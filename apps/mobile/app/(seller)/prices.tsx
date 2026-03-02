@@ -143,6 +143,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
+  heroSection: {
+    backgroundColor: colors.navy,
+    paddingHorizontal: 20,
+    paddingTop: 10, // Adjusted for overscroll filler alignment
+    paddingBottom: 24,
+  },
+  overscrollFiller: {
+    position: 'absolute',
+    top: -1000,
+    left: 0,
+    right: 0,
+    height: 1000,
+    backgroundColor: colors.navy,
+  },
   adBtn: {
     backgroundColor: colors.teal,
     paddingHorizontal: 20,

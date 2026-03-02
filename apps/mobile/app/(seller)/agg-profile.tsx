@@ -32,7 +32,13 @@ export default function AggregatorProfileScreen() {
         }}
       />
       
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        style={{ backgroundColor: colors.bg }}
+      >
+        {/* Anti-gap filler for top overscroll */}
+        <View style={styles.overscrollFiller} />
+
         {/* Dark Hero Section */}
         <View style={styles.heroSection}>
           <View style={styles.heroHeader}>
@@ -187,8 +193,16 @@ const styles = StyleSheet.create({
   heroSection: {
     backgroundColor: colors.navy,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 24,
+  },
+  overscrollFiller: {
+    position: 'absolute',
+    top: -1000,
+    left: 0,
+    right: 0,
+    height: 1000,
+    backgroundColor: colors.navy,
   },
   heroHeader: {
     flexDirection: 'row',
