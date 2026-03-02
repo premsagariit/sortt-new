@@ -35,3 +35,9 @@ coverage/
 # Temporary
 tmp/
 temp/
+
+./agent
+.antigravityignore
+.antigravityrules
+r.txt
+adapters/

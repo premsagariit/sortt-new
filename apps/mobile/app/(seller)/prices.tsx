@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { CaretLeft, TrendUp, TrendDown, Minus, Warning } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
-import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
+import { Info, Warning } from 'phosphor-react-native';
+import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { MarketRateCard, MaterialCode } from '../../components/ui/Card';
+import { safeBack } from '../../utils/navigation';
 
 const MOCK_RATES: { id: string; material: string; price: number; trend: string; materialCode: MaterialCode }[] = [
   { id: '1', material: 'Iron scrap', price: 28, trend: 'up', materialCode: 'metal' },
@@ -21,39 +21,37 @@ export default function MarketRatesScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <NavBar 
-        title="Scrap Rates" 
+    <View style={styles.container}>
+      <NavBar
+        title="Average Local Rates"
         variant="light"
-        rightAction={<Text variant="caption" color={colors.muted}>Hyderabad</Text>}
+        onBack={() => safeBack('/(seller)/home')}
+        rightAction={
+          <View style={styles.localityTag}>
+            <View style={styles.liveDot} />
+            <Numeric size={11} color={colors.muted}>LIVE · HYD</Numeric>
+          </View>
+        }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Date Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text variant="caption" color={colors.muted}>LAST UPDATED</Text>
-            <Text variant="label" color={colors.navy}>Today, 10:30 AM</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        style={{ backgroundColor: colors.bg }}
+      >
+        {/* Locality Average Hint */}
+        <View style={styles.hintCard}>
+          <Info size={20} color={colors.amber} weight="fill" />
+          <View style={styles.hintTextWrap}>
+            <Text variant="label" color={colors.navy}>Locality Average</Text>
+            <Text variant="caption">These rates are averaged from all certified aggregators in Hyderabad. Rates may vary slightly by collector.</Text>
           </View>
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text variant="caption" style={styles.liveText}>LIVE</Text>
-          </View>
-        </View>
-
-        {/* Warning Banner */}
-        <View style={styles.warningBanner}>
-          <Warning size={18} color={colors.amber} weight="fill" />
-          <Text variant="caption" style={styles.warningText}>
-            Rates are indicative and based on market averages in Hyderabad. Final value determined during pickup.
-          </Text>
         </View>
 
         {/* Materials Grid */}
         <View style={styles.grid}>
           {MOCK_RATES.map((item) => (
             <View key={item.id} style={styles.gridItem}>
-              <MarketRateCard 
+              <MarketRateCard
                 material={item.material}
                 materialCode={item.materialCode}
                 ratePerKg={item.price}
@@ -72,8 +70,15 @@ export default function MarketRatesScreen() {
             <Text variant="caption" style={styles.adBtnText}>Learn More</Text>
           </Pressable>
         </View>
+
+        <View style={styles.disclaimerBox}>
+          <Warning size={14} color={colors.muted} />
+          <Text variant="caption" color={colors.muted} style={styles.disclaimerText}>
+            Final rates are determined during the physical inspection and weighing process at your location.
+          </Text>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -86,20 +91,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.xxl,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  livePill: {
+  localityTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colorExtended.tealLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    gap: 4,
+    gap: 6,
   },
   liveDot: {
     width: 6,
@@ -107,25 +102,18 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.teal,
   },
-  liveText: {
-    color: colors.teal,
-    fontWeight: '700',
-  },
-  warningBanner: {
+  hintCard: {
     flexDirection: 'row',
-    backgroundColor: colorExtended.amberLight,
+    backgroundColor: colors.amberLight,
     padding: spacing.md,
     borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.amber,
-    alignItems: 'flex-start',
     gap: spacing.sm,
     marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(183,121,31,0.1)',
   },
-  warningText: {
+  hintTextWrap: {
     flex: 1,
-    color: colors.navy,
-    lineHeight: 16,
   },
   grid: {
     flexDirection: 'row',
@@ -133,7 +121,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   gridItem: {
-    width: '47.5%', // Slightly less than 50% to account for gap
+    width: '47.5%',
   },
   adBanner: {
     marginTop: spacing.xl,
@@ -164,5 +152,17 @@ const styles = StyleSheet.create({
   adBtnText: {
     color: colors.surface,
     fontWeight: '700',
+  },
+  disclaimerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+  },
+  disclaimerText: {
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

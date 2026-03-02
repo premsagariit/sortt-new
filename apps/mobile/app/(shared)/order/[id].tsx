@@ -37,7 +37,9 @@ import { Avatar } from '../../../components/ui/Avatar';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { SecondaryButton } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { useAuthStore } from '../../../store/authStore';
 import type { OrderStatus } from '../../../components/ui/StatusChip';
+import { MapPin, Phone, CheckCircle } from 'phosphor-react-native';
 
 // ── Mock data ──────────────────────────────────────────────────────
 type StatusHistoryEntry = {
@@ -63,6 +65,11 @@ type OrderMock = {
     phoneLast4: string;
   } | null;
   statusHistory: StatusHistoryEntry[];
+  seller?: {
+    name: string;
+    rating: number;
+    phoneLast4: string;
+  };
 };
 
 const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
@@ -82,11 +89,11 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
       phoneLast4: '4521',
     },
     statusHistory: [
-      { status: 'created',   time: 'Today, 10:30 AM', done: true },
-      { status: 'accepted',  time: 'Today, 10:34 AM', done: true },
-      { status: 'en_route',  time: 'Today, 11:02 AM', done: false, active: true },
-      { status: 'arrived',   time: null,               done: false },
-      { status: 'completed', time: null,               done: false },
+      { status: 'created', time: 'Today, 10:30 AM', done: true },
+      { status: 'accepted', time: 'Today, 10:34 AM', done: true },
+      { status: 'en_route', time: 'Today, 11:02 AM', done: false, active: true },
+      { status: 'arrived', time: null, done: false },
+      { status: 'completed', time: null, done: false },
     ],
   },
   'ORD-2790': {
@@ -105,10 +112,10 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
       phoneLast4: '8833',
     },
     statusHistory: [
-      { status: 'created',   time: '22 Feb, 9:00 AM',  done: true },
-      { status: 'accepted',  time: '22 Feb, 9:05 AM',  done: true },
-      { status: 'en_route',  time: '22 Feb, 9:30 AM',  done: true },
-      { status: 'arrived',   time: '22 Feb, 9:48 AM',  done: true },
+      { status: 'created', time: '22 Feb, 9:00 AM', done: true },
+      { status: 'accepted', time: '22 Feb, 9:05 AM', done: true },
+      { status: 'en_route', time: '22 Feb, 9:30 AM', done: true },
+      { status: 'arrived', time: '22 Feb, 9:48 AM', done: true },
       { status: 'completed', time: '22 Feb, 10:15 AM', done: true },
     ],
   },
@@ -123,46 +130,52 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
     pickupAddress: '55, Sai Nagar Colony, Kondapur', // NEVER shown per V25 (status=created)
     aggregator: null,
     statusHistory: [
-      { status: 'created',   time: 'Today, 1:30 PM', done: false, active: true },
-      { status: 'accepted',  time: null, done: false },
-      { status: 'en_route',  time: null, done: false },
-      { status: 'arrived',   time: null, done: false },
+      { status: 'created', time: 'Today, 1:30 PM', done: false, active: true },
+      { status: 'accepted', time: null, done: false },
+      { status: 'en_route', time: null, done: false },
+      { status: 'arrived', time: null, done: false },
       { status: 'completed', time: null, done: false },
     ],
+    seller: {
+      name: 'Pratik Sharma',
+      rating: 4.9,
+      phoneLast4: '9901',
+    },
   },
 };
 
 // ── Status labels for timeline ─────────────────────────────────────
 const TIMELINE_LABELS: Record<string, string> = {
-  created:   'Order Created',
-  accepted:  'Aggregator Accepted',
-  en_route:  'En Route · ETA 8 min',
-  arrived:   'Arrived at Location',
+  created: 'Order Created',
+  accepted: 'Aggregator Accepted',
+  en_route: 'En Route · ETA 8 min',
+  arrived: 'Arrived at Location',
   completed: 'OTP Confirmed & Completed',
 };
 
 // ── Material colour dots ───────────────────────────────────────────
 const MATERIAL_COLORS: Record<string, string> = {
-  metal:   colors.material.metal.fg,
+  metal: colors.material.metal.fg,
   plastic: colors.material.plastic.fg,
-  paper:   colors.material.paper.fg,
-  ewaste:  colors.material.ewaste.fg,
-  fabric:  colors.material.fabric.fg,
-  glass:   colors.material.glass.fg,
+  paper: colors.material.paper.fg,
+  ewaste: colors.material.ewaste.fg,
+  fabric: colors.material.fabric.fg,
+  glass: colors.material.glass.fg,
 };
 
 const MATERIAL_BG: Record<string, string> = {
-  metal:   colors.material.metal.bg,
+  metal: colors.material.metal.bg,
   plastic: colors.material.plastic.bg,
-  paper:   colors.material.paper.bg,
-  ewaste:  colors.material.ewaste.bg,
-  fabric:  colors.material.fabric.bg,
-  glass:   colors.material.glass.bg,
+  paper: colors.material.paper.bg,
+  ewaste: colors.material.ewaste.bg,
+  fabric: colors.material.fabric.bg,
+  glass: colors.material.glass.bg,
 };
 
 // ── Component ──────────────────────────────────────────────────────
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userType } = useAuthStore();
   const order = id ? MOCK_ORDER_DETAIL[id] : undefined;
 
   // Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6
@@ -187,20 +200,33 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const isCompleted  = order.status === 'completed';
+  const isCompleted = order.status === 'completed';
   const isActiveRide = order.status === 'en_route' || order.status === 'arrived';
-  const showAggCard  = order.status !== 'created' && order.aggregator !== null;
+  const showAggCard = order.status !== 'created' && order.aggregator !== null;
 
   // V25: full address revealed only post-acceptance
   const displayAddress = order.status === 'created'
     ? order.pickupLocality          // pre-acceptance: locality only
     : order.pickupAddress;          // post-acceptance: full address
 
-  const canCancel = order.status === 'created' || order.status === 'accepted';
+  // For Aggregator: can only cancel if accepted but not en-route yet
+  // For Seller: can cancel if created or accepted
+  const canCancel = userType === 'seller'
+    ? (order.status === 'created' || order.status === 'accepted')
+    : (order.status === 'accepted');
 
   function handleCancelPress() {
     setShowCancelSheet(true);
   }
+
+  // ── Aggregator Actions ──
+  const handleAccept = () => {
+    console.log('Order accepted');
+    // In real app: router.replace(...) or refresh
+  };
+  const handleEnRoute = () => console.log('Marking en route');
+  const handleArrived = () => console.log('Marking arrived');
+  const handleWeighing = () => router.push(`/(aggregator)/weighing/${order.orderId}` as any);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={[]}>
@@ -229,45 +255,82 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        {/* ── Aggregator card (post-acceptance only) ─────────── */}
-        {showAggCard && order.aggregator && (
-          <View style={styles.card}>
-            <View style={styles.aggRow}>
-              <Avatar
-                name={order.aggregator.name}
-                userType="aggregator"
-                size="lg"
-              />
-              <View style={styles.aggInfo}>
-                <Text variant="subheading" color={colors.navy}>
-                  {order.aggregator.name}
-                </Text>
-                <Text variant="caption" color={colors.muted}>
-                  {'⭐ '}
-                  <Numeric size={12} color={colors.muted}>
-                    {order.aggregator.rating.toFixed(1)}
-                  </Numeric>
-                  {' · '}
-                  <Numeric size={12} color={colors.muted}>
-                    {order.aggregator.completedOrders}
-                  </Numeric>
-                  {' completed orders'}
-                </Text>
-              <Pressable
-                style={styles.chatPillBtn}
-                onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
-                accessible
-                accessibilityLabel="Chat with aggregator"
-              >
-                <Text variant="caption" style={styles.chatPillText as any}>💬 Chat</Text>
-              </Pressable>
+        {/* ── Personnel card (Seller/Aggregator depending on viewer) ─────────── */}
+        {userType === 'seller' ? (
+          showAggCard && order.aggregator && (
+            <View style={styles.card}>
+              <View style={styles.aggRow}>
+                <Avatar
+                  name={order.aggregator.name}
+                  userType="aggregator"
+                  size="lg"
+                />
+                <View style={styles.aggInfo}>
+                  <Text variant="subheading" color={colors.navy}>
+                    {order.aggregator.name}
+                  </Text>
+                  <Text variant="caption" color={colors.muted}>
+                    {'⭐ '}
+                    <Numeric size={12} color={colors.muted}>
+                      {order.aggregator.rating.toFixed(1)}
+                    </Numeric>
+                    {' · '}
+                    <Numeric size={12} color={colors.muted}>
+                      {order.aggregator.completedOrders}
+                    </Numeric>
+                    {' completed orders'}
+                  </Text>
+                  <Pressable
+                    style={styles.chatPillBtn}
+                    onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
+                  >
+                    <Text variant="caption" style={styles.chatPillText as any}>💬 Chat</Text>
+                  </Pressable>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
+          )
+        ) : (
+          order.status !== 'created' && order.seller && (
+            <View style={styles.card}>
+              <View style={styles.aggRow}>
+                <Avatar
+                  name={order.seller.name}
+                  userType="seller"
+                  size="lg"
+                />
+                <View style={styles.aggInfo}>
+                  <Text variant="subheading" color={colors.navy}>
+                    {order.seller.name}
+                  </Text>
+                  <Text variant="caption" color={colors.muted}>
+                    {'⭐ '}
+                    <Numeric size={12} color={colors.muted}>
+                      {order.seller.rating.toFixed(1)}
+                    </Numeric>
+                    {' seller rating'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 4 }}>
+                    <Pressable
+                      style={styles.chatPillBtn}
+                      onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
+                    >
+                      <Text variant="caption" style={styles.chatPillText as any}>💬 Chat</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.chatPillBtn, { borderColor: colors.tealLight, backgroundColor: colorExtended.tealLight }]}
+                      onPress={() => console.log('Call seller')}
+                    >
+                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>📞 Call</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )
         )}
 
         {/* ── Status timeline ─────────────────────────────────── */}
-        {order.status !== 'en_route' && (
         <View style={styles.card}>
           <Text
             variant="caption"
@@ -312,8 +375,8 @@ export default function OrderDetailScreen() {
                     variant="caption"
                     color={
                       isActive ? colors.amber :
-                      isDone   ? colors.navy  :
-                      colors.muted
+                        isDone ? colors.navy :
+                          colors.muted
                     }
                     style={isActive ? styles.timelineLabelActive : undefined}
                   >
@@ -329,7 +392,6 @@ export default function OrderDetailScreen() {
             );
           })}
         </View>
-        )}
 
         {/* ── Order summary ───────────────────────────────────── */}
         <View style={styles.card}>
@@ -387,37 +449,58 @@ export default function OrderDetailScreen() {
         </View>
 
         {/* ── Action bar ──────────────────────────────────────── */}
-          {isCompleted ? (
-            <SecondaryButton
-              label="View Receipt"
-              onPress={() => router.push(`/(shared)/receipt/${order.orderId}`)}
+        {isCompleted ? (
+          <SecondaryButton
+            label="View Receipt"
+            onPress={() => router.push(`/(shared)/receipt/${order.orderId}`)}
+          />
+        ) : (
+          <>
+            {/* Removed SecondaryButton Chat as it is inside the card now */}
+          </>
+        )}
+
+        {isActiveRide && userType === 'seller' && (
+          <View style={{ marginTop: spacing.sm }}>
+            <PrimaryButton
+              label="Track Live"
+              onPress={() => console.log('track live pressed')}
             />
-          ) : (
-            <>
-              {/* Removed SecondaryButton Chat as it is inside the card now */}
-            </>
-          )}
+          </View>
+        )}
 
-          {isActiveRide && (
-            <View style={{ marginTop: spacing.sm }}>
-              <PrimaryButton
-                label="Track Live"
-                onPress={() => console.log('track live pressed')}
-              />
-            </View>
-          )}
+        {/* Aggregator Context Actions */}
+        {userType === 'aggregator' && (
+          <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+            {order.status === 'created' && (
+              <PrimaryButton label="Accept Order" onPress={handleAccept} />
+            )}
+            {order.status === 'accepted' && (
+              <PrimaryButton label="I'm En Route" onPress={handleEnRoute} />
+            )}
+            {order.status === 'en_route' && (
+              <View style={{ gap: spacing.sm }}>
+                <PrimaryButton label="I've Arrived" style={{ backgroundColor: colors.teal }} onPress={handleArrived} />
+                <SecondaryButton label="Get Directions" onPress={() => console.log('Map directions')} />
+              </View>
+            )}
+            {order.status === 'arrived' && (
+              <PrimaryButton label="Start Weighing" onPress={handleWeighing} />
+            )}
+          </View>
+        )}
 
-          {/* Cancel link — visible only for created or accepted orders */}
-          {canCancel && (
-            <Text
-              variant="caption"
-              color={colors.red}
-              style={styles.cancelLink}
-              onPress={handleCancelPress}
-            >
-              Cancel Order
-            </Text>
-          )}
+        {/* Cancel link — visible only for created or accepted orders */}
+        {canCancel && (
+          <Text
+            variant="caption"
+            color={colors.red}
+            style={styles.cancelLink}
+            onPress={handleCancelPress}
+          >
+            Cancel Order
+          </Text>
+        )}
 
         {/* Information Banner missing from App layout */}
         {order.status === 'en_route' && order.aggregator && (
@@ -668,7 +751,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
-    borderTopLeftRadius:  radius.card,
+    borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
     padding: spacing.lg,
     paddingBottom: spacing.xl,

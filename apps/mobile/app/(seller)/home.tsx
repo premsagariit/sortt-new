@@ -90,7 +90,7 @@ export default function SellerHomeScreen() {
     outputRange: [15, 0],
     extrapolate: 'clamp',
   });
-  
+
   const greetingOpacity = scrollY.interpolate({
     inputRange: [10, 60],
     outputRange: [1, 0],
@@ -107,8 +107,8 @@ export default function SellerHomeScreen() {
 
   const handleCreateListing = () => router.push('/(seller)/listing/step1');
   const handleNotifications = () => router.push('/(seller)/notifications');
-  const handleMarketRates   = () => router.push('/(seller)/prices');
-  const handleMyOrders      = () => router.push('/(seller)/orders');
+  const handleMarketRates = () => router.push('/(seller)/prices');
+  const handleMyOrders = () => router.push('/(seller)/orders');
 
   // ── List Header (Greeting + stats + CTAs + recent orders title) ──
   const renderHeader = () => (
@@ -124,30 +124,26 @@ export default function SellerHomeScreen() {
             <View style={[styles.locationDot, { backgroundColor: '#4ADE80' }]} />
             <Text variant="caption" style={styles.locationText}>Hyderabad · Kondapur</Text>
           </View>
+
+          {/* New Hero Stats Row (matches Aggregator pattern) */}
+          <View style={styles.heroStats}>
+            <View style={styles.heroStatCard}>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹2,840</Numeric>
+              <Text variant="caption" style={styles.heroStatLabel}>Earned</Text>
+            </View>
+            <View style={styles.heroStatCard}>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>07</Numeric>
+              <Text variant="caption" style={styles.heroStatLabel}>Orders</Text>
+            </View>
+            <View style={styles.heroStatCard}>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>01</Numeric>
+              <Text variant="caption" style={styles.heroStatLabel}>Active</Text>
+            </View>
+          </View>
         </Animated.View>
       </View>
 
       <View style={styles.listContentPad}>
-        
-
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <BaseCard style={[styles.statCard, styles.statCardAccent] as any}>
-            <Text variant="caption" style={styles.statLabelAccent}>Earned</Text>
-            <Numeric style={styles.statValueAccent}>₹2,840</Numeric>
-            <Text variant="caption" style={styles.statUnitAccent}>This month</Text>
-          </BaseCard>
-          <BaseCard style={styles.statCard}>
-            <Text variant="caption" color={colors.muted}>Orders</Text>
-            <Numeric style={styles.statValue}>07</Numeric>
-            <Text variant="caption" color={colors.muted}>Completed</Text>
-          </BaseCard>
-          <BaseCard style={styles.statCard}>
-            <Text variant="caption" color={colors.muted}>Active</Text>
-            <Numeric style={styles.statValue}>01</Numeric>
-            <Text variant="caption" color={colors.muted}>In progress</Text>
-          </BaseCard>
-        </View>
 
         {/* Primary CTA */}
         <Pressable style={styles.primaryCta} onPress={handleCreateListing}>
@@ -187,7 +183,7 @@ export default function SellerHomeScreen() {
               <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all →</Text>
             </Pressable>
           </View>
-          
+
           <View style={styles.ratesList}>
             <View style={styles.rateCard}>
               <View style={styles.rateInfo}>
@@ -196,7 +192,7 @@ export default function SellerHomeScreen() {
               </View>
               <Text variant="body" style={[styles.trendIcon, { color: colors.teal }]}>▲</Text>
             </View>
-            
+
             <View style={styles.rateCard}>
               <View style={styles.rateInfo}>
                 <Text variant="body" style={styles.rateMaterial}>Paper</Text>
@@ -204,7 +200,7 @@ export default function SellerHomeScreen() {
               </View>
               <Text variant="body" style={[styles.trendIcon, { color: colors.muted }]}>—</Text>
             </View>
-            
+
             <View style={styles.rateCard}>
               <View style={styles.rateInfo}>
                 <Text variant="body" style={styles.rateMaterial}>Plastic (PET)</Text>
@@ -232,29 +228,29 @@ export default function SellerHomeScreen() {
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300, backgroundColor: colors.navy }} />
       {/* ── Custom Animated NavBar ── */}
       <View style={[styles.customNav, { paddingTop: insets.top, height: 56 + insets.top }]}>
-        
+
         {/* UNCOMPRESSED STATE (Title + Badge) */}
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: titleOpacity, transform: [{ translateY: titleTranslateY }] }]} pointerEvents="none">
           <View style={styles.uncompressedWrap}>
-             <SorttLogo variant="compact-dark" />
-             <View style={[styles.badgePill, styles.badgeSeller, { marginTop: 2 }]}>
-               <View style={[styles.badgeDot, { backgroundColor: colors.teal }]} />
-               <Text variant="caption" style={[styles.badgeText, { color: colors.teal }]}>SELLER</Text>
-             </View>
+            <SorttLogo variant="compact-dark" />
+            <View style={[styles.badgePill, styles.badgeSeller, { marginTop: 2 }]}>
+              <View style={[styles.badgeDot, { backgroundColor: colors.teal }]} />
+              <Text variant="caption" style={[styles.badgeText, { color: colors.teal }]}>SELLER</Text>
+            </View>
           </View>
         </Animated.View>
 
         {/* COMPRESSED STATE (Name + Loc) */}
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
-           <View style={styles.compressedRow}>
-              <View style={styles.navLeft}>
-                <Text variant="subheading" style={styles.navMinimizedName}>Ravi Kumar</Text>
-                <View style={styles.navMinimizedLoc}>
-                  <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
-                  <Text variant="caption" style={styles.navMinimizedLocText}>Kondapur</Text>
-                </View>
+          <View style={styles.compressedRow}>
+            <View style={styles.navLeft}>
+              <Text variant="subheading" style={styles.navMinimizedName}>Ravi Kumar</Text>
+              <View style={styles.navMinimizedLoc}>
+                <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
+                <Text variant="caption" style={styles.navMinimizedLocText}>Kondapur</Text>
               </View>
-           </View>
+            </View>
+          </View>
         </Animated.View>
 
         {/* ALWAYS VISIBLE RIGHT ACTIONS */}
@@ -262,18 +258,18 @@ export default function SellerHomeScreen() {
           <Animated.View style={[styles.compressedIndicator, { opacity: minimizedOpacity }]}>
             <Text variant="caption" style={[styles.compressedIndicatorText, { color: colors.teal }]}>S</Text>
           </Animated.View>
-          
+
           <IconButton
             icon={<Bell size={22} color={colors.surface} />}
             onPress={handleNotifications}
             accessibilityLabel="Notifications"
           />
           <Pressable onPress={() => router.push('/(seller)/profile')} hitSlop={8}>
-            <Avatar 
-              name="Ravi Kumar" 
-              userType="seller" 
-              size="sm" 
-              source={AVATAR_SOURCE} 
+            <Avatar
+              name="Ravi Kumar"
+              userType="seller"
+              size="sm"
+              source={AVATAR_SOURCE}
             />
           </Pressable>
         </View>
@@ -292,7 +288,7 @@ export default function SellerHomeScreen() {
         )}
         scrollEventThrottle={16}
         renderItem={({ item }) => (
-          <Pressable 
+          <Pressable
             onPress={() => router.push(`/(shared)/order/${item.orderId}` as any)}
             style={styles.cardPad}
           >
@@ -323,7 +319,7 @@ export default function SellerHomeScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg, 
+    backgroundColor: colors.bg,
   },
 
   // ── Custom Animated NavBar ──
@@ -409,15 +405,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   avatar: {
-    width:           32,
-    height:          32,
-    borderRadius:    16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarText: {
-    color:      colors.surface,
+    color: colors.surface,
     fontWeight: '700',
   },
 
@@ -425,63 +421,63 @@ const styles = StyleSheet.create({
   greetingStrip: {
     backgroundColor: colors.navy,
     paddingHorizontal: spacing.md,
-    paddingTop:        spacing.xl,
-    paddingBottom:     spacing.xl,
-    position:          'relative',
-    overflow:          'hidden',
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+    position: 'relative',
+    overflow: 'hidden',
   },
   geometricShape1: {
-    position:        'absolute',
-    right:           -20,
-    top:             -20,
-    width:           120,
-    height:          120,
-    borderRadius:    60,
-    borderWidth:     15,
-    borderColor:     'rgba(255,255,255,0.05)',
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 15,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   geometricShape2: {
-    position:        'absolute',
-    left:            -40,
-    bottom:          -40,
-    width:           150,
-    height:          150,
-    borderRadius:    75,
+    position: 'absolute',
+    left: -40,
+    bottom: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
   greetingSub: {
-    color:        colors.surface,
-    opacity:      0.55,
+    color: colors.surface,
+    opacity: 0.55,
     marginBottom: 2,
   },
   greetingName: {
-    color:        colors.surface,
-    marginBottom: spacing.sm,
+    color: colors.surface,
+    marginBottom: spacing.md,
   },
   locationPill: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             6,
-    alignSelf:       'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.10)',
-    paddingVertical:   4,
+    paddingVertical: 4,
     paddingHorizontal: 10,
-    borderRadius:    20,
+    borderRadius: 20,
   },
   locationDot: {
-    width:        6,
-    height:       6,
+    width: 6,
+    height: 6,
     borderRadius: 3,
   },
   locationText: {
-    color:   colors.surface,
+    color: colors.surface,
     opacity: 0.75,
   },
 
   // ── Scroll area ──────────────────────────────────────────────────
   listContent: {
     backgroundColor: colors.bg,
-    paddingBottom:   spacing.xxl,
+    paddingBottom: spacing.xxl,
   },
   listContentPad: {
     padding: spacing.md,
@@ -492,88 +488,80 @@ const styles = StyleSheet.create({
 
   // ── Rate Ticker ──────────────────────────────────────────────────
   ticker: {
-    flexDirection:   'row',
-    alignItems:      'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius:    radius.card,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    padding:         spacing.sm,
-    marginBottom:    spacing.sm,
-    gap:             spacing.sm,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
   tickerLabel: {
-    color:           colors.muted,
-    textTransform:   'uppercase',
-    letterSpacing:   1,
-    fontWeight:      '600',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '600',
   },
   tickerItems: {
     flexDirection: 'row',
-    flex:          1,
-    gap:           spacing.md,
+    flex: 1,
+    gap: spacing.md,
   },
   tickerItem: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           4,
+    alignItems: 'center',
+    gap: 4,
   },
   tickerPrice: {
-    color:    colors.amber,
+    color: colors.amber,
     fontSize: 12,
   },
 
-  // ── Stats Row ────────────────────────────────────────────────────
-  statsRow: {
+  heroStats: {
     flexDirection: 'row',
-    gap:           spacing.sm,
-    marginBottom:  spacing.sm,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
-  statCard: {
-    flex:    1,
-    padding: spacing.sm,
-    gap:     3,
-    alignItems: 'flex-start',
+  heroStatCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radius.card,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
-  statCardAccent: {
-    backgroundColor: colors.navy,
-    borderColor:     colors.navy,
+  heroStatVal: {
+    fontWeight: '700',
   },
-  statLabelAccent: {
-    color:   colors.surface,
-    opacity: 0.55,
-  },
-  statValueAccent: {
-    color:    colors.surface,
-    fontSize: 20,
-  },
-  statUnitAccent: {
-    color:   colors.surface,
-    opacity: 0.45,
-  },
-  statValue: {
-    color:    colors.navy,
-    fontSize: 20,
+  heroStatLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontSize: 9,
   },
 
   // ── Primary CTA ──────────────────────────────────────────────────
   primaryCta: {
     backgroundColor: colors.red,
-    borderRadius:    radius.btn,
-    padding:         spacing.md,
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             spacing.md,
-    marginBottom:    spacing.sm,
+    borderRadius: radius.btn,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
   },
   ctaIconBox: {
-    width:           40,
-    height:          40,
-    borderRadius:    10,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    flexShrink:      0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   ctaEmoji: {
     fontSize: 18,
@@ -582,100 +570,100 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   ctaTitle: {
-    color:      colors.surface,
+    color: colors.surface,
     fontWeight: '700',
   },
   ctaSub: {
-    color:   colors.surface,
+    color: colors.surface,
     opacity: 0.65,
     marginTop: 1,
   },
   ctaArrow: {
-    color:    colors.surface,
-    opacity:  0.5,
+    color: colors.surface,
+    opacity: 0.5,
     fontSize: 20,
   },
 
   // ── Secondary CTA Row ────────────────────────────────────────────
   secCtaRow: {
     flexDirection: 'row',
-    gap:           spacing.sm,
-    marginBottom:  spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   secCtaCard: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius:    radius.card,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    padding:         spacing.sm,
-    gap:             spacing.xs,
-    alignItems:      'flex-start',
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    gap: spacing.xs,
+    alignItems: 'flex-start',
   },
   secCtaIcon: {
-    width:        34,
-    height:       34,
+    width: 34,
+    height: 34,
     borderRadius: 8,
-    alignItems:   'center',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   secCtaTitle: {
-    color:      colors.navy,
+    color: colors.navy,
     fontWeight: '600',
   },
 
   // ── Rates Section ───────────────────────────────────────────────
   ratesSection: {
-    marginBottom:  spacing.lg,
+    marginBottom: spacing.lg,
   },
   ratesTitle: {
-    color:      colors.navy,
-    fontSize:   14,
+    color: colors.navy,
+    fontSize: 14,
     fontWeight: '700',
   },
   seeAllText: {
-    fontSize:   13,
+    fontSize: 13,
     fontWeight: '600',
   },
   ratesList: {
     gap: 8,
   },
   rateCard: {
-    flexDirection:   'row',
-    alignItems:      'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius:    radius.card,
-    padding:         spacing.md,
-    borderWidth:     1,
-    borderColor:     colors.border,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   rateInfo: {
-    flex:           1,
-    flexDirection:  'row',
+    flex: 1,
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems:     'center',
-    paddingRight:   spacing.lg,
+    alignItems: 'center',
+    paddingRight: spacing.lg,
   },
   rateMaterial: {
-    color:      colors.navy,
+    color: colors.navy,
     fontWeight: '500',
   },
   ratePrice: {
-    color:      colors.navy,
+    color: colors.navy,
     fontWeight: '600',
   },
   trendIcon: {
     fontSize: 16,
-    width:    24,
+    width: 24,
     textAlign: 'center',
   },
 
   // ── Section Header ───────────────────────────────────────────────
   sectionHeader: {
-    flexDirection:  'row',
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems:     'center',
-    marginBottom:   spacing.sm,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
 
   // ── List ─────────────────────────────────────────────────────────

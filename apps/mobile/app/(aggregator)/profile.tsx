@@ -27,7 +27,7 @@ interface InfoRowProps {
 
 function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProps) {
   return (
-    <Pressable 
+    <Pressable
       style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
       onPress={onPress}
     >
@@ -45,11 +45,11 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProp
 
 export default function AggregatorProfileScreen() {
   const router = useRouter();
-  
+
   return (
     <View style={styles.container}>
       <NavBar title="Profile" variant="light" />
-      
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.placeholderCard}>
           <Text variant="body" style={styles.label}>
@@ -58,24 +58,24 @@ export default function AggregatorProfileScreen() {
         </View>
 
         <View style={styles.menuContainer}>
-          <InfoRow 
-            rowKey="language" icon="🌐" title="Language" subtitle="English" 
+          <InfoRow
+            rowKey="language" icon="🌐" title="Language" subtitle="English"
             onPress={() => router.push('/(shared)/language')}
           />
-          <InfoRow 
-            rowKey="help" icon="❓" title="Help & Support" subtitle="FAQs & contact" 
+          <InfoRow
+            rowKey="help" icon="❓" title="Help & Support" subtitle="FAQs & contact"
             onPress={() => router.push('/(shared)/help')}
           />
-          <InfoRow 
+          <InfoRow
             rowKey="terms" icon="🛡️" title="Terms & Privacy" subtitle="Legal information" isLast
             onPress={() => router.push('/(shared)/terms-privacy')}
           />
         </View>
-        
+
         <View style={{ paddingHorizontal: spacing.md, width: '100%', gap: spacing.sm }}>
-          <PrimaryButton 
-            label="Dev Toggle: Seller View" 
-            onPress={() => router.replace('/(seller)/home')} 
+          <PrimaryButton
+            label="Dev Toggle: Seller View"
+            onPress={() => router.replace('/(seller)/home')}
           />
         </View>
       </ScrollView>
@@ -85,11 +85,11 @@ export default function AggregatorProfileScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
-    alignItems:      'center',
-    justifyContent:  'center',
-    padding:         0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
   },
   scrollContent: {
     paddingBottom: spacing.xxl,

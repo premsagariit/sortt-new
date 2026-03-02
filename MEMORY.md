@@ -690,3 +690,25 @@ Do not delete old entries. Append only.
 - **[2026-03-02] SafeAreaView Layout Reconciliation:** To prevent duplicate top padding when using `NavBar`, always pass `edges={['bottom']}` to the `SafeAreaView` wrapping the screen. The `NavBar` is responsible for top safe area handling. Affects: all onboarding and setup screens.
 
 - **[2026-03-02] Aggregator UI Gapping:** Redundant `borderBottom` and `paddingBottom` on `progressContainer` in wizard flows cause overlapping lines and visual gaps when scrolling. All wizard layouts must use `backgroundColor: colors.bg` for the screen and `colors.surface` only for the header/progress section to maintain Sortt's professional aesthetic.
+
+---
+
+## 11. Pricing Architecture — 3-Tier Model
+
+Sortt uses three distinct levels of pricing to manage marketplace expectations and aggregator profit margins.
+
+| Level | Audience | Access Route | Purpose | Data Source |
+|---|---|---|---|---|
+| **National Market Index** | Aggregators | Home → Ticker → "See all" | Macro trends for reference | AI Scraper / Admin |
+| **Custom Buy Rates** | Aggregators | Profile → "My Buying Rates" | Actual price paid to sellers | Individual Aggregator |
+| **Local Average Rates** | Sellers | Home → Hero Card → "Browse" | Expected value in their area | Aggregator Averages |
+
+### 11.1 Display Logic
+- **National Market Index**: Read-only for all users. Updated daily at 06:00 IST.
+- **Custom Buy Rates**: Editable by aggregators. If not set, defaults to National Index - 5%.
+- **Local Average Rates**: Calculated dynamic average of all *online* aggregators within the seller's city/locality.
+
+### 11.2 UI Consistency
+- All prices use `DM Mono` font.
+- Trends (up/down) color-coded: `colors.teal` (up) / `colors.red` (down).
+- All screens must include the locality tag: `[locality] · [city]`.

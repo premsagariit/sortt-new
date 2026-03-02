@@ -31,14 +31,14 @@ export default function AggregatorLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown:     false,
-        tabBarStyle:     TAB_BAR_STYLE,
-        tabBarActiveTintColor:   TAB_ACTIVE_TINT,
+        headerShown: false,
+        tabBarStyle: TAB_BAR_STYLE,
+        tabBarActiveTintColor: TAB_ACTIVE_TINT,
         tabBarInactiveTintColor: TAB_INACTIVE_TINT,
         tabBarLabelStyle: {
           fontFamily: 'DMSans-Medium',
-          fontSize:   11,
-          marginTop:  2,
+          fontSize: 11,
+          marginTop: 2,
         },
       }}
     >
@@ -58,6 +58,11 @@ export default function AggregatorLayout() {
           }}
         />
       ))}
+      {/* Hide auxiliary screens from tab bar */}
+      <Tabs.Screen name="price-index" options={{ href: null }} />
+      <Tabs.Screen name="my-rates" options={{ href: null }} />
+      <Tabs.Screen name="otp/[id]" options={{ href: null }} />
+      <Tabs.Screen name="weighing/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

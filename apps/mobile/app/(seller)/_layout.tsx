@@ -34,14 +34,14 @@ export default function SellerLayout() {
     <Tabs
       backBehavior="history"
       screenOptions={{
-        headerShown:     false,
-        tabBarStyle:     TAB_BAR_STYLE,
-        tabBarActiveTintColor:   TAB_ACTIVE_TINT,
+        headerShown: false,
+        tabBarStyle: TAB_BAR_STYLE,
+        tabBarActiveTintColor: TAB_ACTIVE_TINT,
         tabBarInactiveTintColor: TAB_INACTIVE_TINT,
         tabBarLabelStyle: {
           fontFamily: 'DMSans-Medium',
-          fontSize:   11,
-          marginTop:  2,
+          fontSize: 11,
+          marginTop: 2,
         },
       }}
     >
@@ -61,18 +61,8 @@ export default function SellerLayout() {
           }}
         />
       ))}
-      <Tabs.Screen
-        name="prices"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="agg-profile"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="prices" options={{ href: null }} />
+      <Tabs.Screen name="agg-profile" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="earnings" options={{ href: null }} />

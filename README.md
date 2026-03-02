@@ -38,6 +38,7 @@ Sortt/
 ### 2. Dependencies
 Install all workspace dependencies from the root directory:
 ```bash
+npm install -g pnpm (If not installed in the system)
 pnpm install
 ```
 
