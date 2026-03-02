@@ -7,6 +7,7 @@ import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { MarketRateCard, MaterialCode } from '../../components/ui/Card';
+import { safeBack } from '../../utils/navigation';
 
 const MOCK_RATES: { id: string; material: string; price: number; trend: string; materialCode: MaterialCode }[] = [
   { id: '1', material: 'Iron scrap', price: 28, trend: 'up', materialCode: 'metal' },
@@ -21,23 +22,32 @@ export default function MarketRatesScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <NavBar 
         title="Scrap Rates" 
         variant="light"
+        onBack={() => safeBack('/(seller)/home')}
         rightAction={<Text variant="caption" color={colors.muted}>Hyderabad</Text>}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Date Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text variant="caption" color={colors.muted}>LAST UPDATED</Text>
-            <Text variant="label" color={colors.navy}>Today, 10:30 AM</Text>
-          </View>
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text variant="caption" style={styles.liveText}>LIVE</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        style={{ backgroundColor: colors.bg }} // Matches page content bg
+      >
+        {/* Anti-gap filler for top overscroll */}
+        <View style={styles.overscrollFiller} />
+
+        {/* Dark Hero Section */}
+        <View style={styles.heroSection}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text variant="caption" color={colors.muted}>LAST UPDATED</Text>
+              <Text variant="label" color={colors.surface}>Today, 10:30 AM</Text>
+            </View>
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text variant="caption" style={styles.liveText}>LIVE</Text>
+            </View>
           </View>
         </View>
 
@@ -73,7 +83,7 @@ export default function MarketRatesScreen() {
           </Pressable>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -90,7 +100,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    // marginBottom: spacing.md, // Removed as heroSection handles padding
   },
   livePill: {
     flexDirection: 'row',
@@ -121,6 +131,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.sm,
     marginBottom: spacing.lg,
+    marginTop: -spacing.lg, // Pull up to overlap hero section
   },
   warningText: {
     flex: 1,
@@ -154,6 +165,20 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     marginBottom: spacing.sm,
+  },
+  heroSection: {
+    backgroundColor: colors.navy,
+    paddingHorizontal: 20,
+    paddingTop: 10, // Adjusted for overscroll filler alignment
+    paddingBottom: 24,
+  },
+  overscrollFiller: {
+    position: 'absolute',
+    top: -1000,
+    left: 0,
+    right: 0,
+    height: 1000,
+    backgroundColor: colors.navy,
   },
   adBtn: {
     backgroundColor: colors.teal,
