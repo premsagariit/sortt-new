@@ -1,0 +1,23 @@
+{
+  "name": "sortt-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sortt scrap marketplace — pnpm monorepo",
+  "scripts": {
+    "dev:mobile": "pnpm --filter mobile dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "install:all": "pnpm install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.3",
+  "devDependencies": {
+    "@types/node": "^25.3.3"
+  }
+}

@@ -1,0 +1,133 @@
+Sortt
+├── MEMORY.md # Authoritative project context and learned lessons
+├── PLAN.md # Master roadmap and daily build status tracker
+├── PRD.md # Product Requirements Document
+├── README.md # Project overview and setup instructions
+├── TRD.md # Technical requirements and schema specs
+├── UI_REFERENCE.md # Branding and UI build guide
+├── adapters
+│   ├── CLAUDE.md # Adapter configuration for Claude
+│   ├── GEMINI.md # Adapter configuration for Gemini
+│   └── GPT_OSS.md # Adapter configuration for GPT-based models
+├── apps
+│   ├── mobile
+│   │   ├── app
+│   │   │   ├── (aggregator) # Scrap dealer specific screens
+│   │   │   │   ├── _layout.tsx # Aggregator tab layout and navigation
+│   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
+│   │   │   │   ├── home.tsx # Nearby orders feed for dealers
+│   │   │   │   ├── orders.tsx # Ongoing and completed pickup management
+│   │   │   │   ├── profile.tsx # Dealer public profile and shop details
+│   │   │   │   └── route.tsx # Internal routing logic for aggregator flow
+│   │   │   ├── (auth) # Consolidated authentication flow
+│   │   │   │   ├── _layout.tsx # Auth stack layout (Headerless)
+│   │   │   │   ├── onboarding.tsx # Universal 4-slide introduction carousel
+│   │   │   │   ├── phone.tsx # Mobile number entry with country code
+│   │   │   │   ├── otp.tsx # SMS/WhatsApp OTP verification
+│   │   │   │   ├── user-type.tsx # Primary role fork: Seller vs. Scrap Dealer
+│   │   │   │   ├── aggregator # Scrap Dealer Onboarding Wizard
+│   │   │   │   │   ├── _layout.tsx # Aggregator stack
+│   │   │   │   │   ├── profile-setup.tsx
+│   │   │   │   │   ├── area-setup.tsx
+│   │   │   │   │   └── materials-setup.tsx
+│   │   │   │   └── seller # Seller Onboarding Wizard
+│   │   │   │       ├── _layout.tsx # Seller stack
+│   │   │   │       ├── account-type.tsx # Individual vs Business
+│   │   │   │       ├── business-setup.tsx # GST and Industry details
+│   │   │   │       └── seller-setup.tsx # Basic naming and locality
+│   │   │   ├── (seller) # Household and Business seller workflow
+│   │   │   │   ├── _layout.tsx # Seller bottom-tab navigation layout
+│   │   │   │   ├── agg-profile.tsx # View dealer details before/after booking
+│   │   │   │   ├── browse.tsx # Material category and rate exploration
+│   │   │   │   ├── earnings.tsx # Seller-side transaction history
+│   │   │   │   ├── edit-profile.tsx # Profile field editor
+│   │   │   │   ├── help.tsx # Support tickets and FAQ access
+│   │   │   │   ├── home.tsx # Seller dashboard: Rates, active orders, CTA
+│   │   │   │   ├── language.tsx # Localization and language toggle
+│   │   │   │   ├── listing # Progressive selling wizard
+│   │   │   │   │   ├── _layout.tsx # Multi-step wizard stack
+│   │   │   │   │   ├── index.tsx # Selling flow entry point
+│   │   │   │   │   ├── step1.tsx # Select items and materials
+│   │   │   │   │   ├── step2.tsx # Capture or upload scrap photos
+│   │   │   │   │   ├── step3.tsx # Weight estimation and pricing
+│   │   │   │   │   └── step4.tsx # Final review and post to marketplace
+│   │   │   │   ├── notifications.tsx # Activity feed
+│   │   │   │   ├── orders.tsx # Seller order tracking (Active/Past)
+│   │   │   │   ├── prices.tsx # Detailed material rate list
+│   │   │   │   ├── privacy-policy.tsx # Legal privacy document
+│   │   │   │   ├── profile.tsx # Seller account overview and settings
+│   │   │   │   ├── settings.tsx # App preferences and logout
+│   │   │   │   ├── terms-of-service.tsx # Usage terms and conditions
+│   │   │   │   └── terms-privacy.tsx # Unified legal view shell
+│   │   │   ├── (shared) # Common screens used across roles
+│   │   │   │   ├── _layout.tsx # Stack wrapper for shared screens
+│   │   │   │   ├── chat
+│   │   │   │   │   └── [id].tsx # Peer-to-peer messaging room
+│   │   │   │   ├── order
+│   │   │   │   │   └── [id].tsx # Deep order detail view with status map
+│   │   │   │   ├── otp-confirm
+│   │   │   │   │   └── [id].tsx # Handshake OTP for pickup verification
+│   │   │   │   ├── receipt
+│   │   │   │   │   └── [id].tsx # Immutable digital receipt post-payment
+│   │   │   │   └── review
+│   │   │   │       └── [id].tsx # Post-pickup review
+│   │   │   ├── _layout.tsx # Root layout/providers
+│   │   │   └── index.tsx # Application index (Splash bridge)
+│   │   ├── app.json # Expo project configuration
+│   │   ├── components
+│   │   │   ├── SplashAnimation.tsx # SVG-driven scrap falling animation
+│   │   │   ├── _1.tsx # Backup/Ref manual of SplashAnimation
+│   │   │   ├── domain # Business-logic heavy components
+│   │   │   └── ui # Atomic design system (Pure presentational)
+│   │   │       ├── Avatar.tsx # User profile image handler
+│   │   │       ├── Button.tsx # Theme-compliant pressables
+│   │   │       ├── Card.tsx # Standard content wrappers
+│   │   │       ├── EmptyState.tsx # Placeholder for null data states
+│   │   │       ├── Input.tsx # Text/Form fields with validation
+│   │   │       ├── MaterialChip.tsx # Filter/Selection material bubbles
+│   │   │       ├── NavBar.tsx # Dynamic header with navigation hooks
+│   │   │       ├── SkeletonLoader.tsx # Shimmering loading states
+│   │   │       ├── StatusChip.tsx # Color-coded status labels
+│   │   │       ├── StepIndicator.tsx # Horizontal progress dots
+│   │   │       ├── TabBar.tsx # Custom bottom navigation tabs
+│   │   │       ├── Typography.tsx # Standardized Text and Numeric styles
+│   │   │       └── WizardStepIndicator.tsx # Progressive progress bar
+│   │   ├── constants
+│   │   │   ├── app.ts # Global strings and service URLs
+│   │   │   └── tokens.ts # Design tokens (Colors, Radius, Spacing)
+│   │   ├── store # Zustand state containers
+│   │   │   ├── aggregatorStore.ts # Dealer-side order and session state
+│   │   │   ├── authStore.ts # User session, role, and onboarding data
+│   │   │   ├── chatStore.ts # Realtime messaging state and history
+│   │   │   ├── listingStore.ts # Draft state for the selling wizard
+│   │   │   ├── orderStore.ts # Cross-role order lifecycle state
+│   │   │   └── uiStore.ts # Navigation signals and global overlays
+│   │   ├── package.json # NPM dependencies for mobile app
+│   │   └── tsconfig.json # TypeScript configuration for mobile app
+│   └── web # Web dashboard and management (TBI)
+│       ├── package.json
+│       └── tsconfig.json
+├── backend # Backend service (Azure App Service)
+│   ├── package.json
+│   ├── src
+│   │   ├── index.ts # Gateway entry point
+│   │   ├── middleware # JWT validation and security layers
+│   │   ├── routes # Domain-specific API endpoints
+│   │   └── utils # Helper functions and provider clients
+│   └── tsconfig.json
+├── pnpm-workspace.yaml # Monorepo workspace configuration
+├── package.json # Root package management
+├── packages # Shared internal libraries
+│   ├── analysis # Gemini Vision Material Recognition
+│   ├── auth # Multi-provider Clerk/Supabase bridge
+│   ├── maps # Map provider and geocoding abstraction
+│   ├── realtime # Ably Messaging and Presence
+│   ├── storage # Uploadthing file management
+├── scraper # Scrap material rate scrapers
+│   └── main.py # Python rate crawler entry
+├── scripts # CI/CD and repository maintenance tools
+├── docs # Technical documentation and guides
+├── sortt_aggregator_ui.html # Reference HTML for dealer UI
+├── sortt_seller_ui.html # Reference HTML for seller UI
+├── sortt_logo_splash_v2.html # Reference HTML for animation
+└── structure.md # This file (Project Structure & Descriptions)

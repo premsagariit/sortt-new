@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+  - backend
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver

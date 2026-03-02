@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sortt — Seller UI v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+
+/* ============================================================
+   DESIGN TOKENS — mirrors constants/tokens.ts exactly
+   ============================================================ */
+:root {
+  --navy:        #1C2E4A;
+  --navy-soft:   #2C4A72;
+  --red:         #C0392B;
+  --red-light:   #F9EDEC;
+  --amber:       #B7791F;
+  --amber-light: #FEF9EC;
+  --teal:        #1A6B63;
+  --teal-light:  #EAF5F4;
+  --slate:       #5C6B7A;
+  --muted:       #8E9BAA;
+  --border:      #DDE3EA;
+  --bg:          #F4F6F9;
+  --surface:     #FFFFFF;
+  --surface2:    #F9FAFB;
+
+  --metal-fg:#6B7280;  --metal-bg:#F3F4F6;
+  --plastic-fg:#2563A8; --plastic-bg:#EEF4FC;
+  --paper-fg:#B45309;  --paper-bg:#FEF3E2;
+  --ewaste-fg:#1A6B63; --ewaste-bg:#EAF5F4;
+  --fabric-fg:#7C3AED; --fabric-bg:#F5F3FF;
+  --glass-fg:#0369A1;  --glass-bg:#EFF6FF;
+
+  --status-created:#EEF2FF;  --status-created-txt:#4338CA;
+  --status-accepted:#DBEAFE; --status-accepted-txt:#1D4ED8;
+  --status-enroute:#FEF9EC;  --status-enroute-txt:#B7791F;
+  --status-completed:#EAF5F4; --status-completed-txt:#1A6B63;
+  --status-cancelled:#F3F4F6; --status-cancelled-txt:#6B7280;
+  --status-disputed:#F9EDEC;  --status-disputed-txt:#C0392B;
+}
+
+/* ============================================================ RESET */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #E0E4EA; display: flex; min-height: 100vh; }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.sidebar {
+  width: 256px; flex-shrink: 0;
+  background: var(--navy); min-height: 100vh;
+  padding: 20px 0; position: sticky; top: 0;
+  overflow-y: auto; max-height: 100vh;
+}
+.sidebar-brand { padding: 0 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 12px; }
+.sidebar-brand h1 { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.sidebar-brand p { color: rgba(255,255,255,0.45); font-size: 11px; margin-top: 2px; }
+.sidebar-section { padding: 4px 0; }
+.sidebar-section-title { padding: 8px 20px 4px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.8px; }
+.sidebar-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 20px; background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.6); font-family: 'DM Sans',sans-serif; font-size: 12.5px; text-align: left; transition: all 0.15s; line-height: 1.3; }
+.sidebar-btn:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.sidebar-btn.active { background: rgba(192,57,43,0.22); color: #fff; }
+.sidebar-btn.active .sb-dot { background: var(--red); }
+.sb-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.18); flex-shrink: 0; }
+
+.main-area { flex: 1; padding: 32px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+.screen-label { font-size: 11px; font-weight: 700; color: var(--slate); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; text-align: center; }
+
+/* ============================================================
+   PHONE FRAME
+   ============================================================ */
+.phone-frame {
+  width: 390px; height: 844px;
+  background: #0d0d0d;
+  border-radius: 52px; padding: 12px;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.6), inset 0 0 0 2px rgba(255,255,255,0.04);
+  position: relative; flex-shrink: 0;
+}
+.phone-notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 34px; background: #0d0d0d;
+  border-radius: 0 0 20px 20px; z-index: 20;
+}
+.phone-inner {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  border-radius: 40px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+}
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+.status-bar {
+  height: 50px; flex-shrink: 0;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 24px 10px;
+  font-size: 12px; font-weight: 600; font-family: 'DM Mono',monospace;
+}
+.status-bar.dark { background: var(--navy); color: rgba(255,255,255,0.9); }
+.status-bar.light { background: var(--surface); color: var(--navy); }
+.status-bar.splash-bar { background: var(--navy); color: rgba(255,255,255,0.65); }
+.sb-icons { display: flex; gap: 5px; align-items: center; font-size: 11px; }
+
+/* ============================================================
+   GLOBAL BACK ICON — canonical, used everywhere
+   The chevron SVG is the ONLY back indicator used.
+   ============================================================ */
+.back-btn {
+  width: 40px; height: 40px; min-width: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.back-btn:hover { background: rgba(0,0,0,0.05); }
+.back-btn.dark:hover { background: rgba(255,255,255,0.1); }
+.back-btn svg { display: block; }
+
+/* ============================================================
+   NAVBAR
+   ============================================================ */
+.navbar {
+  height: 54px; flex-shrink: 0;
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 4px; position: relative;
+  overflow: hidden;
+}
+.navbar.dark { background: var(--navy); }
+.navbar.light { background: var(--surface); border-bottom: 1px solid var(--border); }
+.navbar-title { flex: 1; font-size: 16px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.navbar.dark .navbar-title { color: #fff; }
+.navbar.light .navbar-title { color: var(--navy); }
+.navbar.dark .back-btn svg { stroke: rgba(255,255,255,0.85); }
+.navbar.light .back-btn svg { stroke: var(--navy); }
+.navbar-brand { font-size: 18px; font-weight: 700; flex: 1; }
+.navbar.dark .navbar-brand { color: #fff; }
+.navbar-subtitle { font-size: 10.5px; font-weight: 400; opacity: 0.6; display: block; }
+.navbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.navbar-circle { position: absolute; right: -24px; top: -24px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none; }
+
+/* ============================================================
+   HOME COLLAPSING HEADER  (Swiggy-style)
+   ============================================================ */
+.home-header {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  background: var(--navy);
+}
+
+/* The two navbar "layers" — default and compact */
+.home-navbar {
+  height: 54px; display: flex; align-items: center;
+  padding: 0 16px; gap: 10px;
+  background: var(--navy); position: relative; overflow: hidden;
+}
+.home-navbar .navbar-circle { position: absolute; right: -24px; top: -24px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none; }
+
+/* Default layer: brand text, visible when NOT scrolled */
+.hn-default {
+  display: flex; align-items: center; gap: 10px; flex: 1;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  opacity: 1; transform: translateY(0);
+}
+/* Compact layer: name + location pill, visible when scrolled */
+.hn-compact {
+  position: absolute; left: 16px; top: 50%; transform: translateY(calc(-50% + 8px));
+  display: flex; align-items: center; gap: 10px; flex: 1;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.hn-compact-info { display: flex; flex-direction: column; }
+.hn-compact-name { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.2; }
+.hn-compact-loc {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1;
+}
+.hn-compact-loc-dot { width: 5px; height: 5px; border-radius: 50%; background: #4ADE80; }
+
+.home-header-icons {
+  margin-left: auto; display: flex; gap: 6px; align-items: center; flex-shrink: 0;
+  position: relative; z-index: 2;
+}
+
+/* Greeting strip — the collapsible section */
+.greeting-strip {
+  background: var(--navy); padding: 10px 18px 20px;
+  overflow: hidden;
+  max-height: 120px;
+  opacity: 1;
+  transition: max-height 0.32s cubic-bezier(0.4,0,0.2,1),
+              opacity 0.25s ease,
+              padding 0.32s cubic-bezier(0.4,0,0.2,1);
+}
+.greeting-strip-inner { position: relative; overflow: hidden; }
+.greeting-strip-inner::after {
+  content: '';
+  position: absolute; right: -30px; top: -20px;
+  width: 110px; height: 110px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.05);
+  pointer-events: none;
+}
+.greeting-sub { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 2px; }
+.greeting-name { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.4px; line-height: 1.2; }
+.locality-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,0.1); border-radius: 20px;
+  padding: 4px 10px; font-size: 12px; font-weight: 500;
+  color: rgba(255,255,255,0.8); margin-top: 8px;
+}
+.loc-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ADE80; flex-shrink: 0; }
+
+/* HOME SCROLLED STATE — triggered by JS */
+.home-header.scrolled .hn-default { opacity: 0; transform: translateY(-10px); pointer-events: none; }
+.home-header.scrolled .hn-compact {
+  opacity: 1;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+.home-header.scrolled .greeting-strip {
+  max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0;
+}
+
+/* ============================================================
+   TAB BAR — outlined black icons + centre red + FAB
+   ============================================================ */
+.tab-bar {
+  height: 76px; background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 4px 8px; flex-shrink: 0;
+}
+.tab-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px; cursor: pointer; padding-top: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-icon {
+  width: 26px; height: 26px; display: flex;
+  align-items: center; justify-content: center;
+}
+.tab-icon svg { display: block; }
+.tab-item .tab-icon svg { stroke: #9CA3AF; transition: stroke 0.15s; }
+.tab-item.active .tab-icon svg { stroke: var(--navy); }
+.tab-label { font-size: 10px; font-weight: 500; color: #9CA3AF; transition: color 0.15s; }
+.tab-item.active .tab-label { color: var(--navy); font-weight: 700; }
+
+/* Centre + FAB */
+.tab-center {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer; position: relative; padding-bottom: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-fab {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: var(--red); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(192,57,43,0.45);
+  margin-top: -20px; /* lifts above tab bar */
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: 3px solid var(--surface);
+}
+.tab-fab:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(192,57,43,0.55); }
+.tab-fab svg { display: block; }
+.tab-center-label { font-size: 10px; font-weight: 600; color: var(--red); margin-top: 4px; }
+
+/* ============================================================
+   REUSABLE COMPONENTS
+   ============================================================ */
+
+/* Buttons */
+.btn-primary {
+  background: var(--red); color: #fff; border: none;
+  border-radius: 14px; height: 52px; width: 100%;
+  font-family: 'DM Sans',sans-serif; font-size: 15px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity 0.15s;
+}
+.btn-primary:disabled { opacity: 0.38; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--surface); color: var(--navy);
+  border: 1.5px solid var(--border); border-radius: 14px;
+  height: 52px; width: 100%;
+  font-family: 'DM Sans',sans-serif; font-size: 15px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+/* Input */
+.input-group { display: flex; flex-direction: column; gap: 6px; }
+.input-label { font-size: 13px; font-weight: 600; color: var(--navy); }
+.input-field {
+  height: 52px; border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 0 14px; font-family: 'DM Sans',sans-serif; font-size: 15px;
+  color: var(--navy); background: var(--surface);
+  display: flex; align-items: center;
+}
+.input-field.mono { font-family: 'DM Mono',monospace; }
+.input-field.focused { border-color: var(--navy); }
+
+/* Avatar */
+.avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; font-family: 'DM Sans',sans-serif; }
+.avatar.navy { background: var(--navy); color: #fff; }
+.avatar.teal { background: var(--teal); color: #fff; }
+.avatar.sm { width: 32px; height: 32px; font-size: 12px; }
+.avatar.md { width: 40px; height: 40px; font-size: 15px; }
+.avatar.lg { width: 54px; height: 54px; font-size: 19px; }
+.avatar.xl { width: 72px; height: 72px; font-size: 25px; }
+
+/* Icon button (notif, avatar wrapper) */
+.icon-btn {
+  width: 36px; height: 36px; display: flex;
+  align-items: center; justify-content: center;
+  border-radius: 10px; cursor: pointer; flex-shrink: 0;
+}
+.icon-btn svg { display: block; }
+.icon-btn.dark svg { stroke: rgba(255,255,255,0.8); }
+.icon-btn.light svg { stroke: var(--navy); }
+
+/* Status chip */
+.status-chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.chip-created  { background: var(--status-created);  color: var(--status-created-txt); }
+.chip-accepted { background: var(--status-accepted); color: var(--status-accepted-txt); }
+.chip-enroute  { background: var(--status-enroute);  color: var(--status-enroute-txt); }
+.chip-completed{ background: var(--status-completed);color: var(--status-completed-txt); }
+.chip-cancelled{ background: var(--status-cancelled);color: var(--status-cancelled-txt); }
+.chip-disputed { background: var(--status-disputed); color: var(--status-disputed-txt); }
+
+/* Material chip */
+.material-chip { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; gap: 5px; cursor: pointer; border: 1.5px solid transparent; transition: all 0.15s; }
+.material-chip.metal   { background: var(--metal-bg);   color: var(--metal-fg);   }
+.material-chip.plastic { background: var(--plastic-bg); color: var(--plastic-fg); }
+.material-chip.paper   { background: var(--paper-bg);   color: var(--paper-fg);   }
+.material-chip.ewaste  { background: var(--ewaste-bg);  color: var(--ewaste-fg);  }
+.material-chip.fabric  { background: var(--fabric-bg);  color: var(--fabric-fg);  }
+.material-chip.glass   { background: var(--glass-bg);   color: var(--glass-fg);   }
+.material-chip.selected{ border-color: currentColor; }
+
+/* Rate card */
+.rate-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+.rate-card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.rate-card-info { flex: 1; }
+.rate-card-material { font-size: 13px; font-weight: 600; color: var(--navy); }
+.rate-card-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.rate-card-price { font-family: 'DM Mono',monospace; font-size: 15px; font-weight: 600; color: var(--amber); }
+.rate-trend { font-size: 11px; margin-top: 2px; }
+.rate-trend.up { color: var(--teal); } .rate-trend.down { color: var(--red); } .rate-trend.flat { color: var(--muted); }
+
+/* Order card */
+.order-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.order-card-top { padding: 14px 16px 12px; }
+.order-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.order-id { font-family: 'DM Mono',monospace; font-size: 11px; color: var(--muted); }
+.order-materials { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.order-card-footer { border-top: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--bg); }
+.order-footer-info { font-size: 12px; color: var(--muted); }
+.order-amount { font-family: 'DM Mono',monospace; font-size: 14px; font-weight: 600; color: var(--amber); }
+
+/* Skeleton */
+.skeleton { background: #E8ECF1; border-radius: 6px; position: relative; overflow: hidden; }
+.skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,transparent,rgba(255,255,255,0.55),transparent); animation: shimmer 1.5s infinite; }
+@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+/* Step indicator */
+.step-indicator { display: flex; gap: 6px; align-items: center; justify-content: center; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all 0.2s; }
+.step-dot.active { width: 24px; border-radius: 4px; background: var(--red); }
+.step-dot.done { background: var(--teal); }
+
+/* Progress bar */
+.progress-bar { height: 3px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--red); border-radius: 4px; transition: width 0.3s; }
+
+/* OTP boxes */
+.otp-boxes { display: flex; gap: 10px; justify-content: center; }
+.otp-box { width: 46px; height: 56px; border: 2px solid var(--border); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono',monospace; font-size: 22px; font-weight: 600; color: var(--navy); background: var(--surface); }
+.otp-box.filled { border-color: var(--navy); background: var(--surface2); }
+.otp-box.active { border-color: var(--navy); }
+.otp-box.error  { border-color: var(--red); background: var(--red-light); }
+
+/* Timeline */
+.timeline { display: flex; flex-direction: column; }
+.timeline-item { display: flex; gap: 12px; position: relative; }
+.timeline-item:not(:last-child) .tl-line::after { content:''; position:absolute; left:11px; top:26px; width:2px; height:calc(100% - 4px); background:var(--border); }
+.tl-line { position: relative; display: flex; flex-direction: column; align-items: center; }
+.timeline-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.timeline-dot.done    { background: var(--teal);   color: #fff; }
+.timeline-dot.active  { background: var(--red);    color: #fff; }
+.timeline-dot.pending { background: var(--border); color: var(--muted); }
+.tl-content { flex: 1; padding: 2px 0 20px; }
+.tl-title { font-size: 13px; font-weight: 600; color: var(--navy); }
+.tl-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* Chat bubbles */
+.chat-bubble { max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+.chat-bubble.sent { background: var(--navy); color: #fff; border-bottom-right-radius: 4px; }
+.chat-bubble.received { background: var(--surface); color: var(--navy); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.chat-time { font-family: 'DM Mono',monospace; font-size: 10px; color: var(--muted); }
+
+/* Section heading */
+.section-heading { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.section-link { font-size: 12px; font-weight: 600; color: var(--red); }
+
+/* Stat card */
+.stats-strip { display: flex; gap: 8px; }
+.stat-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.stat-value { font-family: 'DM Mono',monospace; font-size: 20px; font-weight: 600; color: var(--navy); }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Empty state */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; gap: 12px; }
+.empty-icon  { font-size: 42px; opacity: 0.35; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--navy); }
+.empty-sub   { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+/* Onboarding screens */
+.onboard-visual { background: var(--navy); display: flex; align-items: center; justify-content: center; flex: 1.4; position: relative; overflow: hidden; }
+.onboard-icon-wrap { width: 100px; height: 100px; background: rgba(255,255,255,0.08); border-radius: 32px; display: flex; align-items: center; justify-content: center; font-size: 44px; border: 1px solid rgba(255,255,255,0.12); }
+.onboard-text-area { flex: 1; padding: 24px 20px 20px; display: flex; flex-direction: column; }
+.onboard-title { font-size: 22px; font-weight: 700; color: var(--navy); line-height: 1.25; margin-bottom: 10px; }
+.onboard-body { font-size: 14px; color: var(--slate); line-height: 1.6; flex: 1; }
+.onboard-footer { padding: 0 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+.splash-circle { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.06); }
+
+/* Type card */
+.type-card { background: var(--surface); border: 2px solid var(--border); border-radius: 16px; padding: 20px; cursor: pointer; display: flex; gap: 16px; align-items: flex-start; transition: all 0.15s; }
+.type-card.selected { border-color: var(--navy); background: rgba(28,46,74,0.03); }
+.type-card-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+
+/* Radio card */
+.radio-card { border: 2px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: border-color 0.15s; background: var(--surface); }
+.radio-card.selected { border-color: var(--navy); background: rgba(28,46,74,0.03); }
+
+/* Banner */
+.banner { border-radius: 12px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; }
+.banner-info    { background: #EEF4FC; }
+.banner-success { background: var(--teal-light); }
+.banner-warn    { background: var(--amber-light); }
+.banner-error   { background: var(--red-light); }
+
+/* Earnings */
+.earnings-total { background: var(--amber-light); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+.earnings-total-label { font-size: 14px; font-weight: 600; color: var(--amber); }
+.earnings-total-value { font-family: 'DM Mono',monospace; font-size: 22px; font-weight: 700; color: var(--amber); }
+
+/* List section */
+.list-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.list-row { padding: 14px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.list-row:last-child { border-bottom: none; }
+.list-row-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.list-row-content { flex: 1; }
+.list-row-title { font-size: 14px; font-weight: 500; color: var(--navy); }
+.list-row-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.chevron { color: var(--muted); font-size: 16px; }
+
+/* Toggle */
+.toggle { width: 44px; height: 26px; border-radius: 13px; background: var(--border); position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.2s; }
+.toggle.on { background: var(--teal); }
+.toggle::after { content:''; position:absolute; width:20px; height:20px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+.toggle.on::after { transform: translateX(18px); }
+
+/* Tab chips */
+.tab-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.tab-chips::-webkit-scrollbar { display: none; }
+.tab-chip { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; background: var(--surface); border: 1.5px solid var(--border); color: var(--slate); transition: all 0.15s; }
+.tab-chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+/* Star rating */
+.stars { display: flex; gap: 3px; }
+.star.filled { color: #F59E0B; } .star.empty { color: var(--border); }
+
+/* Scroll area */
+.scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.scroll-area::-webkit-scrollbar { display: none; }
+
+/* Misc */
+.page-content { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.divider { height: 1px; background: var(--border); }
+.mono { font-family: 'DM Mono',monospace; }
+.text-amber { color: var(--amber); }
+.text-teal { color: var(--teal); }
+.text-red { color: var(--red); }
+.text-muted { color: var(--muted); }
+.text-slate { color: var(--slate); }
+.text-navy { color: var(--navy); }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-6 { gap: 6px; } .gap-8 { gap: 8px; } .gap-10 { gap: 10px; }
+.gap-12 { gap: 12px; } .gap-16 { gap: 16px; }
+.fw-600 { font-weight: 600; } .fw-700 { font-weight: 700; }
+.fs-11 { font-size: 11px; } .fs-12 { font-size: 12px; } .fs-13 { font-size: 13px; }
+.fs-14 { font-size: 14px; } .fs-15 { font-size: 15px; } .fs-16 { font-size: 16px; }
+.fs-18 { font-size: 18px; } .fs-20 { font-size: 20px; }
+
+/* Photo upload / zone */
+.photo-upload { width: 72px; height: 72px; border-radius: 50%; border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; background: var(--surface2); font-size: 24px; }
+.photo-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--surface2); cursor: pointer; }
+.photo-zone.has-photo { border-style: solid; border-color: var(--teal); background: var(--teal-light); }
+.photo-thumbnail { border-radius: 8px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 36px; }
+
+/* AI badge */
+.ai-badge { background: var(--teal-light); border: 1px solid rgba(26,107,99,0.2); border-radius: 10px; padding: 12px 14px; }
+.ai-badge-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ai-tag { background: var(--teal); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px; }
+
+/* Weight row */
+.weight-row { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+.weight-input { width: 70px; height: 40px; border: 1.5px solid var(--border); border-radius: 8px; text-align: center; font-family: 'DM Mono',monospace; font-size: 15px; font-weight: 600; color: var(--navy); background: var(--surface2); outline: none; }
+
+/* Datetime slot */
+.datetime-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.datetime-slot { border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 600; color: var(--slate); cursor: pointer; background: var(--surface); }
+.datetime-slot.selected { background: var(--navy); color: #fff; border-color: var(--navy); }
+.datetime-slot.disabled { opacity: 0.38; cursor: default; }
+
+/* Map placeholder */
+.map-placeholder { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: linear-gradient(135deg,#EEF4FC 0%,#E8F4E8 100%); display: flex; align-items: center; justify-content: center; position: relative; }
+
+/* Data table */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0; border-bottom: 1px solid var(--border); text-align: left; }
+.data-table td { font-size: 13px; padding: 10px 0; border-bottom: 1px solid var(--border); color: var(--slate); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table .mono-cell { font-family: 'DM Mono',monospace; color: var(--navy); font-weight: 500; }
+
+/* Aggregator card */
+.agg-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+.agg-name { font-size: 14px; font-weight: 700; color: var(--navy); }
+.agg-best-rate { background: var(--amber-light); border-radius: 8px; padding: 8px 12px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; }
+
+/* KYC badge */
+.kyc-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; }
+.kyc-verified { background: var(--teal-light); color: var(--teal); }
+.kyc-pending  { background: var(--amber-light); color: var(--amber); }
+
+/* Pill */
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.pill-navy  { background: rgba(28,46,74,0.08); color: var(--navy); }
+.pill-amber { background: var(--amber-light); color: var(--amber); }
+.pill-green { background: #DCFCE7; color: #166534; }
+
+/* Invoice */
+.invoice-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.invoice-row:last-child { border-bottom: none; }
+.invoice-icon { width: 38px; height: 38px; background: var(--red-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+/* Notif */
+.notif-item { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.notif-item.unread { background: rgba(28,46,74,0.025); }
+.notif-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; margin-top: 6px; }
+
+/* Receipt header */
+.receipt-header { background: var(--teal); padding: 28px 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.receipt-check { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 4px; }
+
+/* Bottom sheet */
+.bottom-sheet { background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 20px 32px; }
+.sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 16px; }
+
+/* Ad banner */
+.ad-banner { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.ad-tag { font-size: 9px; font-weight: 700; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; letter-spacing: 0.5px; }
+
+/* FAQ */
+.faq-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.faq-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--navy); gap: 8px; }
+.faq-body { padding: 0 16px 14px; font-size: 13px; color: var(--slate); line-height: 1.6; }
+
+/* Splash */
+.splash-content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; position: relative; overflow: hidden; }
+.splash-logo-mark { width: 88px; height: 88px; background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.12); border-radius: 28px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; position: relative; z-index: 1; }
+.splash-logo-inner { width: 52px; height: 52px; background: var(--red); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.splash-dots { display: flex; gap: 6px; }
+.splash-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+.splash-dot.active { background: var(--red); }
+
+/* Dropdown field */
+.dropdown-field { height: 52px; border: 1.5px solid var(--border); border-radius: 10px; padding: 0 14px; font-family: 'DM Sans',sans-serif; font-size: 15px; color: var(--navy); background: var(--surface); display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SVG ICON DEFINITIONS — referenced inline via <use>
+     ============================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <!-- Chevron left — THE canonical back icon -->
+  <symbol id="icon-back" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </symbol>
+  <!-- Tab: Home -->
+  <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </symbol>
+  <!-- Tab: Orders -->
+  <symbol id="icon-orders" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+    <rect x="9" y="3" width="6" height="4" rx="2"/>
+    <line x1="9" y1="12" x2="15" y2="12"/>
+    <line x1="9" y1="16" x2="13" y2="16"/>
+  </symbol>
+  <!-- Tab: Prices / Chart -->
+  <symbol id="icon-prices" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10"/>
+    <line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="14"/>
+    <line x1="2" y1="20" x2="22" y2="20"/>
+  </symbol>
+  <!-- Tab: Profile -->
+  <symbol id="icon-profile" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="7" r="4"/>
+    <path d="M4 21v-1a8 8 0 0 1 16 0v1"/>
+  </symbol>
+  <!-- Notification bell -->
+  <symbol id="icon-bell" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </symbol>
+  <!-- S logo mark for compact header -->
+  <symbol id="icon-s-logo" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="10" fill="#C0392B"/>
+    <text x="16" y="23" text-anchor="middle" font-family="DM Sans,sans-serif" font-weight="700" font-size="18" fill="white">S</text>
+  </symbol>
+</svg>
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<div class="sidebar">
+  <div class="sidebar-brand">
+    <h1>♻ Sortt UI v2</h1>
+    <p>Seller-Side · All Screens</p>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Common / Auth</div>
+    <button class="sidebar-btn active" onclick="show('splash')"><span class="sb-dot"></span>Splash Screen</button>
+    <button class="sidebar-btn" onclick="show('onboard1')"><span class="sb-dot"></span>Onboarding — Slide 1</button>
+    <button class="sidebar-btn" onclick="show('onboard2')"><span class="sb-dot"></span>Onboarding — Slide 2</button>
+    <button class="sidebar-btn" onclick="show('onboard3')"><span class="sb-dot"></span>Onboarding — Slide 3</button>
+    <button class="sidebar-btn" onclick="show('user-type')"><span class="sb-dot"></span>User Type Selection</button>
+    <button class="sidebar-btn" onclick="show('phone')"><span class="sb-dot"></span>Phone Entry</button>
+    <button class="sidebar-btn" onclick="show('otp')"><span class="sb-dot"></span>OTP Verify</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Seller Onboarding</div>
+    <button class="sidebar-btn" onclick="show('account-type')"><span class="sb-dot"></span>Account Type Select</button>
+    <button class="sidebar-btn" onclick="show('profile-ind')"><span class="sb-dot"></span>Profile — Individual</button>
+    <button class="sidebar-btn" onclick="show('profile-biz')"><span class="sb-dot"></span>Profile — Business</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Seller Home</div>
+    <button class="sidebar-btn" onclick="show('home')"><span class="sb-dot"></span>Home (with orders)</button>
+    <button class="sidebar-btn" onclick="show('home-empty')"><span class="sb-dot"></span>Home (empty state)</button>
+    <button class="sidebar-btn" onclick="show('home-skeleton')"><span class="sb-dot"></span>Home (skeleton)</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Listing Wizard</div>
+    <button class="sidebar-btn" onclick="show('list1')"><span class="sb-dot"></span>Step 1 — Materials</button>
+    <button class="sidebar-btn" onclick="show('list2')"><span class="sb-dot"></span>Step 2 — Photo & Weight</button>
+    <button class="sidebar-btn" onclick="show('list2-ai')"><span class="sb-dot"></span>Step 2 — AI Result</button>
+    <button class="sidebar-btn" onclick="show('list3')"><span class="sb-dot"></span>Step 3 — Pickup Pref.</button>
+    <button class="sidebar-btn" onclick="show('list4')"><span class="sb-dot"></span>Step 4 — Review & Submit</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Order Management</div>
+    <button class="sidebar-btn" onclick="show('orders-active')"><span class="sb-dot"></span>Orders — Active</button>
+    <button class="sidebar-btn" onclick="show('orders-completed')"><span class="sb-dot"></span>Orders — Completed</button>
+    <button class="sidebar-btn" onclick="show('orders-empty')"><span class="sb-dot"></span>Orders — Empty</button>
+    <button class="sidebar-btn" onclick="show('order-pre')"><span class="sb-dot"></span>Order Detail — Pre-Accept</button>
+    <button class="sidebar-btn" onclick="show('order-post')"><span class="sb-dot"></span>Order Detail — Accepted</button>
+    <button class="sidebar-btn" onclick="show('order-enroute')"><span class="sb-dot"></span>Order Detail — En Route</button>
+    <button class="sidebar-btn" onclick="show('order-cancel')"><span class="sb-dot"></span>Cancel Sheet</button>
+    <button class="sidebar-btn" onclick="show('otp-confirm')"><span class="sb-dot"></span>OTP Confirmation</button>
+    <button class="sidebar-btn" onclick="show('receipt')"><span class="sb-dot"></span>Transaction Receipt</button>
+    <button class="sidebar-btn" onclick="show('review')"><span class="sb-dot"></span>Rate & Review</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Prices & Browse</div>
+    <button class="sidebar-btn" onclick="show('prices')"><span class="sb-dot"></span>Market Prices</button>
+    <button class="sidebar-btn" onclick="show('browse')"><span class="sb-dot"></span>Browse Aggregators</button>
+    <button class="sidebar-btn" onclick="show('agg-profile')"><span class="sb-dot"></span>Aggregator Profile</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Profile & Settings</div>
+    <button class="sidebar-btn" onclick="show('profile-seller')"><span class="sb-dot"></span>Seller Profile</button>
+    <button class="sidebar-btn" onclick="show('settings')"><span class="sb-dot"></span>Settings</button>
+    <button class="sidebar-btn" onclick="show('help')"><span class="sb-dot"></span>Help & Support</button>
+    <button class="sidebar-btn" onclick="show('notifications')"><span class="sb-dot"></span>Notifications</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Shared</div>
+    <button class="sidebar-btn" onclick="show('chat')"><span class="sb-dot"></span>In-App Chat</button>
+    <button class="sidebar-btn" onclick="show('dispute')"><span class="sb-dot"></span>File a Dispute</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Business Mode</div>
+    <button class="sidebar-btn" onclick="show('biz-dash')"><span class="sb-dot"></span>Business Dashboard</button>
+    <button class="sidebar-btn" onclick="show('biz-invoices')"><span class="sb-dot"></span>GST Invoices</button>
+    <button class="sidebar-btn" onclick="show('biz-team')"><span class="sb-dot"></span>Team Management</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN AREA
+     ============================================================ -->
+<div class="main-area">
+  <div class="screen-label" id="screen-label">SPLASH SCREEN</div>
+  <div class="phone-frame">
+    <div class="phone-notch"></div>
+
+    <!-- ====================================================
+         REUSABLE BACK ICON SNIPPET (SVG only, no emoji)
+         Used in all navbars except Home & Profile
+         ==================================================== -->
+
+    <!-- S1: SPLASH -->
+    <div class="phone-inner" id="s-splash" style="background:var(--navy);">
+      <div class="status-bar splash-bar"><span class="mono">9:41</span><div class="sb-icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div></div>
+      <div class="splash-content">
+        <div class="splash-circle" style="width:420px;height:420px;right:-120px;top:-100px;"></div>
+        <div class="splash-circle" style="width:260px;height:260px;left:-80px;bottom:-60px;"></div>
+        <div class="splash-logo-mark"><div class="splash-logo-inner">♻</div></div>
+        <div style="font-size:34px;font-weight:700;color:#fff;letter-spacing:-1px;position:relative;z-index:1;">Sortt</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.45);margin-top:8px;text-align:center;position:relative;z-index:1;">Your scrap. Fair price. Zero hassle.</div>
+        <div style="margin-top:48px;position:relative;z-index:1;"><div class="splash-dots"><div class="splash-dot active"></div><div class="splash-dot active"></div><div class="splash-dot"></div></div></div>
+      </div>
+    </div>
+
+    <!-- S2: ONBOARDING 1 -->
+    <div class="phone-inner" id="s-onboard1" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>●●●●</span><span>🔋</span></div></div>
+      <div class="onboard-visual"><div class="onboard-icon-wrap">💰</div><div class="splash-circle" style="width:200px;height:200px;right:-40px;bottom:-40px;"></div></div>
+      <div class="onboard-text-area">
+        <div class="onboard-title">Get the best price for your scrap</div>
+        <div class="onboard-body">See live rates in your area. Compare aggregator prices and earn more from every pickup — no guesswork.</div>
+        <div style="display:flex;gap:6px;margin-top:16px;"><div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div></div>
+      </div>
+      <div class="onboard-footer"><button class="btn-primary">Next</button><button style="background:none;border:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;">Skip</button></div>
+    </div>
+
+    <!-- S3: ONBOARDING 2 -->
+    <div class="phone-inner" id="s-onboard2" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>●●●●</span><span>🔋</span></div></div>
+      <div class="onboard-visual"><div class="onboard-icon-wrap">📸</div><div class="splash-circle" style="width:180px;height:180px;left:-40px;top:-40px;"></div></div>
+      <div class="onboard-text-area">
+        <div class="onboard-title">AI evaluates your scrap instantly</div>
+        <div class="onboard-body">Snap a photo. Our AI identifies materials, estimates weight, and gives you an instant quote — before any aggregator arrives.</div>
+        <div style="display:flex;gap:6px;margin-top:16px;"><div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div></div>
+      </div>
+      <div class="onboard-footer"><button class="btn-primary">Next</button><button style="background:none;border:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;">Skip</button></div>
+    </div>
+
+    <!-- S4: ONBOARDING 3 -->
+    <div class="phone-inner" id="s-onboard3" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>●●●●</span><span>🔋</span></div></div>
+      <div class="onboard-visual"><div class="onboard-icon-wrap">🏍</div><div class="splash-circle" style="width:200px;height:200px;left:-60px;bottom:-60px;"></div></div>
+      <div class="onboard-text-area">
+        <div class="onboard-title">Pickup at your doorstep</div>
+        <div class="onboard-body">Verified aggregators near you come to you. Track in real time, confirm with OTP, get paid on the spot.</div>
+        <div style="display:flex;gap:6px;margin-top:16px;"><div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div></div>
+      </div>
+      <div class="onboard-footer">
+        <button class="btn-primary">Get Started</button>
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;"><span class="fs-12 text-muted">Language:</span><div class="tab-chip active" style="padding:4px 14px;font-size:12px;">English</div><div class="tab-chip" style="padding:4px 14px;font-size:12px;">తెలుగు</div></div>
+      </div>
+    </div>
+
+    <!-- S5: USER TYPE -->
+    <div class="phone-inner" id="s-user-type" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="navbar-brand" style="color:var(--navy);">♻ Sortt</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:24px;">
+        <div style="margin-bottom:8px;"><div class="fs-20 fw-700 text-navy" style="line-height:1.3;">I want to…</div><div class="fs-14 text-muted" style="margin-top:6px;">Tell us how you'll use Sortt</div></div>
+        <div class="type-card selected">
+          <div class="type-card-icon" style="background:var(--red-light);">♻️</div>
+          <div style="flex:1;"><div class="fw-700 text-navy fs-15">Sell my scrap</div><div class="fs-12 text-muted" style="margin-top:3px;line-height:1.45;">Household, office, or business looking to sell scrap at fair rates</div><div style="margin-top:8px;display:flex;gap:6px;"><span class="pill pill-navy">Household</span><span class="pill pill-navy">Office</span><span class="pill pill-navy">Factory</span></div></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;flex-shrink:0;">✓</div>
+        </div>
+        <div class="type-card">
+          <div class="type-card-icon" style="background:var(--teal-light);">🏪</div>
+          <div style="flex:1;"><div class="fw-700 text-navy fs-15">I'm a scrap dealer</div><div class="fs-12 text-muted" style="margin-top:3px;line-height:1.45;">I collect scrap and want to find pickup orders near me</div><div style="margin-top:8px;display:flex;gap:6px;"><span class="pill pill-navy">Shop-based</span><span class="pill pill-navy">Mobile</span></div></div>
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div>
+        </div>
+        <div class="banner banner-info"><span>ℹ️</span><span class="fs-12 text-slate" style="line-height:1.5;">You can always switch account types later from Settings.</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Continue as Seller →</button></div>
+    </div>
+
+    <!-- S6: PHONE ENTRY -->
+    <div class="phone-inner" id="s-phone" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div class="navbar-title">Sign In / Register</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:32px;">
+        <div style="margin-bottom:24px;"><div class="fs-20 fw-700 text-navy" style="letter-spacing:-0.4px;">Welcome to Sortt</div><div class="fs-14 text-muted" style="margin-top:8px;line-height:1.55;">Enter your mobile number. We'll send a verification code on WhatsApp.</div></div>
+        <div class="input-group">
+          <div class="input-label">Mobile Number</div>
+          <div class="flex gap-8 items-center">
+            <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;height:52px;padding:0 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;"><span>🇮🇳</span><span class="mono fw-600 text-navy">+91</span></div>
+            <div class="input-field mono focused" style="flex:1;">98765 43210</div>
+          </div>
+        </div>
+        <div class="banner banner-info"><span style="font-size:18px;">💬</span><div><div class="fs-13 fw-600 text-slate">OTP via WhatsApp</div><div class="fs-12 text-muted" style="margin-top:2px;">Free · No SMS charges · Instant delivery</div></div></div>
+        <div class="fs-11 text-muted" style="text-align:center;line-height:1.6;padding:0 8px;">By continuing, you agree to our <span style="color:var(--navy);font-weight:600;">Terms</span> and <span style="color:var(--navy);font-weight:600;">Privacy Policy</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary"><span>💬</span> Send OTP via WhatsApp</button></div>
+    </div>
+
+    <!-- S7: OTP VERIFY -->
+    <div class="phone-inner" id="s-otp" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div class="navbar-title">Verify OTP</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:32px;">
+        <div style="text-align:center;margin-bottom:28px;"><div style="font-size:44px;margin-bottom:12px;">💬</div><div class="fs-18 fw-700 text-navy">Enter the 6-digit code</div><div class="fs-13 text-muted" style="margin-top:8px;line-height:1.5;">Sent to your WhatsApp at<br><span class="mono fw-600 text-navy">+91 ••••• 43210</span></div></div>
+        <div class="otp-boxes"><div class="otp-box filled">9</div><div class="otp-box filled">3</div><div class="otp-box filled">7</div><div class="otp-box active"></div><div class="otp-box"></div><div class="otp-box"></div></div>
+        <div style="text-align:center;margin-top:20px;"><span class="fs-13 text-muted">Resend in </span><span class="mono fw-600 text-navy">00:42</span></div>
+      </div></div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn-primary">Verify & Continue</button>
+        <button style="background:none;border:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;height:36px;">Didn't receive it? Resend</button>
+      </div>
+    </div>
+
+    <!-- S8: ACCOUNT TYPE -->
+    <div class="phone-inner" id="s-account-type" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div class="navbar-title">Account Type</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:24px;">
+        <div class="fs-20 fw-700 text-navy" style="margin-bottom:4px;">What describes you best?</div>
+        <div class="fs-13 text-muted" style="margin-bottom:20px;">This helps us tailor your experience</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="type-card selected"><div class="type-card-icon" style="background:#F0FDF4;">🏠</div><div><div class="fw-700 text-navy">Individual / Household</div><div class="fs-12 text-muted" style="margin-top:4px;line-height:1.5;">Sell scrap from home or office. Simple flow — no GST required.</div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"><span class="pill pill-navy">5–50 kg</span><span class="pill pill-navy">Occasional</span></div></div></div>
+          <div class="type-card"><div class="type-card-icon" style="background:#EFF6FF;">🏭</div><div><div class="fw-700 text-navy">Business / Industry</div><div class="fs-12 text-muted" style="margin-top:4px;line-height:1.5;">Factory or warehouse. GST invoices, recurring schedules, team access.</div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"><span class="pill pill-navy">500 kg+</span><span class="pill pill-navy">GST invoice</span></div></div></div>
+        </div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Continue</button></div>
+    </div>
+
+    <!-- S9: PROFILE INDIVIDUAL -->
+    <div class="phone-inner" id="s-profile-ind" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div class="navbar-title">Set Up Profile</div>
+        <div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 1 of 1</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:20px;">
+        <div class="flex flex-col items-center" style="gap:10px;margin-bottom:8px;"><div class="photo-upload"><div class="avatar navy xl">R</div></div><span class="fs-12 text-muted">Optional · Tap to add photo</span></div>
+        <div class="input-group"><div class="input-label">Full Name</div><div class="input-field focused">Rahul Sharma</div></div>
+        <div class="input-group"><div class="input-label">Locality / Area</div><div class="input-field">Banjara Hills</div></div>
+        <div class="input-group"><div class="input-label">City</div><div class="input-field" style="background:var(--surface2);justify-content:space-between;"><span>Hyderabad</span><span class="fs-11 text-muted" style="background:var(--bg);padding:2px 8px;border-radius:6px;">Pilot 🔒</span></div></div>
+        <div class="banner banner-info"><span>📍</span><span class="fs-12 text-slate" style="line-height:1.5;">Your precise address is only shared with an aggregator after they accept your order.</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Create Account</button></div>
+    </div>
+
+    <!-- S10: PROFILE BUSINESS -->
+    <div class="phone-inner" id="s-profile-biz" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div class="navbar-title">Business Setup</div>
+      </div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:16px;">
+        <div class="input-group"><div class="input-label">Business Name</div><div class="input-field focused">Sharma Industries Pvt Ltd</div></div>
+        <div class="input-group"><div class="input-label">GSTIN <span class="fs-11 text-muted fw-400">(Optional now)</span></div><div class="input-field mono" style="color:var(--muted);">29AABCS1234A1Z5</div></div>
+        <div class="input-group"><div class="input-label">Business Address</div><div class="input-field">Plot 42, IDA Nacharam, Hyderabad</div></div>
+        <div class="input-group"><div class="input-label">Industry Type</div><div class="dropdown-field"><span>Manufacturing</span><span>▼</span></div></div>
+        <div style="border-top:1px solid var(--border);padding-top:16px;">
+          <div class="fs-14 fw-600 text-navy" style="margin-bottom:12px;">Invite Team <span class="fs-12 text-muted fw-400">(up to 5)</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px;"><div class="input-field" style="color:var(--muted);">+91 team member phone...</div><button style="background:none;border:1.5px dashed var(--border);border-radius:10px;height:46px;color:var(--slate);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;">+ Add Member</button></div>
+        </div>
+        <div><div class="fs-14 fw-600 text-navy" style="margin-bottom:12px;">Recurring Pickup</div><div style="display:flex;gap:8px;flex-wrap:wrap;"><div class="tab-chip">Off</div><div class="tab-chip active">Weekly</div><div class="tab-chip">Bi-weekly</div><div class="tab-chip">Monthly</div></div></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Create Business Account</button></div>
+    </div>
+
+    <!-- =========================================================
+         S11: HOME — SWIGGY-STYLE COLLAPSING HEADER
+         Note: No back button on Home screen (root tab screen)
+         ========================================================= -->
+    <div class="phone-inner" id="s-home" style="display:none;">
+      <div class="status-bar dark" id="home-statusbar"><span class="mono">9:41</span><div class="sb-icons"><span>●●●●</span><span>🔋</span></div></div>
+
+      <!-- ---- COLLAPSING HEADER ---- -->
+      <div class="home-header" id="home-header">
+        <div class="home-navbar">
+          <!-- DEFAULT layer: brand -->
+          <div class="hn-default">
+            <div style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px;">♻ Sortt</div>
+          </div>
+          <!-- COMPACT layer: avatar S + name + location (shown on scroll) -->
+          <div class="hn-compact">
+            <svg width="32" height="32"><use href="#icon-s-logo"/></svg>
+            <div class="hn-compact-info">
+              <div class="hn-compact-name">Rahul Sharma</div>
+              <div class="hn-compact-loc"><span class="hn-compact-loc-dot"></span>Banjara Hills</div>
+            </div>
+          </div>
+          <!-- Icons always visible -->
+          <div class="home-header-icons">
+            <div class="icon-btn dark">
+              <svg width="22" height="22"><use href="#icon-bell" stroke="rgba(255,255,255,0.8)"/></svg>
+            </div>
+            <div class="avatar navy sm" style="border:2px solid rgba(255,255,255,0.2);">R</div>
+          </div>
+          <div class="navbar-circle"></div>
+        </div>
+
+        <!-- ---- GREETING STRIP (collapses on scroll) ---- -->
+        <div class="greeting-strip" id="greeting-strip">
+          <div class="greeting-strip-inner">
+            <div class="greeting-sub">Good morning,</div>
+            <div class="greeting-name">Rahul Sharma</div>
+            <div class="locality-pill" style="margin-top:10px;"><span class="loc-dot"></span>Banjara Hills, Hyderabad</div>
+          </div>
+        </div>
+      </div>
+      <!-- ---- SCROLLABLE CONTENT ---- -->
+      <div class="scroll-area" id="home-scroll" style="background:var(--bg);">
+        <div class="page-content">
+          <!-- Stats -->
+          <div class="stats-strip">
+            <div class="stat-card"><div class="stat-value text-amber">₹2,840</div><div class="stat-label">Total earned</div></div>
+            <div class="stat-card"><div class="stat-value">7</div><div class="stat-label">Pickups done</div></div>
+            <div class="stat-card"><div class="stat-value text-teal">2</div><div class="stat-label">Active orders</div></div>
+          </div>
+          <!-- Rates -->
+          <div>
+            <div class="section-heading">Today's Rates <span class="section-link">See all →</span></div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div class="rate-card"><div class="rate-card-icon" style="background:var(--metal-bg);">⚙️</div><div class="rate-card-info"><div class="rate-card-material">Metal (Iron)</div><div class="rate-card-sub">Trending up today</div></div><div><div class="rate-card-price">₹28/kg</div><div class="rate-trend up">▲ ₹1.4</div></div></div>
+              <div class="rate-card"><div class="rate-card-icon" style="background:var(--paper-bg);">📄</div><div class="rate-card-info"><div class="rate-card-material">Paper</div><div class="rate-card-sub">Stable this week</div></div><div><div class="rate-card-price">₹12/kg</div><div class="rate-trend flat">— Same</div></div></div>
+              <div class="rate-card"><div class="rate-card-icon" style="background:var(--plastic-bg);">🧴</div><div class="rate-card-info"><div class="rate-card-material">Plastic (PET)</div><div class="rate-card-sub">Slight dip today</div></div><div><div class="rate-card-price">₹8/kg</div><div class="rate-trend down">▼ ₹0.2</div></div></div>
+            </div>
+          </div>
+          <!-- Active orders -->
+          <div>
+            <div class="section-heading">Active Orders <span class="section-link">View all →</span></div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div class="order-card">
+                <div style="height:3px;background:var(--status-enroute-txt);border-radius:12px 12px 0 0;"></div>
+                <div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24091</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Kumar Scrap Co. en route</div></div><div class="status-chip chip-enroute">En Route</div></div><div class="order-materials"><div class="material-chip metal selected">⚙ Metal · 12 kg</div><div class="material-chip paper selected">📄 Paper · 8 kg</div></div></div>
+                <div class="order-card-footer"><div class="order-footer-info">📅 Today, 10–12 AM</div><div class="order-amount">~₹432</div></div>
+              </div>
+              <div class="order-card">
+                <div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24089</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Waiting for aggregator</div></div><div class="status-chip chip-created">Created</div></div><div class="order-materials"><div class="material-chip plastic selected">🧴 Plastic · 5 kg</div></div></div>
+                <div class="order-card-footer"><div class="order-footer-info">📅 Wed, Mar 5 · 2–4 PM</div><div class="order-amount">~₹40</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Ad -->
+          <div class="ad-banner"><span class="ad-tag">AD</span><span class="fs-12 text-muted" style="flex:1;">Upgrade your insulation — GreenBuild Solutions</span><span class="fs-12 text-muted">→</span></div>
+          <div style="height:8px;"></div>
+        </div>
+      </div>
+      <!-- Tab bar — no back btn on home -->
+      <div class="tab-bar">
+        <div class="tab-item active" onclick="show('home')">
+          <div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div>
+          <div class="tab-label">Home</div>
+        </div>
+        <div class="tab-item" onclick="show('orders-active')">
+          <div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div>
+          <div class="tab-label">Orders</div>
+        </div>
+        <div class="tab-center" onclick="show('list1')">
+          <div class="tab-fab">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div class="tab-center-label">New</div>
+        </div>
+        <div class="tab-item" onclick="show('prices')">
+          <div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div>
+          <div class="tab-label">Prices</div>
+        </div>
+        <div class="tab-item" onclick="show('profile-seller')">
+          <div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div>
+          <div class="tab-label">Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S12: HOME EMPTY -->
+    <div class="phone-inner" id="s-home-empty" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="home-header">
+        <div class="home-navbar"><div class="hn-default"><div style="font-size:18px;font-weight:700;color:#fff;">♻ Sortt</div></div><div class="home-header-icons"><div class="icon-btn dark"><svg width="22" height="22"><use href="#icon-bell" stroke="rgba(255,255,255,0.8)"/></svg></div><div class="avatar navy sm">P</div></div><div class="navbar-circle"></div></div>
+        <div class="greeting-strip"><div class="greeting-strip-inner"><div class="greeting-sub">Good afternoon,</div><div class="greeting-name">Priya Reddy</div><div class="locality-pill" style="margin-top:10px;"><span class="loc-dot"></span>Jubilee Hills, Hyderabad</div></div></div>
+      </div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="stats-strip"><div class="stat-card"><div class="stat-value mono text-muted">—</div><div class="stat-label">Total earned</div></div><div class="stat-card"><div class="stat-value mono text-muted">0</div><div class="stat-label">Pickups done</div></div><div class="stat-card"><div class="stat-value mono text-muted">0</div><div class="stat-label">Active</div></div></div>
+        <div class="card" style="padding:36px 20px;text-align:center;"><div style="font-size:44px;margin-bottom:12px;opacity:0.35;">📦</div><div class="fs-15 fw-600 text-navy">No active orders</div><div class="fs-13 text-muted" style="margin-top:6px;line-height:1.5;">List your first scrap pickup and get the best rates from nearby aggregators</div></div>
+      </div></div>
+      <div class="tab-bar">
+        <div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div>
+        <div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div>
+      </div>
+    </div>
+
+    <!-- S13: HOME SKELETON -->
+    <div class="phone-inner" id="s-home-skeleton" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="home-header"><div class="home-navbar"><div class="hn-default"><div style="font-size:18px;font-weight:700;color:#fff;">♻ Sortt</div></div><div class="home-header-icons"><div class="skeleton" style="width:32px;height:32px;border-radius:50%;"></div></div></div>
+        <div class="greeting-strip"><div class="skeleton" style="width:80px;height:13px;margin-bottom:8px;"></div><div class="skeleton" style="width:150px;height:22px;margin-bottom:12px;"></div><div class="skeleton" style="width:110px;height:26px;border-radius:20px;"></div></div>
+      </div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="stats-strip"><div class="stat-card"><div class="skeleton" style="width:60px;height:24px;margin-bottom:6px;"></div><div class="skeleton" style="width:50px;height:12px;"></div></div><div class="stat-card"><div class="skeleton" style="width:40px;height:24px;margin-bottom:6px;"></div><div class="skeleton" style="width:40px;height:12px;"></div></div><div class="stat-card"><div class="skeleton" style="width:40px;height:24px;margin-bottom:6px;"></div><div class="skeleton" style="width:50px;height:12px;"></div></div></div>
+        <div class="skeleton" style="width:100px;height:16px;margin-bottom:12px;"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;"><div class="card" style="padding:14px 16px;"><div class="flex items-center gap-12"><div class="skeleton" style="width:40px;height:40px;border-radius:10px;flex-shrink:0;"></div><div style="flex:1;"><div class="skeleton" style="width:80px;height:14px;margin-bottom:6px;"></div><div class="skeleton" style="width:120px;height:12px;"></div></div><div class="skeleton" style="width:50px;height:18px;"></div></div></div><div class="card" style="padding:14px 16px;"><div class="flex items-center gap-12"><div class="skeleton" style="width:40px;height:40px;border-radius:10px;flex-shrink:0;"></div><div style="flex:1;"><div class="skeleton" style="width:70px;height:14px;margin-bottom:6px;"></div><div class="skeleton" style="width:110px;height:12px;"></div></div><div class="skeleton" style="width:50px;height:18px;"></div></div></div></div>
+        <div class="skeleton" style="width:100px;height:16px;margin:4px 0 12px;"></div>
+        <div class="skeleton" style="width:100%;height:100px;border-radius:12px;"></div>
+      </div></div>
+      <div class="tab-bar">
+        <div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div>
+        <div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div>
+        <div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         LISTING WIZARD — Steps 1–4
+         All have back icon (light variant)
+         ========================================= -->
+
+    <!-- S14: LIST STEP 1 -->
+    <div class="phone-inner" id="s-list1" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">List Scrap</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 1 of 4</div></div>
+      <div style="padding:6px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-fill" style="width:25%;"></div></div></div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:20px;">
+        <div class="fs-18 fw-700 text-navy" style="margin-bottom:4px;">What are you selling?</div>
+        <div class="fs-13 text-muted" style="margin-bottom:20px;">Select all that apply. Minimum weights shown below each.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="radio-card selected" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">⚙️</div><div class="fw-600 text-navy fs-13">Metal</div><div class="fs-11 text-muted" style="margin-top:2px;">Iron, copper, aluminium</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 1 kg</div></div>
+          <div class="radio-card selected" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">📄</div><div class="fw-600 text-navy fs-13">Paper</div><div class="fs-11 text-muted" style="margin-top:2px;">Newspaper, cardboard</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 2 kg</div></div>
+          <div class="radio-card" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">🧴</div><div class="fw-600 text-navy fs-13">Plastic</div><div class="fs-11 text-muted" style="margin-top:2px;">PET, HDPE, other</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 1 kg</div></div>
+          <div class="radio-card" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">💻</div><div class="fw-600 text-navy fs-13">E-Waste</div><div class="fs-11 text-muted" style="margin-top:2px;">Electronics, cables</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 0.5 kg</div></div>
+          <div class="radio-card" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">👗</div><div class="fw-600 text-navy fs-13">Fabric</div><div class="fs-11 text-muted" style="margin-top:2px;">Clothes, textile</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 1 kg</div></div>
+          <div class="radio-card" style="padding:14px;text-align:center;"><div style="font-size:28px;margin-bottom:6px;">🫙</div><div class="fw-600 text-navy fs-13">Glass</div><div class="fs-11 text-muted" style="margin-top:2px;">Bottles, flat glass</div><div class="fs-11 text-muted" style="margin-top:4px;">Min. 2 kg</div></div>
+        </div>
+        <div class="banner banner-info"><span>💡</span><span class="fs-12 text-slate" style="line-height:1.5;"><b>2 materials selected.</b> Our AI will verify from your photo in the next step.</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Next →</button></div>
+    </div>
+
+    <!-- S15: LIST STEP 2 — Photo required -->
+    <div class="phone-inner" id="s-list2" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">List Scrap</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 2 of 4</div></div>
+      <div style="padding:6px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-fill" style="width:50%;"></div></div></div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:16px;">
+        <div class="fs-16 fw-700 text-navy" style="margin-bottom:4px;">Add a photo & enter weights</div>
+        <div class="fs-12 text-muted" style="margin-bottom:16px;">Photo is required · AI will analyse your scrap pile</div>
+        <div class="photo-zone"><div style="font-size:36px;opacity:0.45;">📸</div><div class="fs-13 fw-600 text-navy">Tap to take photo</div><div class="fs-12 text-muted">or choose from gallery</div><span class="status-chip" style="background:var(--red-light);color:var(--red);font-size:10px;margin-top:4px;">Required</span></div>
+        <div class="fs-14 fw-600 text-navy" style="margin-bottom:10px;">Approximate Weights</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="weight-row"><div style="width:32px;height:32px;border-radius:8px;background:var(--metal-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">⚙️</div><div style="flex:1;font-size:14px;font-weight:600;color:var(--metal-fg);">Metal</div><div class="flex items-center gap-6"><input class="weight-input" value="12" type="number"/><span style="font-size:13px;color:var(--muted);">kg</span></div></div>
+          <div class="weight-row"><div style="width:32px;height:32px;border-radius:8px;background:var(--paper-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">📄</div><div style="flex:1;font-size:14px;font-weight:600;color:var(--paper-fg);">Paper</div><div class="flex items-center gap-6"><input class="weight-input" value="8" type="number"/><span style="font-size:13px;color:var(--muted);">kg</span></div></div>
+        </div>
+        <div class="banner banner-warn"><span>⚠️</span><span class="fs-12 text-slate" style="line-height:1.5;">Approximate weight is fine here. Aggregator confirms exact weight with a scale at pickup.</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary" disabled>Next → (Add photo first)</button></div>
+    </div>
+
+    <!-- S16: LIST STEP 2 AI RESULT -->
+    <div class="phone-inner" id="s-list2-ai" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">List Scrap</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 2 of 4</div></div>
+      <div style="padding:6px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-fill" style="width:50%;"></div></div></div>
+      <div class="scroll-area"><div class="page-content">
+        <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--teal);"><div class="photo-thumbnail" style="height:150px;background:linear-gradient(135deg,var(--metal-bg),var(--paper-bg));font-size:52px;">📦</div><div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;">✓ Photo added</div></div>
+        <div class="ai-badge">
+          <div class="ai-badge-header"><span style="font-size:18px;">🤖</span><div class="ai-tag">AI ESTIMATE</div><span class="fs-12 fw-600 text-teal">Analysis complete</span></div>
+          <div class="fs-12 text-slate" style="line-height:1.55;margin-bottom:10px;">Materials detected. Please verify and adjust — AI estimates can be off.</div>
+          <div style="display:flex;flex-direction:column;gap:6px;"><div class="flex items-center justify-between"><div class="flex items-center gap-8"><span>⚙️</span><span class="fs-13 fw-600 text-navy">Metal</span></div><span class="mono fs-13 text-navy">~10–15 kg</span></div><div class="flex items-center justify-between"><div class="flex items-center gap-8"><span>📄</span><span class="fs-13 fw-600 text-navy">Paper</span></div><span class="mono fs-13 text-navy">~7–10 kg</span></div><div style="border-top:1px dashed rgba(26,107,99,0.2);padding-top:8px;margin-top:2px;" class="flex items-center justify-between"><span class="fs-12 fw-600 text-teal">Estimated value range</span><span class="mono fw-700 text-amber" style="font-size:15px;">₹380–₹490</span></div></div>
+        </div>
+        <div class="fs-14 fw-600 text-navy" style="margin-bottom:10px;">Confirm Weights</div>
+        <div style="display:flex;flex-direction:column;gap:8px;"><div class="weight-row"><div style="width:32px;height:32px;border-radius:8px;background:var(--metal-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">⚙️</div><div style="flex:1;font-size:14px;font-weight:600;color:var(--metal-fg);">Metal</div><div class="flex items-center gap-6"><input class="weight-input" value="12" type="number" style="border-color:var(--teal);"/><span style="font-size:13px;color:var(--muted);">kg</span></div></div><div class="weight-row"><div style="width:32px;height:32px;border-radius:8px;background:var(--paper-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">📄</div><div style="flex:1;font-size:14px;font-weight:600;color:var(--paper-fg);">Paper</div><div class="flex items-center gap-6"><input class="weight-input" value="8" type="number" style="border-color:var(--teal);"/><span style="font-size:13px;color:var(--muted);">kg</span></div></div></div>
+        <div class="input-group"><div class="input-label">Notes <span class="fs-11 text-muted fw-400">(Optional)</span></div><textarea style="border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--navy);resize:none;height:72px;outline:none;width:100%;background:var(--surface);" placeholder="E.g. Some items are on the terrace..."></textarea></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Next →</button></div>
+    </div>
+
+    <!-- S17: LIST STEP 3 — Pickup Preference -->
+    <div class="phone-inner" id="s-list3" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">List Scrap</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 3 of 4</div></div>
+      <div style="padding:6px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-fill" style="width:75%;"></div></div></div>
+      <div class="scroll-area"><div class="page-content" style="padding-top:16px;">
+        <div class="fs-16 fw-700 text-navy" style="margin-bottom:16px;">Pickup preference</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+          <div class="radio-card selected"><div class="flex items-center justify-between"><div class="flex items-center gap-12"><div style="font-size:22px;">🏠</div><div><div class="fw-600 text-navy">Pickup from my location</div><div class="fs-12 text-muted" style="margin-top:2px;">Aggregator comes to you · Free</div></div></div><div style="width:20px;height:20px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;">✓</div></div></div>
+          <div class="radio-card"><div class="flex items-center justify-between"><div class="flex items-center gap-12"><div style="font-size:22px;">🏪</div><div><div class="fw-600 text-navy">Drop-off at aggregator</div><div class="fs-12 text-muted" style="margin-top:2px;">You bring the scrap · Higher rate</div></div></div><div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);"></div></div></div>
+        </div>
+        <div class="input-group" style="margin-bottom:10px;"><div class="input-label">Pickup Address</div><div class="input-field" style="height:auto;padding:12px 14px;line-height:1.4;">Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034</div></div>
+        <div class="map-placeholder" style="height:120px;"><div style="font-size:28px;">📍</div><span style="font-size:12px;color:var(--slate);position:absolute;bottom:8px;right:10px;">Tap to adjust pin</span></div>
+        <div class="fs-14 fw-600 text-navy" style="margin-bottom:10px;">Preferred Date</div>
+        <div class="datetime-grid" style="margin-bottom:14px;"><div class="datetime-slot">Mon<br><span class="mono" style="font-size:11px;">Mar 3</span></div><div class="datetime-slot selected">Tue<br><span class="mono" style="font-size:11px;">Mar 4</span></div><div class="datetime-slot">Wed<br><span class="mono" style="font-size:11px;">Mar 5</span></div><div class="datetime-slot disabled">Thu<br><span class="mono" style="font-size:11px;">Mar 6</span></div></div>
+        <div class="fs-14 fw-600 text-navy" style="margin-bottom:10px;">Preferred Time</div>
+        <div class="datetime-grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="datetime-slot selected">8–10 AM</div><div class="datetime-slot">10–12 PM</div><div class="datetime-slot">12–2 PM</div><div class="datetime-slot">2–4 PM</div><div class="datetime-slot">4–6 PM</div><div class="datetime-slot disabled">Evening</div></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Next →</button></div>
+    </div>
+
+    <!-- S18: LIST STEP 4 — Review & Submit -->
+    <div class="phone-inner" id="s-list4" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Review & Submit</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Step 4 of 4</div></div>
+      <div style="padding:6px 16px 12px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--teal);"></div></div></div>
+      <div class="scroll-area"><div class="page-content">
+        <div class="card" style="padding:16px;">
+          <div class="flex items-center justify-between" style="margin-bottom:12px;"><div class="fs-14 fw-700 text-navy">Earnings Calculator</div><span class="pill pill-amber">Live Rates</span></div>
+          <table class="data-table"><thead><tr><th>Material</th><th>Weight</th><th>Rate</th><th style="text-align:right;">Est.</th></tr></thead><tbody><tr><td><div class="flex items-center gap-8">⚙️ <span class="text-navy fw-600">Metal</span></div></td><td class="mono-cell">12 kg</td><td class="mono-cell text-muted">₹28</td><td class="mono-cell text-amber" style="text-align:right;">₹336</td></tr><tr><td><div class="flex items-center gap-8">📄 <span class="text-navy fw-600">Paper</span></div></td><td class="mono-cell">8 kg</td><td class="mono-cell text-muted">₹12</td><td class="mono-cell text-amber" style="text-align:right;">₹96</td></tr></tbody></table>
+        </div>
+        <div class="earnings-total"><div class="earnings-total-label">Estimated Earnings</div><div class="earnings-total-value">₹432</div></div>
+        <div class="fs-11 text-muted" style="text-align:center;">Estimate based on today's rates · Final amount confirmed at pickup</div>
+        <div class="card"><div class="list-row" style="border-bottom:1px solid var(--border);"><span style="font-size:18px;">📦</span><div class="list-row-content"><div class="list-row-title">Materials</div><div class="list-row-sub">Metal 12 kg, Paper 8 kg</div></div><span class="fs-12 text-red">Edit</span></div><div class="list-row" style="border-bottom:1px solid var(--border);"><span style="font-size:18px;">📍</span><div class="list-row-content"><div class="list-row-title">Pickup Address</div><div class="list-row-sub" style="line-height:1.4;">Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills</div></div><span class="fs-12 text-red">Edit</span></div><div class="list-row"><span style="font-size:18px;">📅</span><div class="list-row-content"><div class="list-row-title">Pickup Window</div><div class="list-row-sub">Tue, Mar 4 · 8–10 AM</div></div><span class="fs-12 text-red">Edit</span></div></div>
+        <div class="banner banner-info"><span>ℹ️</span><span class="fs-12 text-slate" style="line-height:1.5;">Your listing will be sent to verified aggregators near you. You'll be notified when someone accepts.</span></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Submit Listing →</button></div>
+    </div>
+
+    <!-- =========================================
+         ORDER MANAGEMENT
+         ========================================= -->
+
+    <!-- S19: ORDERS ACTIVE -->
+    <div class="phone-inner" id="s-orders-active" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="navbar-title">My Orders</div><div class="navbar-right"><div class="icon-btn light"><svg width="22" height="22"><use href="#icon-bell" stroke="var(--navy)"/></svg></div></div></div>
+      <div style="padding:10px 16px 0;background:var(--surface);border-bottom:1px solid var(--border);"><div class="tab-chips"><div class="tab-chip active">Active (2)</div><div class="tab-chip">Completed</div><div class="tab-chip">Cancelled</div></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div class="order-card"><div style="height:3px;background:var(--status-enroute-txt);border-radius:12px 12px 0 0;"></div><div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24091</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Kumar Scrap Co. en route</div></div><div class="status-chip chip-enroute">En Route</div></div><div class="order-materials"><div class="material-chip metal selected">⚙ Metal · 12 kg</div><div class="material-chip paper selected">📄 Paper · 8 kg</div></div><div class="flex items-center gap-8" style="margin-top:10px;"><div class="avatar teal sm">K</div><div class="fs-12 text-slate">Kumar Aggregates · ⭐ 4.8</div></div></div><div class="order-card-footer"><div class="order-footer-info">📅 Today, 10–12 AM</div><div class="order-amount">~₹432</div></div></div>
+        <div class="order-card"><div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24089</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Waiting for aggregator</div></div><div class="status-chip chip-created">Created</div></div><div class="order-materials"><div class="material-chip plastic selected">🧴 Plastic · 5 kg</div></div></div><div class="order-card-footer"><div class="order-footer-info">📅 Wed, Mar 5 · 2–4 PM</div><div class="order-amount">~₹40</div></div></div>
+      </div></div>
+      <div class="tab-bar"><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div><div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div><div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div></div>
+    </div>
+
+    <!-- S20: ORDERS COMPLETED -->
+    <div class="phone-inner" id="s-orders-completed" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="navbar-title">My Orders</div></div>
+      <div style="padding:10px 16px 0;background:var(--surface);border-bottom:1px solid var(--border);"><div class="tab-chips"><div class="tab-chip">Active (2)</div><div class="tab-chip active">Completed</div><div class="tab-chip">Cancelled</div></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div class="order-card"><div style="height:3px;background:var(--teal);border-radius:12px 12px 0 0;"></div><div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24080</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Completed · Feb 24</div></div><div class="status-chip chip-completed">Completed</div></div><div class="order-materials"><div class="material-chip metal selected">⚙ Metal · 18 kg</div><div class="material-chip paper selected">📄 Paper · 12 kg</div></div></div><div class="order-card-footer"><div class="order-footer-info">Kumar Scrap Co.</div><div class="order-amount text-teal">₹648</div></div></div>
+        <div class="order-card"><div style="height:3px;background:var(--teal);border-radius:12px 12px 0 0;"></div><div class="order-card-top"><div class="order-card-header"><div><div class="order-id">#ORD-24071</div><div class="fs-13 fw-600 text-navy" style="margin-top:2px;">Completed · Feb 18</div></div><div class="status-chip chip-completed">Completed</div></div><div class="order-materials"><div class="material-chip plastic selected">🧴 Plastic · 4 kg</div><div class="material-chip ewaste selected">💻 E-Waste · 1 kg</div></div></div><div class="order-card-footer"><div class="order-footer-info">Ravi Scrap</div><div class="order-amount text-teal">₹480</div></div></div>
+      </div></div>
+      <div class="tab-bar"><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div><div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div><div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div></div>
+    </div>
+
+    <!-- S21: ORDERS EMPTY -->
+    <div class="phone-inner" id="s-orders-empty" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="navbar-title">My Orders</div></div>
+      <div style="padding:10px 16px 0;background:var(--surface);border-bottom:1px solid var(--border);"><div class="tab-chips"><div class="tab-chip active">Active (0)</div><div class="tab-chip">Completed</div><div class="tab-chip">Cancelled</div></div></div>
+      <div class="scroll-area" style="background:var(--bg);display:flex;flex-direction:column;"><div class="empty-state" style="flex:1;"><div class="empty-icon">📭</div><div class="empty-title">No active orders</div><div class="empty-sub">List your scrap and verified aggregators near you will come to pick it up</div><button class="btn-primary" style="margin-top:8px;width:auto;padding:0 24px;">+ List Scrap</button></div></div>
+      <div class="tab-bar"><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div><div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div><div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div></div>
+    </div>
+
+    <!-- S22: ORDER DETAIL PRE-ACCEPTANCE -->
+    <div class="phone-inner" id="s-order-pre" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Order <span class="mono" style="font-size:13px;color:var(--muted);">#ORD-24089</span></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="padding:16px;text-align:center;"><div style="font-size:36px;margin-bottom:8px;">⏳</div><div class="fs-16 fw-700 text-navy">Waiting for aggregator</div><div class="fs-12 text-muted" style="margin-top:6px;line-height:1.5;">Your listing has been sent to aggregators within 5 km. This usually takes under 15 minutes.</div><div style="margin-top:12px;"><div class="status-chip chip-created" style="font-size:12px;padding:5px 16px;">Order Created</div></div></div>
+        <div class="card" style="padding:16px;">
+          <div class="timeline"><div class="timeline-item"><div class="tl-line"><div class="timeline-dot done">✓</div></div><div class="tl-content"><div class="tl-title">Order created</div><div class="tl-sub">Today, 9:35 AM</div></div></div><div class="timeline-item"><div class="tl-line"><div class="timeline-dot active">2</div></div><div class="tl-content"><div class="tl-title">Waiting for acceptance</div><div class="tl-sub">Broadcast to 12 nearby aggregators</div></div></div><div class="timeline-item"><div class="tl-line"><div class="timeline-dot pending">3</div></div><div class="tl-content"><div class="tl-title">Aggregator en route</div><div class="tl-sub">—</div></div></div><div class="timeline-item"><div class="tl-line"><div class="timeline-dot pending">4</div></div><div class="tl-content" style="padding-bottom:0;"><div class="tl-title">Pickup complete</div><div class="tl-sub">—</div></div></div></div>
+        </div>
+        <div class="card"><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div class="fs-13 fw-600 text-navy" style="margin-bottom:8px;">Materials</div><div style="display:flex;gap:6px;flex-wrap:wrap;"><div class="material-chip metal selected">⚙ Metal · 12 kg</div><div class="material-chip paper selected">📄 Paper · 8 kg</div></div></div><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div class="fs-13 fw-600 text-navy">Location</div><div class="fs-12 text-muted" style="margin-top:4px;">Banjara Hills, Hyderabad</div><div class="fs-11 text-amber" style="margin-top:4px;">🔒 Full address shown after aggregator accepts</div></div><div style="padding:14px 16px;"><div class="fs-13 fw-600 text-navy">Window</div><div class="fs-12 text-muted" style="margin-top:4px;">Wed, Mar 5 · 2–4 PM</div></div></div>
+        <div class="earnings-total" style="background:var(--surface2);border:1px solid var(--border);"><div class="earnings-total-label">Estimated Earnings</div><div class="earnings-total-value">~₹432</div></div>
+      </div></div>
+      <div style="padding:16px;background:var(--surface);border-top:1px solid var(--border);"><button class="btn-secondary" style="border-color:var(--red);color:var(--red);height:46px;">Cancel Order</button></div>
+    </div>
+
+    <!-- S23: ORDER DETAIL POST-ACCEPTANCE -->
+    <div class="phone-inner" id="s-order-post" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Order <span class="mono" style="font-size:13px;color:var(--muted);">#ORD-24091</span></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="padding:16px;"><div class="flex items-center gap-12" style="margin-bottom:12px;"><div class="avatar teal lg">K</div><div style="flex:1;"><div class="fs-16 fw-700 text-navy">Kumar Scrap Co.</div><div class="flex items-center gap-6" style="margin-top:4px;"><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span></div><span class="mono fs-12 text-muted">4.8 · 142 pickups</span></div><div style="margin-top:4px;"><span class="kyc-badge kyc-verified">✓ Verified</span></div></div></div><div style="display:flex;gap:8px;"><button class="btn-secondary" style="height:40px;font-size:13px;flex:1;gap:6px;"><span>💬</span> Chat</button><button class="btn-secondary" style="height:40px;font-size:13px;flex:1;gap:6px;"><span>📞</span> Call</button></div></div>
+        <div class="card" style="padding:14px 16px;background:var(--teal-light);border-color:rgba(26,107,99,0.2);"><div class="flex items-center gap-10"><span style="font-size:22px;">✅</span><div><div class="fs-14 fw-700 text-teal">Order Accepted</div><div class="fs-12 text-slate" style="margin-top:2px;">Kumar arrives Tue, Mar 4 · 8–10 AM</div></div></div></div>
+        <div class="card"><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div class="fs-13 fw-600 text-navy">Pickup Address <span class="fs-11 text-teal">Revealed ✓</span></div><div class="fs-13 text-slate" style="margin-top:4px;line-height:1.5;">Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034</div></div><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div class="fs-13 fw-600 text-navy">Materials</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"><div class="material-chip metal selected">⚙ Metal · 12 kg</div><div class="material-chip paper selected">📄 Paper · 8 kg</div></div></div><div style="padding:14px 16px;"><div class="fs-13 fw-600 text-navy">Window</div><div class="fs-12 text-muted" style="margin-top:4px;">Tue, Mar 4 · 8–10 AM</div></div></div>
+        <div class="earnings-total"><div class="earnings-total-label">Estimated Earnings</div><div class="earnings-total-value">~₹432</div></div>
+      </div></div>
+      <div style="padding:16px;background:var(--surface);border-top:1px solid var(--border);"><button class="btn-secondary" style="border-color:var(--red);color:var(--red);height:46px;">Cancel Order</button></div>
+    </div>
+
+    <!-- S24: ORDER EN ROUTE -->
+    <div class="phone-inner" id="s-order-enroute" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Order <span class="mono" style="font-size:13px;color:var(--muted);">#ORD-24091</span></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="background:var(--amber-light);border-color:rgba(183,121,31,0.2);padding:14px 16px;"><div class="flex items-center gap-10"><span style="font-size:24px;">🏍</span><div><div class="fs-14 fw-700 text-amber">Kumar is on the way!</div><div class="fs-12 text-slate" style="margin-top:2px;">Est. arrival in 8 minutes</div></div></div></div>
+        <div class="map-placeholder" style="height:160px;"><div style="font-size:32px;">🏍</div><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,0.92);padding:8px 12px;border-top:1px solid var(--border);"><div class="fs-12 fw-600 text-navy">Kumar Scrap Co. · 1.2 km away</div></div></div>
+        <div class="card" style="padding:14px 16px;"><div class="flex items-center gap-12"><div class="avatar teal md">K</div><div style="flex:1;"><div class="fw-700 text-navy">Kumar Scrap Co.</div><div class="mono fs-12 text-muted" style="margin-top:2px;">⭐ 4.8 · 142 pickups</div></div><button class="btn-secondary" style="height:38px;width:auto;padding:0 16px;font-size:13px;">💬 Chat</button></div></div>
+        <div class="card"><div style="padding:14px 16px;border-bottom:1px solid var(--border);"><div class="fs-13 fw-600 text-navy">Materials</div><div style="display:flex;gap:6px;margin-top:6px;"><div class="material-chip metal selected">⚙ Metal · 12 kg</div><div class="material-chip paper selected">📄 Paper · 8 kg</div></div></div><div style="padding:14px 16px;"><div class="flex items-center justify-between"><span class="fs-13 fw-600 text-navy">Estimated Earnings</span><span class="mono fw-700 text-amber fs-16">~₹432</span></div></div></div>
+        <div class="banner banner-info"><span>💡</span><span class="fs-12 text-slate" style="line-height:1.5;">When Kumar arrives, they'll weigh your scrap. You'll then receive a confirmation OTP on WhatsApp.</span></div>
+      </div></div>
+    </div>
+
+    <!-- S25: ORDER CANCEL SHEET -->
+    <div class="phone-inner" id="s-order-cancel" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Order #ORD-24089</div></div>
+      <div style="flex:1;background:rgba(0,0,0,0.32);display:flex;flex-direction:column;justify-content:flex-end;">
+        <div class="bottom-sheet"><div class="sheet-handle"></div><div class="fs-16 fw-700 text-navy" style="margin-bottom:6px;">Cancel this order?</div><div class="fs-13 text-slate" style="margin-bottom:16px;line-height:1.5;">This will notify the aggregator. Please only cancel if you no longer need this pickup.</div><div style="background:var(--surface2);border-radius:10px;padding:12px 14px;margin-bottom:16px;"><div class="flex items-center gap-8 fs-12 text-slate"><span>📦</span> Metal 12 kg + Paper 8 kg</div><div class="flex items-center gap-8 fs-12 text-slate" style="margin-top:4px;"><span>📅</span> Wed, Mar 5 · 2–4 PM</div></div><div style="display:flex;flex-direction:column;gap:10px;"><button class="btn-primary" style="background:var(--red);">Yes, Cancel Order</button><button class="btn-secondary">Keep Order</button></div></div>
+      </div>
+    </div>
+
+    <!-- S26: OTP CONFIRMATION -->
+    <div class="phone-inner" id="s-otp-confirm" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="navbar-title">Confirm Pickup</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="padding:16px;"><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Transaction Summary</div><table class="data-table"><thead><tr><th>Material</th><th>Actual kg</th><th>Rate</th><th style="text-align:right;">Amount</th></tr></thead><tbody><tr><td><div class="flex items-center gap-6">⚙️ <span class="text-navy fw-600">Metal</span></div></td><td class="mono-cell">11.4 kg</td><td class="mono-cell text-muted">₹28</td><td class="mono-cell text-amber" style="text-align:right;">₹319</td></tr><tr><td><div class="flex items-center gap-6">📄 <span class="text-navy fw-600">Paper</span></div></td><td class="mono-cell">7.8 kg</td><td class="mono-cell text-muted">₹12</td><td class="mono-cell text-amber" style="text-align:right;">₹94</td></tr></tbody></table></div>
+        <div class="earnings-total"><div class="earnings-total-label">You will receive</div><div class="earnings-total-value">₹413</div></div>
+        <div><div class="fs-13 fw-600 text-navy" style="margin-bottom:8px;">Scale Photo</div><div class="photo-thumbnail" style="height:100px;width:100%;background:linear-gradient(135deg,var(--metal-bg),#ddd);">⚖️</div></div>
+        <div class="divider"></div>
+        <div style="text-align:center;"><div class="fs-14 fw-700 text-navy" style="margin-bottom:4px;">Enter OTP to confirm</div><div class="fs-12 text-muted" style="margin-bottom:16px;">Sent to your WhatsApp · Valid for 10 mins</div><div class="otp-boxes"><div class="otp-box filled">7</div><div class="otp-box filled">3</div><div class="otp-box filled">9</div><div class="otp-box active"></div><div class="otp-box"></div><div class="otp-box"></div></div></div>
+      </div></div>
+      <div style="padding:16px;background:var(--surface);border-top:1px solid var(--border);"><button class="btn-primary" disabled>Confirm & Complete</button></div>
+    </div>
+
+    <!-- S27: RECEIPT -->
+    <div class="phone-inner" id="s-receipt" style="display:none;">
+      <div class="status-bar" style="background:var(--teal);color:rgba(255,255,255,0.9);"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="receipt-header"><div class="receipt-check">✓</div><div class="fs-20 fw-700" style="color:#fff;">Pickup Complete!</div><div class="fs-13" style="color:rgba(255,255,255,0.7);">Order #ORD-24091 · Tue, Mar 4</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="padding:20px;text-align:center;"><div class="fs-13 text-muted" style="margin-bottom:6px;">Amount Received</div><div class="mono fs-32 fw-700 text-teal">₹413</div><div class="fs-12 text-muted" style="margin-top:6px;">Paid by Kumar Scrap Co.</div></div>
+        <div class="card" style="padding:16px;"><div class="fs-13 fw-700 text-navy" style="margin-bottom:10px;">Breakdown</div><table class="data-table"><tbody><tr><td><div class="flex items-center gap-6">⚙️ Metal</div></td><td class="mono-cell">11.4 kg × ₹28</td><td class="mono-cell text-teal" style="text-align:right;">₹319</td></tr><tr><td><div class="flex items-center gap-6">📄 Paper</div></td><td class="mono-cell">7.8 kg × ₹12</td><td class="mono-cell text-teal" style="text-align:right;">₹94</td></tr></tbody></table></div>
+        <div class="card" style="padding:16px;">
+          <div class="fs-14 fw-700 text-navy" style="margin-bottom:10px;">Rate your aggregator</div>
+          <div class="flex items-center gap-12" style="margin-bottom:12px;"><div class="avatar teal md">K</div><div><div class="fw-600 text-navy">Kumar Scrap Co.</div><div class="fs-12 text-muted">142 pickups · Verified</div></div></div>
+          <div class="stars" style="justify-content:center;gap:8px;font-size:28px;margin-bottom:12px;"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star empty">★</span></div>
+          <textarea style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--navy);resize:none;height:64px;background:var(--surface2);outline:none;" placeholder="Optional — share your experience..."></textarea>
+        </div>
+        <button class="btn-secondary" style="height:46px;opacity:0.38;gap:8px;" disabled><span>📑</span> Download GST Invoice (Business only)</button>
+      </div></div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:10px;"><button class="btn-primary">Submit Rating</button><button style="background:none;border:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;height:36px;">Back to Home</button></div>
+    </div>
+
+    <!-- S28: RATE & REVIEW -->
+    <div class="phone-inner" id="s-review" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Rate & Review</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content" style="padding-top:24px;">
+        <div style="text-align:center;margin-bottom:24px;"><div class="avatar teal xl" style="margin:0 auto 12px;">K</div><div class="fs-18 fw-700 text-navy">Kumar Scrap Co.</div><div class="fs-13 text-muted" style="margin-top:4px;">Picked up · Tue, Mar 4</div></div>
+        <div class="card" style="padding:20px;text-align:center;"><div class="fs-13 text-muted" style="margin-bottom:12px;">How was your experience?</div><div class="stars" style="justify-content:center;gap:12px;font-size:36px;margin-bottom:10px;"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star empty">★</span></div><div class="fs-14 fw-600 text-navy">Very Good</div></div>
+        <div><div class="fs-13 fw-600 text-navy" style="margin-bottom:10px;">What went well?</div><div style="display:flex;gap:8px;flex-wrap:wrap;"><div class="tab-chip active">On time ✓</div><div class="tab-chip active">Fair weighing ✓</div><div class="tab-chip">Friendly</div><div class="tab-chip">Quick</div></div></div>
+        <div class="input-group"><div class="input-label">Write a review <span class="fs-11 text-muted">(optional)</span></div><textarea style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--navy);resize:none;height:90px;outline:none;" placeholder="Share details..."></textarea></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Submit Review</button></div>
+    </div>
+
+    <!-- S29: MARKET PRICES -->
+    <div class="phone-inner" id="s-prices" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="navbar-title">Scrap Rates</div><div class="navbar-right" style="font-size:12px;color:var(--muted);">Hyderabad</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="flex items-center justify-between" style="padding:2px 0;"><div class="fs-12 text-muted">Today's rates · <span class="mono">27 Feb, 9:00 AM</span></div><span class="pill pill-green" style="font-size:10px;">● Live</span></div>
+        <div class="banner banner-warn"><span>⚠️</span><span class="fs-12 text-slate" style="line-height:1.5;">Rates are indicative averages. Final rate confirmed by your aggregator at pickup.</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--metal-bg);">⚙️</div><div class="rate-card-info"><div class="rate-card-material">Metal (Iron)</div><div class="rate-card-sub">Ferrous metal</div></div><div><div class="rate-card-price">₹28/kg</div><div class="rate-trend up">▲ ₹1.4</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--metal-bg);">🔩</div><div class="rate-card-info"><div class="rate-card-material">Metal (Copper)</div><div class="rate-card-sub">Wire, pipes</div></div><div><div class="rate-card-price">₹480/kg</div><div class="rate-trend up">▲ ₹12</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--paper-bg);">📄</div><div class="rate-card-info"><div class="rate-card-material">Paper</div><div class="rate-card-sub">Newspaper, office paper</div></div><div><div class="rate-card-price">₹12/kg</div><div class="rate-trend flat">— Stable</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--paper-bg);">📦</div><div class="rate-card-info"><div class="rate-card-material">Cardboard</div><div class="rate-card-sub">Cartons, corrugated</div></div><div><div class="rate-card-price">₹8/kg</div><div class="rate-trend flat">— Stable</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--plastic-bg);">🧴</div><div class="rate-card-info"><div class="rate-card-material">Plastic (PET)</div><div class="rate-card-sub">Bottles, clear plastic</div></div><div><div class="rate-card-price">₹8/kg</div><div class="rate-trend down">▼ ₹0.2</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--ewaste-bg);">💻</div><div class="rate-card-info"><div class="rate-card-material">E-Waste</div><div class="rate-card-sub">Electronics, cables</div></div><div><div class="rate-card-price">₹60/kg</div><div class="rate-trend up">▲ ₹3</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--fabric-bg);">👗</div><div class="rate-card-info"><div class="rate-card-material">Fabric / Clothes</div><div class="rate-card-sub">Textile, old clothes</div></div><div><div class="rate-card-price">₹6/kg</div><div class="rate-trend flat">— Stable</div></div></div>
+          <div class="rate-card"><div class="rate-card-icon" style="background:var(--glass-bg);">🫙</div><div class="rate-card-info"><div class="rate-card-material">Glass</div><div class="rate-card-sub">Bottles, flat glass</div></div><div><div class="rate-card-price">₹2/kg</div><div class="rate-trend flat">— Stable</div></div></div>
+        </div>
+        <div class="ad-banner"><span class="ad-tag">AD</span><span class="fs-12 text-muted" style="flex:1;">Donate clothes to Goonj NGO</span></div>
+      </div></div>
+      <div class="tab-bar"><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div><div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div><div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div></div>
+    </div>
+
+    <!-- S30: BROWSE AGGREGATORS -->
+    <div class="phone-inner" id="s-browse" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Nearby Aggregators</div><div class="navbar-right"><div style="background:var(--navy);color:#fff;font-size:12px;padding:4px 12px;border-radius:20px;cursor:pointer;font-weight:600;">🗺 Map</div></div></div>
+      <div style="padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);"><div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;height:42px;display:flex;align-items:center;padding:0 12px;gap:8px;"><span style="font-size:16px;color:var(--muted);">🔍</span><span class="fs-13 text-muted">Search aggregators, materials...</span></div></div>
+      <div style="padding:8px 16px 6px;background:var(--surface);border-bottom:1px solid var(--border);"><div class="tab-chips"><div class="tab-chip active">All (14)</div><div class="tab-chip">Metal</div><div class="tab-chip">Paper</div><div class="tab-chip">Plastic</div><div class="tab-chip">E-Waste</div></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div class="agg-card"><div class="avatar teal lg">K</div><div style="flex:1;"><div class="flex items-center justify-between"><div class="agg-name">Kumar Scrap Co.</div><span class="fs-12 text-muted mono">1.2 km</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Banjara Hills · Jubilee Hills</div><div class="flex items-center gap-4" style="margin-top:4px;"><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span></div><span class="fs-11 text-muted">4.8 (142)</span></div><div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;"><div class="material-chip metal" style="padding:3px 8px;font-size:11px;">⚙ Metal</div><div class="material-chip paper" style="padding:3px 8px;font-size:11px;">📄 Paper</div><div class="material-chip plastic" style="padding:3px 8px;font-size:11px;">🧴 Plastic</div></div><div class="agg-best-rate"><div class="fs-12 text-amber fw-600">Best rate: Metal</div><div class="mono fw-700 text-amber">₹29/kg</div></div></div></div>
+        <div class="agg-card"><div class="avatar teal lg">R</div><div style="flex:1;"><div class="flex items-center justify-between"><div class="agg-name">Ravi Scrap Shop</div><span class="fs-12 text-muted mono">2.7 km</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Himayatnagar · Basheerbagh</div><div class="flex items-center gap-4" style="margin-top:4px;"><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star empty">★</span></div><span class="fs-11 text-muted">4.5 (89)</span></div><div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;"><div class="material-chip ewaste" style="padding:3px 8px;font-size:11px;">💻 E-Waste</div><div class="material-chip metal" style="padding:3px 8px;font-size:11px;">⚙ Metal</div></div><div class="agg-best-rate"><div class="fs-12 text-amber fw-600">Best rate: E-Waste</div><div class="mono fw-700 text-amber">₹65/kg</div></div></div></div>
+        <div class="agg-card"><div class="avatar teal lg">G</div><div style="flex:1;"><div class="flex items-center justify-between"><div class="agg-name">Green Collect</div><span class="fs-12 text-muted mono">3.4 km</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Ameerpet · SR Nagar</div><div class="flex items-center gap-4" style="margin-top:4px;"><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star empty">★</span></div><span class="fs-11 text-muted">4.6 (210)</span></div><div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;"><div class="material-chip paper" style="padding:3px 8px;font-size:11px;">📄 Paper</div><div class="material-chip fabric" style="padding:3px 8px;font-size:11px;">👗 Fabric</div></div><div class="agg-best-rate"><div class="fs-12 text-amber fw-600">Best rate: Paper</div><div class="mono fw-700 text-amber">₹13/kg</div></div></div></div>
+      </div></div>
+    </div>
+
+    <!-- S31: AGGREGATOR PROFILE -->
+    <div class="phone-inner" id="s-agg-profile" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar dark"><div class="back-btn dark"><svg width="22" height="22"><use href="#icon-back" stroke="rgba(255,255,255,0.85)"/></svg></div><div class="navbar-title">Aggregator Profile</div><div class="navbar-circle"></div></div>
+      <div class="scroll-area" style="background:var(--bg);">
+        <div style="background:var(--navy);padding:20px 20px 24px;display:flex;gap:14px;align-items:center;"><div class="avatar teal xl">K</div><div style="flex:1;"><div class="fs-20 fw-700" style="color:#fff;">Kumar Scrap Co.</div><div style="color:rgba(255,255,255,0.55);font-size:13px;margin-top:3px;">Mobile Aggregator · Since 2021</div><div class="flex items-center gap-8" style="margin-top:8px;"><div class="stars" style="font-size:16px;gap:2px;"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span></div><span class="mono" style="color:rgba(255,255,255,0.65);font-size:13px;">4.8 · 142 pickups</span></div></div><span class="kyc-badge kyc-verified" style="align-self:flex-start;">✓ Verified</span></div>
+        <div class="page-content">
+          <div class="stats-strip"><div class="stat-card" style="text-align:center;"><div class="stat-value mono">142</div><div class="stat-label">Pickups</div></div><div class="stat-card" style="text-align:center;"><div class="stat-value mono text-teal">98%</div><div class="stat-label">Completion</div></div><div class="stat-card" style="text-align:center;"><div class="stat-value mono" style="font-size:16px;">22 min</div><div class="stat-label">Avg. pickup</div></div></div>
+          <div class="card" style="padding:16px;"><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Material Rates</div><table class="data-table"><thead><tr><th>Material</th><th style="text-align:right;">Rate/kg</th></tr></thead><tbody><tr><td><div class="flex items-center gap-8">⚙️ Metal (Iron)</div></td><td class="mono-cell text-amber" style="text-align:right;">₹29</td></tr><tr><td><div class="flex items-center gap-8">📄 Paper</div></td><td class="mono-cell text-amber" style="text-align:right;">₹12</td></tr><tr><td><div class="flex items-center gap-8">🧴 Plastic</div></td><td class="mono-cell text-amber" style="text-align:right;">₹8</td></tr><tr><td><div class="flex items-center gap-8">👗 Fabric</div></td><td class="mono-cell text-amber" style="text-align:right;">₹6</td></tr></tbody></table></div>
+          <div class="card" style="padding:16px;"><div class="fs-14 fw-700 text-navy" style="margin-bottom:8px;">Operating Details</div><div style="padding:8px 0;border-bottom:1px solid var(--border);" class="flex gap-10"><span style="font-size:16px;">📍</span><div><div class="list-row-title">Banjara Hills, Jubilee Hills, Panjagutta</div><div class="list-row-sub">Operating area</div></div></div><div style="padding:8px 0;" class="flex gap-10"><span style="font-size:16px;">🕐</span><div><div class="list-row-title">Mon–Sat · 8 AM – 7 PM</div><div class="list-row-sub">Operating hours</div></div></div></div>
+          <div><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Recent Reviews</div><div style="display:flex;flex-direction:column;gap:10px;"><div class="card" style="padding:14px 16px;"><div class="flex items-center justify-between" style="margin-bottom:6px;"><div class="flex items-center gap-8"><div class="avatar navy sm">R</div><span class="fs-13 fw-600 text-navy">Rahul S.</span></div><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span></div></div><div class="fs-13 text-slate" style="line-height:1.5;">Quick pickup, fair weighing. Very professional.</div><div class="mono fs-11 text-muted" style="margin-top:4px;">Feb 24, 2026</div></div><div class="card" style="padding:14px 16px;"><div class="flex items-center justify-between" style="margin-bottom:6px;"><div class="flex items-center gap-8"><div class="avatar navy sm">P</div><span class="fs-13 fw-600 text-navy">Priya K.</span></div><div class="stars"><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star empty">★</span></div></div><div class="fs-13 text-slate" style="line-height:1.5;">Good experience. Arrived 10 mins early.</div><div class="mono fs-11 text-muted" style="margin-top:4px;">Feb 18, 2026</div></div></div></div>
+        </div>
+      </div>
+      <div style="padding:16px;background:var(--surface);border-top:1px solid var(--border);"><button class="btn-primary">List Scrap for Pickup</button></div>
+    </div>
+
+    <!-- =========================================
+         S32: SELLER PROFILE — no back button
+         ========================================= -->
+    <div class="phone-inner" id="s-profile-seller" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar dark"><div style="flex:1;"><div class="navbar-brand">♻ Sortt</div></div><div class="navbar-circle"></div></div>
+      <div style="background:var(--navy);padding:0 20px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;"><div class="avatar navy xl" style="border:3px solid rgba(255,255,255,0.15);margin-top:4px;">R</div><div class="fs-18 fw-700" style="color:#fff;">Rahul Sharma</div><div class="locality-pill"><span class="loc-dot"></span>Banjara Hills, Hyderabad</div><div style="display:flex;gap:8px;margin-top:4px;"><div style="text-align:center;padding:8px 16px;background:rgba(255,255,255,0.08);border-radius:10px;"><div class="mono fw-700" style="color:#fff;font-size:16px;">₹2,840</div><div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;">Total earned</div></div><div style="text-align:center;padding:8px 16px;background:rgba(255,255,255,0.08);border-radius:10px;"><div class="mono fw-700" style="color:#fff;font-size:16px;">7</div><div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;">Pickups</div></div></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="list-section"><div class="list-row"><div class="list-row-icon" style="background:var(--plastic-bg);">📋</div><div class="list-row-content"><div class="list-row-title">My Listings</div><div class="list-row-sub">View all orders & history</div></div><span class="chevron">›</span></div><div class="list-row"><div class="list-row-icon" style="background:var(--ewaste-bg);">📊</div><div class="list-row-content"><div class="list-row-title">Earnings Summary</div><div class="list-row-sub">Transaction history & totals</div></div><span class="chevron">›</span></div></div>
+        <div class="list-section"><div class="list-row"><div class="list-row-icon" style="background:var(--paper-bg);">⚙️</div><div class="list-row-content"><div class="list-row-title">Account Settings</div><div class="list-row-sub">Name, address, phone</div></div><span class="chevron">›</span></div><div class="list-row"><div class="list-row-icon" style="background:var(--glass-bg);">🔔</div><div class="list-row-content"><div class="list-row-title">Notifications</div><div class="list-row-sub">Manage push preferences</div></div><span class="chevron">›</span></div><div class="list-row"><div class="list-row-icon" style="background:var(--fabric-bg);">🌐</div><div class="list-row-content"><div class="list-row-title">Language</div><div class="list-row-sub">English</div></div><span class="chevron">›</span></div></div>
+        <div class="list-section"><div class="list-row"><div class="list-row-icon" style="background:#F0FDF4;">❓</div><div class="list-row-content"><div class="list-row-title">Help & Support</div><div class="list-row-sub">FAQs, contact, disputes</div></div><span class="chevron">›</span></div><div class="list-row"><div class="list-row-icon" style="background:var(--surface2);">📑</div><div class="list-row-content"><div class="list-row-title">Terms & Privacy</div></div><span class="chevron">›</span></div></div>
+        <div class="list-section"><div class="list-row"><div class="list-row-icon" style="background:var(--red-light);">🚪</div><div class="list-row-title" style="color:var(--red);">Log Out</div></div></div>
+        <div style="text-align:center;padding:8px 0;"><div class="fs-11 text-muted mono">v1.0.0 · Sortt · Hyderabad</div></div>
+      </div></div>
+      <!-- No back btn. Profile is a root tab screen. -->
+      <div class="tab-bar"><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-home"/></svg></div><div class="tab-label">Home</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-orders"/></svg></div><div class="tab-label">Orders</div></div><div class="tab-center"><div class="tab-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div><div class="tab-center-label">New</div></div><div class="tab-item"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-prices"/></svg></div><div class="tab-label">Prices</div></div><div class="tab-item active"><div class="tab-icon"><svg width="24" height="24"><use href="#icon-profile"/></svg></div><div class="tab-label">Profile</div></div></div>
+    </div>
+
+    <!-- S33: SETTINGS -->
+    <div class="phone-inner" id="s-settings" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Settings</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="fs-12 fw-600 text-muted" style="text-transform:uppercase;letter-spacing:0.6px;">Account</div>
+        <div class="list-section"><div class="list-row"><div class="list-row-icon" style="background:var(--navy);color:#fff;font-size:14px;font-weight:700;">R</div><div class="list-row-content"><div class="list-row-title">Rahul Sharma</div><div class="list-row-sub">+91 ••••• 43210 · Banjara Hills</div></div><span class="fs-12 text-red">Edit</span></div></div>
+        <div class="fs-12 fw-600 text-muted" style="text-transform:uppercase;letter-spacing:0.6px;">Notifications</div>
+        <div class="list-section"><div class="list-row"><div class="list-row-content"><div class="list-row-title">Order updates</div><div class="list-row-sub">When an aggregator accepts</div></div><div class="toggle on"></div></div><div class="list-row"><div class="list-row-content"><div class="list-row-title">Price alerts</div><div class="list-row-sub">When rates change significantly</div></div><div class="toggle on"></div></div><div class="list-row"><div class="list-row-content"><div class="list-row-title">Promotions</div><div class="list-row-sub">Offers and platform news</div></div><div class="toggle"></div></div></div>
+        <div class="fs-12 fw-600 text-muted" style="text-transform:uppercase;letter-spacing:0.6px;">Preferences</div>
+        <div class="list-section"><div class="list-row"><div class="list-row-content"><div class="list-row-title">Language</div><div class="list-row-sub">English</div></div><span class="chevron">›</span></div><div class="list-row"><div class="list-row-content"><div class="list-row-title">Default pickup window</div><div class="list-row-sub">Morning (8–10 AM)</div></div><span class="chevron">›</span></div></div>
+        <div class="list-section"><div class="list-row"><div class="list-row-content"><div class="list-row-title" style="color:var(--red);">Delete Account</div><div class="list-row-sub">Permanently remove your data</div></div><span class="chevron" style="color:var(--red);">›</span></div></div>
+      </div></div>
+    </div>
+
+    <!-- S34: HELP -->
+    <div class="phone-inner" id="s-help" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Help & Support</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="card" style="padding:16px;"><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Contact Us</div><div style="display:flex;gap:10px;"><button class="btn-secondary" style="flex:1;height:46px;font-size:13px;gap:6px;"><span>💬</span> WhatsApp</button><button class="btn-secondary" style="flex:1;height:46px;font-size:13px;gap:6px;"><span>📧</span> Email</button></div><div class="fs-11 text-muted" style="text-align:center;margin-top:10px;">Mon–Sat 9AM–6PM · Avg. 2hr response</div></div>
+        <div class="card" style="padding:16px;border-color:var(--amber);background:var(--amber-light);"><div class="flex items-center gap-12"><span style="font-size:28px;">⚖️</span><div style="flex:1;"><div class="fw-700 text-navy">Raise a Dispute</div><div class="fs-12 text-slate" style="margin-top:3px;line-height:1.4;">Wrong weight? No-show? Report within 48 hours of completion</div></div><span class="chevron text-amber">›</span></div></div>
+        <div class="fs-14 fw-700 text-navy">FAQs</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="faq-item"><div class="faq-header">How are rates determined? <span>▾</span></div></div>
+          <div class="faq-item"><div class="faq-header">When do I receive payment? <span>▾</span></div><div class="faq-body">Payment is made in cash by the aggregator at pickup, after OTP confirmation.</div></div>
+          <div class="faq-item"><div class="faq-header">Can I cancel an order? <span>▾</span></div></div>
+          <div class="faq-item"><div class="faq-header">Is my address shared publicly? <span>▾</span></div><div class="faq-body">No. Full address is only revealed to an aggregator after they accept your order.</div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- S35: NOTIFICATIONS -->
+    <div class="phone-inner" id="s-notifications" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Notifications</div><div class="navbar-right" style="font-size:12px;color:var(--red);cursor:pointer;">Mark all read</div></div>
+      <div class="scroll-area" style="background:var(--bg);">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:0;overflow:hidden;">
+          <div class="notif-item unread"><div class="notif-dot"></div><div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:2px;">Order accepted!</div><div style="font-size:12px;color:var(--slate);line-height:1.4;">An aggregator has accepted your listing. Tap to view details.</div><div class="mono fs-11 text-muted" style="margin-top:4px;">Just now</div></div></div>
+          <div class="notif-item unread"><div class="notif-dot"></div><div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:2px;">Aggregator is en route</div><div style="font-size:12px;color:var(--slate);line-height:1.4;">Your pickup is on the way. Make sure your scrap is ready.</div><div class="mono fs-11 text-muted" style="margin-top:4px;">12 mins ago</div></div></div>
+          <div class="notif-item"><div style="width:8px;height:8px;flex-shrink:0;margin-top:6px;"></div><div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:2px;">Pickup completed</div><div style="font-size:12px;color:var(--slate);line-height:1.4;">Order #ORD-24080 is done. Rate your experience!</div><div class="mono fs-11 text-muted" style="margin-top:4px;">Feb 24, 11:42 AM</div></div></div>
+          <div class="notif-item"><div style="width:8px;height:8px;flex-shrink:0;margin-top:6px;"></div><div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:2px;">Metal rates up today</div><div style="font-size:12px;color:var(--slate);line-height:1.4;">Iron scrap rates increased in Hyderabad today.</div><div class="mono fs-11 text-muted" style="margin-top:4px;">Today, 9:00 AM</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S36: CHAT -->
+    <div class="phone-inner" id="s-chat" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light">
+        <div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div>
+        <div style="flex:1;display:flex;align-items:center;gap:10px;"><div class="avatar teal sm">K</div><div><div class="fs-14 fw-700 text-navy">Kumar Scrap Co.</div><div class="fs-11 text-teal">Online</div></div></div>
+        <div class="navbar-right"><div class="mono fs-11 text-muted">#ORD-24091</div></div>
+      </div>
+      <div style="background:var(--surface2);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;"><span style="font-size:14px;">📦</span><span class="fs-12 text-slate">Metal 12 kg + Paper 8 kg · Tue Mar 4, 8–10 AM</span></div>
+      <div class="scroll-area" style="background:var(--bg);padding:12px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div class="flex flex-col items-end gap-4"><div class="chat-bubble sent">Hi, I have metal scrap ready. Will you be here by 8?</div><div class="chat-time" style="margin-right:4px;">9:32 AM · Delivered ✓</div></div>
+        <div class="flex flex-col" style="gap:4px;"><div class="chat-bubble received">Yes, I'll be there by 8 AM sharp. Keep the scrap near the entrance.</div><div class="chat-time" style="margin-left:4px;">9:34 AM</div></div>
+        <div class="flex flex-col items-end gap-4"><div class="chat-bubble sent">Sure, I'll keep it near the main gate. See you then!</div><div class="chat-time" style="margin-right:4px;">9:35 AM · Read ✓✓</div></div>
+        <div class="flex flex-col" style="gap:4px;"><div class="chat-bubble received">My number is <span style="color:var(--muted);font-style:italic;">[phone number removed]</span></div><div class="chat-time" style="margin-left:4px;">9:36 AM</div></div>
+        <div style="text-align:center;padding:4px 0;"><span style="font-size:10px;background:var(--border);padding:3px 10px;border-radius:10px;color:var(--muted);">Phone sharing blocked for your safety</span></div>
+        <div class="flex flex-col items-end gap-4"><div class="chat-bubble sent">No problem, I'll meet you at the gate!</div><div class="chat-time" style="margin-right:4px;">9:37 AM · Read ✓✓</div></div>
+      </div>
+      <div style="background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:10px;align-items:center;"><div style="flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:24px;height:44px;display:flex;align-items:center;padding:0 16px;"><span class="fs-13 text-muted">Type a message...</span></div><div style="width:44px;height:44px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div></div>
+    </div>
+
+    <!-- S37: DISPUTE -->
+    <div class="phone-inner" id="s-dispute" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">File a Dispute</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="banner banner-warn"><span>⚠️</span><span class="fs-12 text-slate" style="line-height:1.5;">Disputes must be raised within 48 hours of order completion. Reviewed within 72 hours.</span></div>
+        <div class="card" style="padding:14px 16px;"><div class="fs-13 fw-600 text-navy" style="margin-bottom:4px;">Order</div><div class="flex items-center gap-10"><span class="mono text-muted fs-12">#ORD-24091</span><span class="status-chip chip-completed">Completed</span></div><div class="fs-12 text-muted" style="margin-top:4px;">Kumar Scrap Co. · Tue, Mar 4</div></div>
+        <div class="input-group">
+          <div class="input-label">Issue Type</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="radio-card selected" style="padding:12px;"><div class="flex items-center gap-10"><div style="width:18px;height:18px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0;">✓</div><span class="fs-13 fw-600 text-navy">Wrong weight recorded</span></div></div>
+            <div class="radio-card" style="padding:12px;"><div class="flex items-center gap-10"><div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div><span class="fs-13 text-slate">Payment not made</span></div></div>
+            <div class="radio-card" style="padding:12px;"><div class="flex items-center gap-10"><div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div><span class="fs-13 text-slate">Aggregator no-show</span></div></div>
+            <div class="radio-card" style="padding:12px;"><div class="flex items-center gap-10"><div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div><span class="fs-13 text-slate">Other</span></div></div>
+          </div>
+        </div>
+        <div class="input-group"><div class="input-label">Describe the issue</div><textarea style="width:100%;border:1.5px solid var(--navy);border-radius:10px;padding:12px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--navy);resize:none;height:100px;outline:none;background:var(--surface);" placeholder="The aggregator recorded 8 kg but my estimate was clearly around 12 kg..."></textarea></div>
+        <div class="input-group"><div class="input-label">Upload Evidence <span class="fs-11 text-muted">(Optional)</span></div><div class="photo-zone" style="height:80px;"><span style="font-size:24px;opacity:0.5;">📎</span><span class="fs-12 text-muted">Add photo evidence</span></div></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Submit Dispute</button></div>
+    </div>
+
+    <!-- S38: BUSINESS DASHBOARD -->
+    <div class="phone-inner" id="s-biz-dash" style="display:none;">
+      <div class="status-bar dark"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar dark"><div style="flex:1;"><div class="navbar-brand">♻ Sortt</div><div class="navbar-subtitle">Sharma Industries</div></div><div class="navbar-right"><span style="font-size:11px;background:var(--red);color:#fff;padding:2px 8px;border-radius:6px;font-weight:700;">BIZ</span><div class="avatar navy sm">S</div></div><div class="navbar-circle"></div></div>
+      <div style="background:var(--navy);padding:10px 18px 20px;"><div class="greeting-sub">Business Dashboard</div><div class="greeting-name">Sharma Industries</div><div style="margin-top:8px;display:flex;gap:8px;"><div class="locality-pill"><span class="loc-dot"></span>IDA Nacharam, Hyderabad</div><span class="pill pill-amber">GST Registered</span></div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <div class="flex items-center justify-between" style="margin-bottom:12px;"><div class="fs-14 fw-700 text-navy">February 2026</div><div class="flex gap-6;"><div class="tab-chip" style="padding:3px 10px;font-size:11px;">Jan</div><div class="tab-chip active" style="padding:3px 10px;font-size:11px;">Feb</div></div></div>
+          <div style="display:flex;gap:12px;"><div style="flex:1;border-right:1px solid var(--border);padding-right:12px;"><div class="mono fw-700 text-amber" style="font-size:22px;">₹48,200</div><div class="fs-11 text-muted" style="margin-top:2px;">Total earnings</div></div><div style="flex:1;padding-left:4px;"><div class="mono fw-700 text-navy" style="font-size:22px;">2,180 kg</div><div class="fs-11 text-muted" style="margin-top:2px;">Total weight</div></div></div>
+          <div style="height:60px;margin-top:14px;background:var(--surface2);border-radius:8px;display:flex;align-items:flex-end;padding:8px;gap:4px;overflow:hidden;"><div style="flex:1;background:var(--border);border-radius:3px 3px 0 0;height:40%;"></div><div style="flex:1;background:var(--border);border-radius:3px 3px 0 0;height:60%;"></div><div style="flex:1;background:var(--border);border-radius:3px 3px 0 0;height:45%;"></div><div style="flex:1;background:var(--border);border-radius:3px 3px 0 0;height:75%;"></div><div style="flex:1;background:var(--amber);border-radius:3px 3px 0 0;height:90%;"></div><div style="flex:1;background:var(--amber);border-radius:3px 3px 0 0;height:70%;"></div><div style="flex:1;background:var(--amber-light);border:1px dashed var(--amber);border-radius:3px 3px 0 0;height:55%;"></div></div>
+        </div>
+        <div><div class="section-heading">Upcoming Pickups <span class="section-link">Manage →</span></div><div class="order-card"><div class="order-card-top"><div class="order-card-header"><div><div class="order-id">Weekly — Recurring</div><div class="fs-13 fw-600 text-navy">Mixed Metal + E-Waste</div></div><div class="status-chip chip-accepted">Scheduled</div></div><div class="order-materials"><div class="material-chip metal selected">⚙ Metal · ~500 kg</div><div class="material-chip ewaste selected">💻 E-Waste · ~20 kg</div></div></div><div class="order-card-footer"><div class="order-footer-info">📅 Mon, Mar 3 · 9 AM–12 PM</div><div class="order-amount">~₹14,200</div></div></div></div>
+        <div class="banner banner-info"><span>📑</span><div><div class="fs-13 fw-600 text-slate">2 GST invoices pending download</div><div class="fs-12 text-muted" style="margin-top:2px;">January 2026</div></div></div>
+        <div><div class="section-heading">Quick Actions</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"><button class="btn-primary" style="height:46px;font-size:13px;">+ New Listing</button><button class="btn-secondary" style="height:46px;font-size:13px;gap:6px;"><span>📑</span> Invoices</button><button class="btn-secondary" style="height:46px;font-size:13px;gap:6px;"><span>👥</span> Team</button><button class="btn-secondary" style="height:46px;font-size:13px;gap:6px;"><span>📅</span> Schedule</button></div></div>
+      </div></div>
+    </div>
+
+    <!-- S39: GST INVOICES -->
+    <div class="phone-inner" id="s-biz-invoices" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">GST Invoices</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="banner banner-info"><span>ℹ️</span><span class="fs-12 text-slate" style="line-height:1.5;">GST invoices stored for 6 years as required by Indian law. Download as PDF anytime.</span></div>
+        <div class="card" style="padding:16px;"><div class="fs-13 fw-700 text-navy" style="margin-bottom:12px;">February 2026</div><div class="invoice-row"><div class="invoice-icon">📑</div><div style="flex:1;"><div class="fs-13 fw-600 text-navy">INV-2026-02-041</div><div class="fs-12 text-muted" style="margin-top:2px;">Feb 26 · Kumar Scrap Co.</div></div><div style="text-align:right;"><div class="mono fw-700 text-amber">₹14,200</div><div style="font-size:11px;color:var(--teal);margin-top:2px;">↓ Download</div></div></div><div class="invoice-row"><div class="invoice-icon">📑</div><div style="flex:1;"><div class="fs-13 fw-600 text-navy">INV-2026-02-038</div><div class="fs-12 text-muted" style="margin-top:2px;">Feb 19 · Green Collect</div></div><div style="text-align:right;"><div class="mono fw-700 text-amber">₹9,800</div><div style="font-size:11px;color:var(--teal);margin-top:2px;">↓ Download</div></div></div></div>
+        <div class="card" style="padding:16px;"><div class="fs-13 fw-700 text-navy" style="margin-bottom:12px;">January 2026</div><div class="invoice-row"><div class="invoice-icon">📑</div><div style="flex:1;"><div class="fs-13 fw-600 text-navy">INV-2026-01-029</div><div class="fs-12 text-muted" style="margin-top:2px;">Jan 28 · Kumar Scrap Co.</div></div><div style="text-align:right;"><div class="mono fw-700 text-amber">₹22,400</div><div style="font-size:11px;color:var(--teal);margin-top:2px;">↓ Download</div></div></div><div class="invoice-row"><div class="invoice-icon">📑</div><div style="flex:1;"><div class="fs-13 fw-600 text-navy">INV-2026-01-021</div><div class="fs-12 text-muted" style="margin-top:2px;">Jan 14 · Ravi Scrap Shop</div></div><div style="text-align:right;"><div class="mono fw-700 text-amber">₹18,600</div><div style="font-size:11px;color:var(--teal);margin-top:2px;">↓ Download</div></div></div></div>
+      </div></div>
+    </div>
+
+    <!-- S40: TEAM MANAGEMENT -->
+    <div class="phone-inner" id="s-biz-team" style="display:none;">
+      <div class="status-bar light"><span class="mono">9:41</span><div class="sb-icons"><span>🔋</span></div></div>
+      <div class="navbar light"><div class="back-btn light"><svg width="22" height="22"><use href="#icon-back" stroke="var(--navy)"/></svg></div><div class="navbar-title">Team Management</div></div>
+      <div class="scroll-area" style="background:var(--bg);"><div class="page-content">
+        <div class="banner banner-info"><span>👥</span><span class="fs-12 text-slate" style="line-height:1.5;">Up to 5 team members. <b>Admin</b> can create orders. <b>Operator</b> view-only.</span></div>
+        <div><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Team Members (2/5)</div><div class="list-section"><div class="list-row"><div class="avatar navy md">S</div><div class="list-row-content"><div class="list-row-title">Suresh Kumar</div><div class="list-row-sub">+91 98765 00001 · Admin</div></div><span class="pill pill-navy" style="font-size:11px;">Admin</span></div><div class="list-row"><div class="avatar navy md">A</div><div class="list-row-content"><div class="list-row-title">Anita Reddy</div><div class="list-row-sub">+91 98765 00002 · Operator</div></div><div style="display:flex;gap:6px;align-items:center;"><span class="pill pill-navy" style="font-size:11px;">Operator</span><span style="font-size:16px;color:var(--red);cursor:pointer;">✕</span></div></div></div></div>
+        <div><div class="fs-14 fw-700 text-navy" style="margin-bottom:12px;">Invite New Member</div><div style="display:flex;flex-direction:column;gap:10px;"><div class="input-group"><div class="input-label">Phone Number</div><div class="flex gap-8"><div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;height:52px;padding:0 12px;display:flex;align-items:center;gap:4px;flex-shrink:0;"><span>🇮🇳</span><span class="mono fw-600 text-navy">+91</span></div><div class="input-field focused" style="flex:1;">98765 99999</div></div></div><div class="input-group"><div class="input-label">Role</div><div style="display:flex;gap:8px;"><div class="tab-chip active">Admin</div><div class="tab-chip">Operator</div><div class="tab-chip">View Only</div></div></div></div></div>
+      </div></div>
+      <div style="padding:16px;"><button class="btn-primary">Send Invite</button></div>
+    </div>
+
+  </div><!-- /phone-frame -->
+</div><!-- /main-area -->
+
+<script>
+/* ============================================================
+   SCREEN REGISTRY
+   ============================================================ */
+const labels = {
+  'splash':'SPLASH SCREEN','onboard1':'ONBOARDING — SLIDE 1','onboard2':'ONBOARDING — SLIDE 2','onboard3':'ONBOARDING — SLIDE 3',
+  'user-type':'USER TYPE SELECTION','phone':'PHONE ENTRY','otp':'OTP VERIFY','account-type':'ACCOUNT TYPE',
+  'profile-ind':'PROFILE — INDIVIDUAL','profile-biz':'PROFILE — BUSINESS',
+  'home':'HOME (WITH ORDERS)','home-empty':'HOME (EMPTY STATE)','home-skeleton':'HOME (LOADING)',
+  'list1':'LISTING STEP 1 — MATERIALS','list2':'LISTING STEP 2 — PHOTO & WEIGHT','list2-ai':'LISTING STEP 2 — AI RESULT',
+  'list3':'LISTING STEP 3 — PICKUP PREF.','list4':'LISTING STEP 4 — REVIEW & SUBMIT',
+  'orders-active':'ORDERS — ACTIVE','orders-completed':'ORDERS — COMPLETED','orders-empty':'ORDERS — EMPTY',
+  'order-pre':'ORDER DETAIL — PRE-ACCEPTANCE','order-post':'ORDER DETAIL — ACCEPTED','order-enroute':'ORDER DETAIL — EN ROUTE',
+  'order-cancel':'ORDER CANCEL SHEET','otp-confirm':'OTP CONFIRMATION','receipt':'TRANSACTION RECEIPT','review':'RATE & REVIEW',
+  'prices':'MARKET PRICES','browse':'BROWSE AGGREGATORS','agg-profile':'AGGREGATOR PROFILE',
+  'profile-seller':'SELLER PROFILE','settings':'SETTINGS','help':'HELP & SUPPORT','notifications':'NOTIFICATIONS',
+  'chat':'IN-APP CHAT','dispute':'FILE A DISPUTE',
+  'biz-dash':'BUSINESS DASHBOARD','biz-invoices':'GST INVOICES','biz-team':'TEAM MANAGEMENT',
+};
+
+function show(id) {
+  /* Hide all screens */
+  document.querySelectorAll('.phone-inner').forEach(el => { el.style.display = 'none'; });
+
+  const el = document.getElementById('s-' + id);
+  if (!el) return;
+  el.style.display = 'flex';
+  el.style.flexDirection = 'column';
+
+  /* Reset scroll */
+  const sa = el.querySelector('.scroll-area');
+  if (sa) sa.scrollTop = 0;
+
+  /* Reset home header state */
+  const hh = el.querySelector('#home-header');
+  if (hh) hh.classList.remove('scrolled');
+
+  /* Update label */
+  document.getElementById('screen-label').textContent = labels[id] || id.toUpperCase();
+
+  /* Sidebar highlight */
+  document.querySelectorAll('.sidebar-btn').forEach(b => {
+    b.classList.remove('active');
+    if (b.getAttribute('onclick') === `show('${id}')`) b.classList.add('active');
+  });
+
+  /* Wire home scroll → collapsing header */
+  if (id === 'home') wireHomeScroll();
+}
+
+/* ============================================================
+   SWIGGY-STYLE COLLAPSING HOME HEADER
+   Listens to home scroll area. Triggers at 64px scroll.
+   ============================================================ */
+function wireHomeScroll() {
+  const scrollArea = document.getElementById('home-scroll');
+  const header     = document.getElementById('home-header');
+  if (!scrollArea || !header) return;
+
+  // Remove old listener if any
+  scrollArea.onscroll = null;
+  // Reset
+  header.classList.remove('scrolled');
+
+  const THRESHOLD = 64; // px — matches roughly the greeting strip height
+
+  scrollArea.addEventListener('scroll', function onScroll() {
+    if (scrollArea.scrollTop > THRESHOLD) {
+      header.classList.add('scrolled');
+    } else {
+      header.classList.remove('scrolled');
+    }
+  }, { passive: true });
+}
+
+/* Init */
+show('splash');
+</script>
+</body>
+</html>

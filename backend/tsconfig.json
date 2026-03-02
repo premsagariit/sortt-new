@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "CommonJS",
+    "lib": ["ES2019"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@sortt/maps": ["../packages/maps/src/index.ts"],
+      "@sortt/realtime": ["../packages/realtime/src/index.ts"],
+      "@sortt/auth": ["../packages/auth/src/index.ts"],
+      "@sortt/storage": ["../packages/storage/src/index.ts"],
+      "@sortt/analysis": ["../packages/analysis/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,13 @@
+﻿{
+    "version":  "1.0.0",
+    "name":  "@sortt/storage",
+    "main":  "src/index.ts",
+    "scripts":  {
+                    "type-check":  "tsc --noEmit",
+                    "build":  "tsc --project tsconfig.json"
+                },
+    "devDependencies":  {
+                            "typescript":  "^5.5.3"
+                        },
+    "private":  true
+}

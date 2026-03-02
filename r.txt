@@ -1,0 +1,52 @@
+# apps / mobile / app/
+├── (auth)
+│   ├── _layout.tsx
+│   ├── onboarding.tsx 
+│   ├── otp.tsx 
+│   ├── phone.tsx 
+│   ├── user-type.tsx 
+│   ├── aggregator
+│   │   ├──  area-setup.tsx
+│   │   ├──  material-setup.tsx
+│   │   └── profile-setup.tsx 
+│   ├── seller
+│   │   ├──  business-setup.tsx
+│   │   ├── account-type.tsx 
+│   │   └──  seller-setup.tsx 
+
+Expected Routing:
+Splash animation -> Onboarding screens -> user-type screens -> selected seller -> Phone number screen -> OTP screen ->  account-type screen -> selected Individual -> seller-setup screen -> Seller Home Screen
+Splash animation -> Onboarding screens -> user-type screens -> selected seller -> Phone number screen -> OTP screen ->  account-type screen -> Selected Business -> Seller setup screen -> Business setup screen -> Seller Home Screen
+Splash animation -> Onboarding screens -> user-type screens -> Selected aggregator -> Phone number screen -> OTP screen -> Profile-setup screens -> Area setup screen -> material setup screen -> Aggregator Home Screen
+
+
+# apps / mobile / app/ (root)
+├── _layout.tsx           # Main Root Layout
+├── index.tsx             # Root Entry (Redirects to Onboarding or Path)
+├── (auth) -> Already fixed => No need to make any chnages
+├── (aggregator)          # Aggregator (Scrap Dealer) Tab Flow
+│   ├── _layout.tsx       # Bottom Tab Bar for Aggregator
+│   ├── home.tsx          # Aggregator Dashboard
+│   ├── orders.tsx        # Inbound Pickups/Orders
+│   ├── earnings.tsx      # Payment history & stats
+│   ├── profile.tsx       # Dealer Settings/Profile
+│   └── route.tsx         # Internal routing logic
+├── (seller)              # Individual/Business Seller Tab Flow
+│   ├── _layout.tsx       # Bottom Tab Bar for Sellers
+│   ├── home.tsx          # Seller Dashboard
+│   ├── orders.tsx        # Outbound Requests
+│   ├── browse.tsx        # Browse/Prices (Search for dealers)
+│   ├── profile.tsx       # Seller Profile
+│   ├── listing/          # Multiple-step flow for creating listings
+│   │   ├── _layout.tsx
+│   │   ├── index.tsx
+│   │   ├── step1.tsx through step4.tsx
+│   ├── settings.tsx      # General settings
+│   ├── notifications.tsx # App alerts
+│   ├── help.tsx          # Support screen
+│   ├── (Extra files to clean up later: prices.tsx, language.tsx, privacy-policy.tsx, etc.)
+└── (shared)              # Screens accessible by both roles
+    ├── _layout.tsx       # Shared Stack
+    ├── chat/[id].tsx     # Active conversations
+    ├── order/[id].tsx    # Detailed order view
+    └── (otp-confirm, receipt, review folders)
