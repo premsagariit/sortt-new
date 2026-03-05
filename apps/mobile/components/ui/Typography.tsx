@@ -28,12 +28,12 @@ import { colors } from '../../constants/tokens';
 
 // ── Font sizes (not in token set — Typography owns these) ─────────
 const FONT_SIZES = {
-  heading:    22,
+  heading: 22,
   subheading: 17,
-  body:       15,
-  button:     15,
-  label:      13,
-  caption:    12,
+  body: 15,
+  button: 15,
+  label: 13,
+  caption: 12,
 } as const;
 
 type TextVariant = keyof typeof FONT_SIZES;
@@ -51,6 +51,8 @@ interface TextProps {
   color?: string;
   onPress?: () => void;
   disabled?: boolean;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
 }
 
 export function Text({
@@ -62,6 +64,8 @@ export function Text({
   color,
   onPress,
   disabled,
+  adjustsFontSizeToFit,
+  minimumFontScale,
 }: TextProps) {
   return (
     <RNText
@@ -70,6 +74,8 @@ export function Text({
       selectable={selectable}
       onPress={onPress}
       disabled={disabled}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+      minimumFontScale={minimumFontScale}
     >
       {children}
     </RNText>
@@ -92,6 +98,8 @@ interface NumericProps {
   tabular?: boolean;
   onPress?: () => void;
   disabled?: boolean;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
 }
 
 export function Numeric({
@@ -103,6 +111,8 @@ export function Numeric({
   tabular = true,
   onPress,
   disabled,
+  adjustsFontSizeToFit,
+  minimumFontScale,
 }: NumericProps) {
   return (
     <RNText
@@ -115,6 +125,8 @@ export function Numeric({
       numberOfLines={numberOfLines}
       onPress={onPress}
       disabled={disabled}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+      minimumFontScale={minimumFontScale}
     >
       {children}
     </RNText>
@@ -126,47 +138,47 @@ export function Numeric({
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   heading: {
-    fontFamily:  'DMSans-Bold',
-    fontSize:    FONT_SIZES.heading,
-    color:       colors.navy,
-    lineHeight:  28,
+    fontFamily: 'DMSans-Bold',
+    fontSize: FONT_SIZES.heading,
+    color: colors.navy,
+    lineHeight: 28,
     letterSpacing: -0.3,
   },
   subheading: {
-    fontFamily:  'DMSans-SemiBold',
-    fontSize:    FONT_SIZES.subheading,
-    color:       colors.navy,
-    lineHeight:  22,
+    fontFamily: 'DMSans-SemiBold',
+    fontSize: FONT_SIZES.subheading,
+    color: colors.navy,
+    lineHeight: 22,
     letterSpacing: -0.15,
   },
   body: {
     fontFamily: 'DMSans-Regular',
-    fontSize:   FONT_SIZES.body,
-    color:      colors.slate,
+    fontSize: FONT_SIZES.body,
+    color: colors.slate,
     lineHeight: 22,
   },
   button: {
-    fontFamily:    'DMSans-SemiBold',
-    fontSize:      FONT_SIZES.button,
-    color:         colors.surface,
-    lineHeight:    20,
+    fontFamily: 'DMSans-SemiBold',
+    fontSize: FONT_SIZES.button,
+    color: colors.surface,
+    lineHeight: 20,
     letterSpacing: 0.1,
   },
   label: {
     fontFamily: 'DMSans-Medium',
-    fontSize:   FONT_SIZES.label,
-    color:      colors.slate,
+    fontSize: FONT_SIZES.label,
+    color: colors.slate,
     lineHeight: 18,
   },
   caption: {
     fontFamily: 'DMSans-Regular',
-    fontSize:   FONT_SIZES.caption,
-    color:      colors.muted,
+    fontSize: FONT_SIZES.caption,
+    color: colors.muted,
     lineHeight: 16,
   },
 });
 
 const numericBase: TextStyle = {
   fontFamily: 'DMMono-Regular',
-  color:      colors.slate,
+  color: colors.slate,
 };

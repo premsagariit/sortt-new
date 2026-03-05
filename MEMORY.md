@@ -691,7 +691,19 @@ Do not delete old entries. Append only.
 
 - **[2026-03-02] SafeAreaView Layout Reconciliation:** To prevent duplicate top padding when using `NavBar`, always pass `edges={['bottom']}` to the `SafeAreaView` wrapping the screen. The `NavBar` is responsible for top safe area handling. Affects: all onboarding and setup screens.
 
-- **[2026-03-02] Aggregator UI Gapping:** Redundant `borderBottom` and `paddingBottom` on `progressContainer` in wizard flows cause overlapping lines and visual gaps when scrolling. All wizard layouts must use `backgroundColor: colors.bg` for the screen and `colors.surface` only for the header/progress section to maintain Sortt's professional aesthetic.
+- **[2026-03-04] Aggregator UI Gapping:** Redundant `borderBottom` and `paddingBottom` on `progressContainer` in wizard flows cause overlapping lines and visual gaps when scrolling. All wizard layouts must use `backgroundColor: colors.bg` for the screen and `colors.surface` only for the header/progress section to maintain Sortt's professional aesthetic.
+
+- **[2026-03-04] Aggregator Execution Stack Isolation:** Order execution screens (Navigation, Weighing, OTP) that should hide the bottom tab bar are placed inside a nested stack `(aggregator)/execution/` rather than shared folders. The `_layout.tsx` in `execution` uses a standard Headerless Stack, ensuring the bottom tab bar provided by `(aggregator)/_layout.tsx` is completely hidden when inside the execution flow. Affects: `apps/mobile/app/(aggregator)/execution/`.
+
+- **[2026-03-04] Global Order Management State:** When implementing actions like rejecting/cancelling orders that must reflect consistently across multiple tabs (e.g., Home feed vs Orders feed), always lift the tracking state (like `rejectedOrderIds`) into the global Zustand store (`useOrderStore`) rather than relying on local React state. Affects: `apps/mobile/app/(aggregator)/home.tsx` and `orders.tsx`.
+
+- **[2026-03-05] Camera Hook Architecture:** `expo-image-picker` must NEVER be imported directly in screen files. All camera calls go through `hooks/usePhotoCapture.ts`. The hook owns permission requests, launch, and local URI state. Screens only call `pickPhoto()` and read `photoUri`. Day 8 uploads are wired inside the hook only — screen interface is stable. Affects: `step2.tsx`, `weighing/[id].tsx`, `kyc.tsx`.
+
+- **[2026-03-05] Store-Driven Disabled States:** The CTA `disabled` prop must always read from the Zustand store (e.g., `scalePhotoUri`, `kycAadhaarUri`) NOT from the hook's local `photoUri` state. This ensures the disabled guard survives screen re-mounts and reflects truth that persists in the store. Pattern: `const canSubmit = aggregatorStore.scalePhotoUri !== null && ...`.
+
+- **[2026-03-05] app.json vs app.config.ts for Permissions:** iOS `infoPlist.NSCameraUsageDescription` and Android `permissions` must be literal strings in `app.json` — `${APP_NAME}` template variables are NOT interpolated in static JSON. Do not use placeholders in native permission strings. Only `app.config.ts` (dynamic) resolves imports. For this project, `app.json` is used and literals are acceptable. Affects: `apps/mobile/app.json`.
+
+- **[2026-03-05] Two-Instance Hook Pattern for KYC:** When a screen needs two independent camera sessions (e.g., KYC with Aadhaar + Shop photo), call `usePhotoCapture()` twice with distinct variable names (`const aadhaar = usePhotoCapture(); const shopPhoto = usePhotoCapture();`). Each instance maintains its own `permissionDenied`, `isLoading`, and `photoUri` state independently. Affects: `kyc.tsx`.
 
 ---
 

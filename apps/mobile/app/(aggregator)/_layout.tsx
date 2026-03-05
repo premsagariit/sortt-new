@@ -42,27 +42,35 @@ export default function AggregatorLayout() {
         },
       }}
     >
-      {AGGREGATOR_TABS.map((tab) => (
-        <Tabs.Screen
-          key={tab.name}
-          name={tab.name}
-          options={{
-            title: tab.label,
-            tabBarIcon: ({ color, focused }) => (
-              <tab.Icon
-                size={24}
-                color={color}
-                weight={focused ? 'fill' : 'regular'}
-              />
-            ),
-          }}
-        />
-      ))}
-      {/* Hide auxiliary screens from tab bar */}
+      {AGGREGATOR_TABS.map((tab) => {
+        const Icon = tab.Icon;
+        return (
+          <Tabs.Screen
+            key={tab.name}
+            name={tab.name}
+            options={{
+              title: tab.label,
+              tabBarIcon: ({ color, focused }) => (
+                <Icon
+                  size={24}
+                  color={color}
+                  weight={focused ? 'fill' : 'regular'}
+                />
+              ),
+            }}
+          />
+        );
+      })}
+      {/* Hide auxiliary screens and sub-pages from tab bar */}
       <Tabs.Screen name="price-index" options={{ href: null }} />
-      <Tabs.Screen name="my-rates" options={{ href: null }} />
-      <Tabs.Screen name="otp/[id]" options={{ href: null }} />
-      <Tabs.Screen name="weighing/[id]" options={{ href: null }} />
+      <Tabs.Screen name="profile/buy-rates" options={{ href: null }} />
+      <Tabs.Screen name="profile/operating-areas" options={{ href: null }} />
+      <Tabs.Screen name="profile/hours-availability" options={{ href: null }} />
+      <Tabs.Screen name="profile/kyc-documents" options={{ href: null }} />
+      <Tabs.Screen name="order-detail" options={{ href: null }} />
+      <Tabs.Screen name="execution" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
     </Tabs>
   );
 }

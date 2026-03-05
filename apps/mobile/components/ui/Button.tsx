@@ -22,7 +22,9 @@ import React from 'react';
 import {
   Pressable,
   PressableStateCallbackType,
+  StyleProp,
   StyleSheet,
+  TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
@@ -37,7 +39,8 @@ interface ButtonBaseProps {
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,6 +56,7 @@ export function PrimaryButton({
   loading = false,
   disabled = false,
   style,
+  textStyle,
 }: PrimaryButtonProps) {
   const isDisabled = disabled || loading;
 
@@ -73,7 +77,7 @@ export function PrimaryButton({
       {loading ? (
         <SkeletonLoader variant="list" height={24} width="60%" />
       ) : (
-        <Text variant="button" style={styles.primaryLabel}>
+        <Text variant="button" style={[styles.primaryLabel, textStyle]}>
           {label}
         </Text>
       )}
@@ -88,6 +92,8 @@ interface SecondaryButtonProps extends ButtonBaseProps {
   label: string;
   /** Optional override for text and border color. Must be a valid colors token key, never raw hex. */
   color?: keyof typeof colors;
+  /** Optional icon to render on the left of the label */
+  icon?: React.ReactNode;
 }
 
 export function SecondaryButton({
@@ -96,7 +102,9 @@ export function SecondaryButton({
   loading = false,
   disabled = false,
   color,
+  icon,
   style,
+  textStyle,
 }: SecondaryButtonProps) {
   const isDisabled = disabled || loading;
   const customColorStyle = color ? {
@@ -124,9 +132,12 @@ export function SecondaryButton({
       {loading ? (
         <SkeletonLoader variant="list" height={24} width="60%" />
       ) : (
-        <Text variant="button" style={[styles.secondaryLabel, customTextStyle] as any}>
-          {label}
-        </Text>
+        <View style={styles.secondaryInner}>
+          {icon && <View style={styles.iconShift}>{icon}</View>}
+          <Text variant="button" style={[styles.secondaryLabel, customTextStyle, textStyle] as any}>
+            {label}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -174,12 +185,12 @@ export function IconButton({
 const styles = StyleSheet.create({
   // Primary
   primary: {
-    width:           '100%',
-    height:          52,
+    width: '100%',
+    height: 52,
     backgroundColor: colors.red,
-    borderRadius:    radius.btn,
-    alignItems:      'center',
-    justifyContent:  'center',
+    borderRadius: radius.btn,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
   primaryLabel: {
@@ -188,29 +199,37 @@ const styles = StyleSheet.create({
 
   // Secondary
   secondary: {
-    width:           '100%',
-    height:          52,
+    width: '100%',
+    height: 52,
     backgroundColor: colors.surface,
-    borderRadius:    radius.btn,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    alignItems:      'center',
-    justifyContent:  'center',
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
   secondaryLabel: {
     color: colors.slate,
   },
+  secondaryInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconShift: {
+    marginRight: spacing.sm,
+  },
 
   // Icon — 48×48 minimum WCAG AA touch target
   icon: {
-    width:          48,
-    height:         48,
-    alignItems:     'center',
+    width: 48,
+    height: 48,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   iconInner: {
-    alignItems:     'center',
+    alignItems: 'center',
     justifyContent: 'center',
   },
 

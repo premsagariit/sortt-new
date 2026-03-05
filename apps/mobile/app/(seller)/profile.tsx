@@ -7,6 +7,7 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { SorttLogo } from '../../components/ui/SorttLogo';
 
 // Mock data directly in component file per requirements
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
@@ -48,7 +49,7 @@ interface InfoRowProps {
 
 function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProps) {
   return (
-    <Pressable 
+    <Pressable
       style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
       onPress={onPress || (() => console.log(`Profile row pressed: ${rowKey}`))}
     >
@@ -65,12 +66,14 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProp
 }
 
 export default function SellerProfileScreen() {
-  const router       = useRouter();
-  const authStore    = useAuthStore();
+  const router = useRouter();
+  const authStore = useAuthStore();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isBusinessMode, setIsBusinessMode] = useState(false);
 
-  const [heroHeight, setHeroHeight] = useState(240); // Bootstrap estimate — actual value set by onLayout on first render.
+  const [heroHeight, setHeroHeight] = useState(300);
+
+
   // Do NOT replace this with a hardcoded measured value.
 
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -109,40 +112,69 @@ export default function SellerProfileScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       {/* 
         Floating Header - Absolute positioned at top
       */}
-      <Animated.View 
+      <Animated.View
         onLayout={(e) => setHeroHeight(e.nativeEvent.layout.height)}
         style={[
-          styles.heroHeaderContainer, 
+          styles.heroHeaderContainer,
           { opacity: headerOpacity, transform: [{ translateY: headerTranslate }] }
         ]}
       >
         <SafeAreaView edges={['top']} style={styles.heroSafeWrapper}>
+          <View style={styles.geometricShape1} pointerEvents="none" />
+          <View style={styles.geometricShape2} pointerEvents="none" />
+
+          <View style={styles.logoWrap}>
+            <SorttLogo variant="compact-dark" />
+          </View>
+
           <View style={styles.hero}>
             <View style={styles.avatarBorder}>
-              <Avatar 
-                name={profileData.name} 
-                userType="seller" 
-                size="xl" 
-                source={AVATAR_SOURCE} 
+              <Avatar
+                name={profileData.name}
+                userType="seller"
+                size="xl"
+                source={AVATAR_SOURCE}
               />
             </View>
-            <Text variant="heading" style={styles.heroName}>{profileData.name}</Text>
-            
-            <View style={styles.indicatorPill}>
-              <View style={[styles.badgeDot, { backgroundColor: userType === 'seller' ? colors.teal : colors.amber }]} />
-              <Text variant="caption" style={styles.indicatorText} numberOfLines={1}>
-                {userType.toUpperCase()}
-              </Text>
+            <Text
+              variant="heading"
+              style={styles.heroName}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {profileData.name}
+            </Text>
+
+            <View style={styles.badgeRow}>
+              <View style={styles.localityPill}>
+                <Text variant="caption" style={styles.localityText}>
+                  📍 {profileData.location}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.localityPill}>
-              <Text variant="caption" style={styles.localityText}>
-                📍 {profileData.location}
-              </Text>
+
+
+
+            {/* Injected Stats Bar */}
+            <View style={styles.heroStatsContainer}>
+              <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Total earned</Text>
+                <Numeric size={20} color={colors.surface}>
+                  ₹{profileData.earned.toLocaleString('en-IN')}
+                </Numeric>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Pickups</Text>
+                <Numeric size={20} color={colors.surface}>
+                  {profileData.orders}
+                </Numeric>
+              </View>
             </View>
           </View>
         </SafeAreaView>
@@ -155,11 +187,11 @@ export default function SellerProfileScreen() {
         <SafeAreaView edges={['top']}>
           <View style={styles.compactContent}>
             <View style={styles.compactAvatar}>
-              <Avatar 
-                name={profileData.name} 
-                userType="seller" 
-                size="sm" 
-                source={AVATAR_SOURCE} 
+              <Avatar
+                name={profileData.name}
+                userType="seller"
+                size="sm"
+                source={AVATAR_SOURCE}
               />
             </View>
             <View style={styles.compactTextWrap}>
@@ -175,8 +207,8 @@ export default function SellerProfileScreen() {
         </SafeAreaView>
       </Animated.View>
 
-      <Animated.ScrollView 
-        contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight }]} 
+      <Animated.ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight }]}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -185,53 +217,36 @@ export default function SellerProfileScreen() {
         scrollEventThrottle={16}
       >
 
-        {/* Floating Stats Bar */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statsInner}>
-            <View style={styles.statBox}>
-              <Text variant="caption" color={colors.muted} style={styles.statLabel}>Total earned</Text>
-              <Numeric size={24} color={colors.navy}>
-                ₹{profileData.earned.toLocaleString('en-IN')}
-              </Numeric>
-            </View>
-            <View style={styles.statBox}>
-              <Text variant="caption" color={colors.muted} style={styles.statLabel}>Pickups</Text>
-              <Numeric size={24} color={colors.navy}>
-                {profileData.orders}
-              </Numeric>
-            </View>
-          </View>
-        </View>
 
         <View style={styles.menuContainer}>
-          <InfoRow 
-            rowKey="listings" icon="📋" title="My Listings" subtitle="Active and past requests" 
+          <InfoRow
+            rowKey="listings" icon="📋" title="My Listings" subtitle="Active and past requests"
             onPress={() => router.push({ pathname: '/(seller)/orders', params: { tab: 'All' } })}
           />
-          <InfoRow 
-            rowKey="earnings" icon="💰" title="Earnings Summary" subtitle="Payouts and history" 
+          <InfoRow
+            rowKey="earnings" icon="💰" title="Earnings Summary" subtitle="Payouts and history"
             onPress={() => router.push('/(seller)/earnings')}
           />
-          <InfoRow 
+          <InfoRow
             rowKey="settings" icon="⚙️" title="Account Settings" subtitle="Preferences & privacy" onPress={() => router.push('/(seller)/settings')}
           />
           {isBusinessMode && (
-            <InfoRow 
+            <InfoRow
               rowKey="gstin" icon="🧾" title="GSTIN Details" subtitle={BUSINESS_DATA.gstin}
               onPress={() => console.log('GSTIN Details')}
             />
           )}
-          <InfoRow 
-            rowKey="notifications" icon="🔔" title="Notifications" subtitle="Alerts & updates" onPress={() => router.push('/(seller)/notifications')}
+          <InfoRow
+            rowKey="notifications" icon="🔔" title="Notifications" subtitle="Alerts & updates" onPress={() => router.push('/(shared)/notifications')}
           />
-          <InfoRow 
-            rowKey="language" icon="🌐" title="Language" subtitle={profileData.language} 
+          <InfoRow
+            rowKey="language" icon="🌐" title="Language" subtitle={profileData.language}
             onPress={() => router.push('/(shared)/language')}
           />
-          <InfoRow 
+          <InfoRow
             rowKey="help" icon="❓" title="Help & Support" subtitle="FAQs & contact" onPress={() => router.push('/(shared)/help')}
           />
-          <InfoRow 
+          <InfoRow
             rowKey="terms" icon="🛡️" title="Terms & Privacy" subtitle="Legal information" isLast
             onPress={() => router.push('/(shared)/terms-privacy')}
           />
@@ -242,7 +257,7 @@ export default function SellerProfileScreen() {
         </View>
 
         <View style={styles.logoutContainer}>
-          <PrimaryButton 
+          <PrimaryButton
             label="Log Out"
             onPress={handleSignOut}
           />
@@ -274,6 +289,31 @@ const styles = StyleSheet.create({
   },
   heroSafeWrapper: {
     backgroundColor: colors.navy,
+    overflow: 'hidden',
+  },
+  geometricShape1: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 15,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  geometricShape2: {
+    position: 'absolute',
+    left: -40,
+    bottom: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  logoWrap: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    alignItems: 'flex-start',
   },
   heroHeaderContainer: {
     position: 'absolute',
@@ -283,10 +323,13 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   hero: {
-    backgroundColor: colors.navy,
+    backgroundColor: 'transparent',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+
+
+
     alignItems: 'center',
   },
   avatarBorder: {
@@ -297,28 +340,20 @@ const styles = StyleSheet.create({
   },
   heroName: {
     color: colors.surface,
-    letterSpacing: -0.3,
+    textAlign: 'center',
     marginBottom: spacing.xs,
   },
-  indicatorPill: {
+  badgeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)', 
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    marginBottom: spacing.sm,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
     alignSelf: 'center',
+    alignItems: 'center',
   },
-  indicatorText: {
-    color: colors.surface,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
+
+
   localityPill: {
-    backgroundColor: 'rgba(255,255,255,0.1)', 
+    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 20,
@@ -327,28 +362,30 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontSize: 12,
   },
-  statsContainer: {
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    zIndex: 10,
-  },
-  statsInner: {
+  heroStatsContainer: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    marginTop: spacing.md,
+
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    padding: spacing.md,
+    width: '100%',
+    alignItems: 'center',
+  },
+
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginHorizontal: spacing.md,
   },
   statBox: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  statLabel: {
-    marginBottom: spacing.xs,
+  statLabelHero: {
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 4,
   },
   scrollContent: {
     paddingBottom: spacing.xxl,
@@ -409,7 +446,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
     marginBottom: spacing.lg,
+
   },
   menuRow: {
     flexDirection: 'row',

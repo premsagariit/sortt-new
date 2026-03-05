@@ -22,12 +22,12 @@ export default function UserTypeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar 
-        logoVariant="compact-light" 
-        variant="light" 
+      <NavBar
+        logoVariant="compact-light"
+        variant="light"
         onBack={() => router.replace('/(auth)/onboarding')}
       />
-      
+
       <View style={styles.content}>
         <View style={styles.header}>
           <Text variant="heading" style={styles.title}>I want to…</Text>
@@ -35,7 +35,7 @@ export default function UserTypeScreen() {
         </View>
 
         <View style={styles.cardsContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.typeCard, selectedType === 'seller' && styles.typeCardSelected]}
             onPress={() => setSelectedType('seller')}
             activeOpacity={0.8}
@@ -44,11 +44,10 @@ export default function UserTypeScreen() {
               <Recycle size={24} color={colors.red} weight="fill" />
             </View>
             <View style={styles.cardContent}>
-              <Text variant="subheading" style={styles.cardTitle}>Sell my scrap</Text>
+              <Text variant="subheading" style={styles.cardTitle}>Sell The scrap</Text>
               <Text variant="caption" style={styles.cardDesc}>Household, office, or business looking to sell scrap at fair rates</Text>
               <View style={styles.pillRow}>
                 <View style={styles.pill}><Text style={styles.pillText}>Household</Text></View>
-                <View style={styles.pill}><Text style={styles.pillText}>Office</Text></View>
                 <View style={styles.pill}><Text style={styles.pillText}>Factory</Text></View>
               </View>
             </View>
@@ -57,7 +56,7 @@ export default function UserTypeScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.typeCard, selectedType === 'dealer' && styles.typeCardSelected]}
             onPress={() => setSelectedType('dealer')}
             activeOpacity={0.8}
@@ -66,7 +65,7 @@ export default function UserTypeScreen() {
               <Storefront size={24} color={colors.teal} weight="fill" />
             </View>
             <View style={styles.cardContent}>
-              <Text variant="subheading" style={styles.cardTitle}>I'm a scrap dealer</Text>
+              <Text variant="subheading" style={styles.cardTitle}>Buy The Scrap</Text>
               <Text variant="caption" style={styles.cardDesc}>I collect scrap and want to find pickup orders near me</Text>
               <View style={styles.pillRow}>
                 <View style={styles.pill}><Text style={styles.pillText}>Shop-based</Text></View>
@@ -87,9 +86,9 @@ export default function UserTypeScreen() {
         </View>
 
         <View style={styles.footer}>
-          <PrimaryButton 
-            label="Continue as Seller →" 
-            onPress={handleContinue} 
+          <PrimaryButton
+            label={selectedType === 'seller' ? "Continue as Seller →" : "Continue as Dealer →"}
+            onPress={handleContinue}
           />
         </View>
       </View>

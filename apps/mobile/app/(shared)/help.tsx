@@ -61,7 +61,7 @@ export default function HelpScreen() {
             <View style={{ flex: 1 }}>
               <PrimaryButton
                 label="Chat with Us"
-                onPress={() => console.log('Chat support')}
+                onPress={() => router.push('/(shared)/chat/support')}
               />
             </View>
             <View style={styles.iconBtnCtn}>

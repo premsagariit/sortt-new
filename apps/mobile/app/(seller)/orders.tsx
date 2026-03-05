@@ -9,16 +9,30 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ClipboardText, CaretRight } from 'phosphor-react-native';
 
 const MOCK_SELLER_ORDERS = [
-  { orderId: 'ORD-2841', status: 'en_route' as OrderStatus, materials: ['paper','metal'] as MaterialCode[],
-    amount: 380, aggregator: 'Suresh Metals & More', date: 'Today, 11:02 AM' },
-  { orderId: 'ORD-2809', status: 'completed' as OrderStatus, materials: ['plastic'] as MaterialCode[],
-    amount: 210, aggregator: 'Raju Scrap Works',     date: '25 Feb 2026' },
-  { orderId: 'ORD-2790', status: 'completed' as OrderStatus, materials: ['ewaste'] as MaterialCode[],
-    amount: 990, aggregator: 'Suresh Metals & More', date: '22 Feb 2026' },
-  { orderId: 'ORD-2751', status: 'cancelled' as OrderStatus, materials: ['fabric','paper'] as MaterialCode[],
-    amount: 0,   aggregator: '—',                    date: '18 Feb 2026' },
-  { orderId: 'ORD-2730', status: 'completed' as OrderStatus, materials: ['metal','glass'] as MaterialCode[],
-    amount: 640, aggregator: 'Raju Scrap Works',     date: '14 Feb 2026' },
+  {
+    orderId: 'ORD-2841', status: 'en_route' as OrderStatus, materials: ['paper', 'metal'] as MaterialCode[],
+    amount: 380, aggregator: 'Suresh Metals & More', date: 'Today, 11:02 AM'
+  },
+  {
+    orderId: 'ORD-2809', status: 'completed' as OrderStatus, materials: ['plastic'] as MaterialCode[],
+    amount: 210, aggregator: 'Raju Scrap Works', date: '25 Feb 2026'
+  },
+  {
+    orderId: 'ORD-2790', status: 'completed' as OrderStatus, materials: ['ewaste'] as MaterialCode[],
+    amount: 990, aggregator: 'Suresh Metals & More', date: '22 Feb 2026'
+  },
+  {
+    orderId: 'ORD-2751', status: 'cancelled' as OrderStatus, materials: ['fabric', 'paper'] as MaterialCode[],
+    amount: 0, aggregator: '—', date: '18 Feb 2026'
+  },
+  {
+    orderId: 'ORD-2730', status: 'completed' as OrderStatus, materials: ['metal', 'glass'] as MaterialCode[],
+    amount: 640, aggregator: 'Raju Scrap Works', date: '14 Feb 2026'
+  },
+  {
+    orderId: 'ORD-7777', status: 'arrived' as OrderStatus, materials: ['paper', 'plastic'] as MaterialCode[],
+    amount: 280, aggregator: 'Suresh Metals & More', date: 'Today, 3:30 PM'
+  },
 ];
 
 const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
@@ -50,16 +64,16 @@ export default function SellerOrdersScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
-      <NavBar 
+
+      <NavBar
         variant="light"
         title="My Orders"
       />
 
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
@@ -74,8 +88,8 @@ export default function SellerOrdersScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <Text 
-                  variant="caption" 
+                <Text
+                  variant="caption"
                   style={[styles.chipText, isActive && styles.chipTextActive] as any}
                 >
                   {filter}
@@ -88,7 +102,7 @@ export default function SellerOrdersScreen() {
 
       {/* Active Banner */}
       {hasActiveOrder && (
-        <Pressable 
+        <Pressable
           style={styles.activeBanner}
           onPress={() => {
             const firstActive = MOCK_SELLER_ORDERS.find(o => ['en_route', 'accepted', 'arrived', 'weighing_in_progress'].includes(o.status));
@@ -113,7 +127,7 @@ export default function SellerOrdersScreen() {
       )}
 
       {/* Order List */}
-      <ScrollView 
+      <ScrollView
         style={styles.listContainer}
         contentContainerStyle={[
           styles.listContent,
@@ -168,14 +182,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    height:            48,  // Fix 6: removed height:32 — was confusingly coexisting with minHeight:48
+    height: 48,  // Fix 6: removed height:32 — was confusingly coexisting with minHeight:48
     paddingHorizontal: 16,
-    borderRadius:      16,
-    backgroundColor:   colors.surface,
-    borderWidth:       1,
-    borderColor:       colors.border,
-    justifyContent:    'center',
-    alignItems:        'center',
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   chipActive: {
     backgroundColor: colors.navy,

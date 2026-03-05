@@ -56,12 +56,12 @@ type ReceiptMock = {
 
 // G2.8: all values from colors.material.X.fg — zero hardcoded hex
 const MATERIAL_COLORS: Record<string, string> = {
-  paper:   colors.material.paper.fg,
-  metal:   colors.material.metal.fg,
+  paper: colors.material.paper.fg,
+  metal: colors.material.metal.fg,
   plastic: colors.material.plastic.fg,
-  ewaste:  colors.material.ewaste.fg,
-  fabric:  colors.material.fabric.fg,
-  glass:   colors.material.glass.fg,
+  ewaste: colors.material.ewaste.fg,
+  fabric: colors.material.fabric.fg,
+  glass: colors.material.glass.fg,
 };
 
 const MOCK_RECEIPT: Record<string, ReceiptMock> = {
@@ -69,9 +69,9 @@ const MOCK_RECEIPT: Record<string, ReceiptMock> = {
     orderId: 'ORD-2841',
     locality: 'Madhapur, 3rd Phase',
     items: [
-      { material: 'Paper',   materialKey: 'paper',   weightKg: 12.5, ratePerKg: 10 },
-      { material: 'Metal',   materialKey: 'metal',   weightKg: 6.0,  ratePerKg: 28 },
-      { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0,  ratePerKg: 12 },
+      { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
+      { material: 'Metal', materialKey: 'metal', weightKg: 6.0, ratePerKg: 28 },
+      { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0, ratePerKg: 12 },
     ],
     paymentMethod: 'Cash',
     isBusiness: false,
@@ -235,6 +235,14 @@ export default function ReceiptScreen() {
             label="Back to Home"
             onPress={() => router.replace('/(seller)/home' as any)}
           />
+          <Pressable
+            onPress={() => router.push('/(shared)/dispute' as any)}
+            style={styles.reportIssue}
+          >
+            <Text variant="caption" style={styles.reportIssueText}>
+              Report an issue
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -264,7 +272,7 @@ const styles = StyleSheet.create({
   // Success header (teal, full-width, no horizontal padding offset)
   successHeader: {
     backgroundColor: colors.teal,
-    alignItems:      'center',
+    alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
@@ -281,43 +289,43 @@ const styles = StyleSheet.create({
   // Section label
   sectionLabel: {
     marginHorizontal: spacing.md,
-    fontSize:         12,
-    letterSpacing:    0.8,
-    textTransform:    'uppercase',
-    fontFamily:       'DMSans-Bold',
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: 'DMSans-Bold',
   },
 
   // Weight table
   weightTable: {
     marginHorizontal: spacing.md,
-    backgroundColor:  colors.surface,
-    borderWidth:      1,
-    borderColor:      colors.border,
-    borderRadius:     radius.card,
-    overflow:         'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    overflow: 'hidden',
   },
   weightRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
-    paddingVertical:   11,
+    paddingVertical: 11,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   weightTotalRow: {
     borderBottomWidth: 0,
-    paddingVertical:   12,
+    paddingVertical: 12,
   },
   weightDot: {
-    width:        9,
-    height:       9,
+    width: 9,
+    height: 9,
     borderRadius: 3,
-    flexShrink:   0,
+    flexShrink: 0,
   },
   weightMat: {
-    flex:      1,
-    fontFamily:'DMSans-SemiBold',
+    flex: 1,
+    fontFamily: 'DMSans-SemiBold',
   },
   weightKg: {
     fontFamily: 'DMMono-Regular',
@@ -327,8 +335,8 @@ const styles = StyleSheet.create({
   },
   weightTotal: {
     fontFamily: 'DMMono-Regular',
-    minWidth:   36,
-    textAlign:  'right',
+    minWidth: 36,
+    textAlign: 'right',
   },
 
   // GST
@@ -341,7 +349,7 @@ const styles = StyleSheet.create({
   },
 
   divider: {
-    height:          1,
+    height: 1,
     backgroundColor: colors.border,
     marginHorizontal: spacing.md,
   },
@@ -349,27 +357,35 @@ const styles = StyleSheet.create({
   // Compact Review Prompt
   reviewPromptCard: {
     marginHorizontal: spacing.md,
-    backgroundColor:  colors.surface,
-    borderWidth:      1,
-    borderColor:      colors.border,
-    borderRadius:     radius.card,
-    paddingVertical:  14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    flexDirection:    'row',
-    alignItems:       'center',
-    justifyContent:   'space-between',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   reviewPromptLeft: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           spacing.sm,
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   reviewAvatar: {
-    width:          40,
-    height:         40,
-    borderRadius:   20,
-    backgroundColor:colors.teal,
-    alignItems:     'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.teal,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  reportIssue: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  reportIssueText: {
+    color: colors.muted,
+    textDecorationLine: 'underline',
   },
 });

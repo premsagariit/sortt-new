@@ -51,10 +51,10 @@ export default function OTPScreen() {
 
   // ── Zustand ────────────────────────────────────────────────────
   const phoneNumber = useAuthStore((s) => s.phoneNumber);
-  const userType    = useAuthStore((s) => s.userType);
+  const userType = useAuthStore((s) => s.userType);
 
   // ── Logic ──────────────────────────────────────────────────────
-  
+
   // Resend Countdown
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -106,7 +106,7 @@ export default function OTPScreen() {
 
   const handleResend = useCallback(() => {
     if (countdown > 0) return;
-    
+
     // Reset flow
     setOtp('');
     setError(null);
@@ -123,15 +123,15 @@ export default function OTPScreen() {
   };
 
   // ── Render Helpers ─────────────────────────────────────────────
-  
+
   const last4 = phoneNumber ? phoneNumber.slice(-4) : null;
   const isResendDisabled = countdown > 0;
 
   // Render the 6 individual boxes
   const renderOTPBoxes = () => {
     return (
-      <Pressable 
-        style={styles.otpGrid} 
+      <Pressable
+        style={styles.otpGrid}
         onPress={() => inputRef.current?.focus()}
         accessibilityLabel="Verification code input"
         accessibilityRole="adjustable"
@@ -139,12 +139,12 @@ export default function OTPScreen() {
         {Array.from({ length: OTP_LENGTH }).map((_, i) => {
           const char = otp[i] || '';
           const isFocused = i === Math.min(otp.length, OTP_LENGTH - 1);
-          
+
           return (
-            <View 
-              key={i} 
+            <View
+              key={i}
               style={[
-                styles.otpBox, 
+                styles.otpBox,
                 isFocused && styles.otpBoxFocused,
                 !!error && styles.otpBoxError
               ]}
@@ -162,37 +162,36 @@ export default function OTPScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* NavBar: Back button, Title text */}
-      <NavBar 
-        title="Verify OTP" 
-        onBack={() => router.replace('/(auth)/phone')} 
+      <NavBar
+        title="Verify OTP"
+        onBack={() => router.replace('/(auth)/phone')}
       />
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
-          style={styles.flex} 
+        <ScrollView
+          style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.header, { alignItems: 'center' }]}>
-            <Text variant="body" style={{ fontSize: 44, marginBottom: 12 }}>💬</Text>
             <Text variant="heading" style={styles.headline}>
               Enter the 6-digit code
             </Text>
-            
+
             <View style={[styles.subcopyRow, { marginTop: 8 }]}>
-               {last4 ? (
-                 <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', lineHeight: 22 }}>
-                   Sent to your WhatsApp at{'\n'}
-                   <Numeric size={14} style={{ fontWeight: '600', color: colors.navy }}>+91 ••••• {last4}</Numeric>
-                 </Text>
-               ) : (
-                 <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', lineHeight: 22 }}>
-                   Sent to your WhatsApp number
-                 </Text>
-               )}
+              {last4 ? (
+                <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', lineHeight: 22 }}>
+                  Sent to your WhatsApp at{'\n'}
+                  <Numeric size={14} style={{ fontWeight: '600', color: colors.navy }}>+91 ••••• {last4}</Numeric>
+                </Text>
+              ) : (
+                <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', lineHeight: 22 }}>
+                  Sent to your WhatsApp number
+                </Text>
+              )}
             </View>
           </View>
 
@@ -213,7 +212,7 @@ export default function OTPScreen() {
           {/* Visual Grid */}
           <View style={styles.gridContainer}>
             {renderOTPBoxes()}
-            
+
             {error && (
               <Text variant="caption" color={colors.red} style={styles.errorText}>
                 {error}
@@ -230,8 +229,8 @@ export default function OTPScreen() {
           )}
 
           <View style={styles.bottomArea}>
-            <PrimaryButton 
-              label="Verify & Continue" 
+            <PrimaryButton
+              label="Verify & Continue"
               onPress={() => handleVerify()}
               disabled={otp.length < OTP_LENGTH}
               loading={isVerifying}
@@ -246,7 +245,7 @@ export default function OTPScreen() {
               </Text>
             </Pressable>
           </View>
-          
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

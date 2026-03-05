@@ -40,7 +40,7 @@ export default function Step4Screen() {
     notes,
     resetListing,
   } = useListingStore();
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -67,6 +67,7 @@ export default function Step4Screen() {
       ]).start();
 
       timerRef.current = setTimeout(() => {
+        router.dismissAll(); // Resets the listing stack back to step1
         router.replace('/(seller)/home');
       }, 4000);
     }
@@ -81,12 +82,12 @@ export default function Step4Screen() {
   const breakDownItems = selectedMaterials.map((code) => {
     const weightStr = weights[code] || '0';
     const weightNum = parseFloat(weightStr) || 0;
-    
+
     // Use midpoint for the estimate
     const rate = (RATE_ESTIMATES[code].min + RATE_ESTIMATES[code].max) / 2;
     const itemTotal = weightNum * rate;
     totalEstimate += itemTotal;
-    
+
     return {
       code,
       label: code.charAt(0).toUpperCase() + code.slice(1),
@@ -113,17 +114,18 @@ export default function Step4Screen() {
           <Animated.View style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}>
             <Text style={{ fontSize: 40 }}>✅</Text>
           </Animated.View>
-          
+
           <Text variant="heading" style={styles.successTitle}>Listing Submitted!</Text>
           <Text variant="body" style={styles.successBody}>
             We're finding nearby aggregators. You'll get a notification when someone accepts.
           </Text>
 
           <View style={styles.successFooter}>
-            <Pressable 
+            <Pressable
               style={styles.backHomeBtn}
               onPress={() => {
                 if (timerRef.current) clearTimeout(timerRef.current);
+                router.dismissAll();
                 router.replace('/(seller)/home');
               }}
             >
@@ -137,15 +139,15 @@ export default function Step4Screen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <NavBar 
-        title="Review & Submit" 
-        onBack={() => router.back()} 
+      <NavBar
+        title="Review & Submit"
+        onBack={() => router.back()}
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 4 of 4</Text>}
       />
-      
+
       <View style={styles.content}>
         <WizardStepIndicator currentStep={4} />
-        
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Earnings Card */}
           <View style={styles.earningsCard}>
@@ -162,7 +164,7 @@ export default function Step4Screen() {
               <Text variant="caption" color={colors.slate} style={{ flex: 1 }}>Rate</Text>
               <Text variant="caption" color={colors.slate} style={{ flex: 1, textAlign: 'right' }}>Est.</Text>
             </View>
-            
+
             {breakDownItems.length > 0 ? (
               breakDownItems.map((item) => {
                 // Get emoji from MATERIALS logic conceptually, or fallback to icons.
@@ -190,7 +192,7 @@ export default function Step4Screen() {
               <Text variant="body" color={colors.muted} style={{ paddingVertical: spacing.md }}>No weights entered.</Text>
             )}
           </View>
-          
+
           {/* Total Earnings */}
           <View style={styles.earningsTotalRow}>
             <Text variant="subheading">Estimated Earnings</Text>
@@ -208,9 +210,9 @@ export default function Step4Screen() {
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Materials</Text>
                 <Text variant="caption" color={colors.slate}>
-                  {breakDownItems.length > 0 
-                  ? breakDownItems.map(i => `${i.label} ${i.weight} kg`).join(', ')
-                  : 'None'}
+                  {breakDownItems.length > 0
+                    ? breakDownItems.map(i => `${i.label} ${i.weight} kg`).join(', ')
+                    : 'None'}
                 </Text>
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step2')}>
@@ -238,7 +240,7 @@ export default function Step4Screen() {
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Window</Text>
                 <Text variant="caption" color={colors.slate}>
-                  {pickupType === 'scheduled' ? `${scheduledDate} · ${scheduledTime}` : 'Drop-off any time'}
+                  {pickupType === 'scheduled' ? `${scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''} · ${scheduledTime}` : 'Drop-off any time'}
                 </Text>
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step3')}>

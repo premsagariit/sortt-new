@@ -27,6 +27,7 @@ import { IconButton } from '../../components/ui/Button';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAggregatorStore } from '../../store/aggregatorStore';
+import { useOrderStore } from '../../store/orderStore';
 
 // ── Mock Data ──────────────────────────────────────────────────────
 
@@ -55,6 +56,14 @@ const MOCK_FEED: MockFeedCard[] = [
     estimatedKg: 8,
     distanceKm: 2.9,
     materials: ['ewaste', 'plastic'],
+  },
+  {
+    id: 'ORD-7777',
+    locality: 'Kondapur, Hitech City',
+    postedMinutesAgo: 2,
+    estimatedKg: 15,
+    distanceKm: 0.8,
+    materials: ['paper', 'plastic'],
   },
 ];
 
@@ -91,9 +100,10 @@ export default function AggregatorHomeScreen() {
 
   // ── Feed Card Component (Inside to access router) ──────────────────
   const FeedCard = ({ item }: { item: MockFeedCard }) => {
+    const { rejectOrder } = useOrderStore();
     const handleAccept = () => console.log(`accept pressed: ${item.locality}`);
     const handleChat = () => router.push(`/(shared)/chat/${item.id}`);
-    const handleReject = () => console.log(`reject pressed: ${item.locality}`);
+    const handleReject = () => rejectOrder(item.id);
 
     return (
       <View style={styles.feedCard}>
@@ -128,8 +138,8 @@ export default function AggregatorHomeScreen() {
 
         {/* Action buttons */}
         <View style={styles.feedActions}>
-          <Pressable style={[styles.feedBtn, styles.feedBtnAccept]} onPress={handleAccept}>
-            <Text variant="button" style={styles.feedBtnAcceptText}>✓ Accept</Text>
+          <Pressable style={[styles.feedBtn, styles.feedBtnAccept]} onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}>
+            <Text variant="button" style={styles.feedBtnAcceptText}>✓ View</Text>
           </Pressable>
           <View style={styles.feedBtnDivider} />
           <Pressable style={[styles.feedBtn, styles.feedBtnChat]} onPress={handleChat}>
@@ -173,10 +183,12 @@ export default function AggregatorHomeScreen() {
     extrapolate: 'clamp',
   });
 
-  const handleNotifications = () => router.push('/(aggregator)/notifications' as any);
+  const handleNotifications = () => router.push('/(shared)/notifications' as any);
 
   // ── Screen State ──────────────────────────────────────────────────
   const [screenState, setScreenState] = React.useState<'loading' | 'empty' | 'populated'>('populated');
+  const rejectedOrderIds = useOrderStore((s) => s.rejectedOrderIds);
+  const activeFeed = MOCK_FEED.filter(item => !rejectedOrderIds.includes(item.id));
 
   const renderHeader = () => (
     <View>

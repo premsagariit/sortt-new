@@ -58,6 +58,13 @@ const MOCK_ORDERS: MockOrder[] = [
     amountRupees: 210,
     date: '18 Feb 2026',
   },
+  {
+    orderId: 'ORD-7777',
+    status: 'arrived',
+    materials: ['paper', 'plastic'],
+    amountRupees: 280,
+    date: 'Today',
+  },
 ];
 
 
@@ -106,7 +113,7 @@ export default function SellerHomeScreen() {
   }, []);
 
   const handleCreateListing = () => router.push('/(seller)/listing/step1');
-  const handleNotifications = () => router.push('/(seller)/notifications');
+  const handleNotifications = () => router.push('/(shared)/notifications' as any);
   const handleMarketRates = () => router.push('/(seller)/prices');
   const handleMyOrders = () => router.push('/(seller)/orders');
 

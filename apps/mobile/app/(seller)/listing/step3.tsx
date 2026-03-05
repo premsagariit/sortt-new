@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Truck, Storefront } from 'phosphor-react-native';
@@ -20,12 +20,8 @@ import { colors, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 import { useAuthStore } from '../../../store/authStore';
 
-const DATES = [
-  { id: 'd1', label1: 'Mon', label2: 'Mar 3' },
-  { id: 'd2', label1: 'Tue', label2: 'Mar 4' },
-  { id: 'd3', label1: 'Wed', label2: 'Mar 5' },
-  { id: 'd4', label1: 'Thu', label2: 'Mar 6' }
-];
+import DateTimePicker from '@react-native-community/datetimepicker';
+
 const TIMES = ['8–10 AM', '10–12 PM', '12–2 PM', '2–4 PM', '4–6 PM', 'Evening'];
 
 export default function Step3Screen() {
@@ -43,6 +39,16 @@ export default function Step3Screen() {
   } = useListingStore();
 
   const locality = useAuthStore((s) => s.locality);
+  const [showDatePicker, setShowDatePicker] = React.useState(false);
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setScheduledDate(selectedDate.toISOString());
+    }
+  };
 
   // Pre-fill address if empty
   useEffect(() => {
@@ -58,15 +64,15 @@ export default function Step3Screen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <NavBar 
-        title="List Scrap" 
-        onBack={() => router.back()} 
+      <NavBar
+        title="List Scrap"
+        onBack={() => router.back()}
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 3 of 4</Text>}
       />
-      
+
       <View style={styles.content}>
         <WizardStepIndicator currentStep={3} />
-        
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <Text variant="heading">Pickup preference</Text>
@@ -86,7 +92,7 @@ export default function Step3Screen() {
                 Aggregator comes to you · Free
               </Text>
             </Pressable>
-            
+
             <Pressable
               style={[styles.typeCard, pickupType === 'dropoff' ? styles.typeSelected : styles.typeUnselected]}
               onPress={() => setPickupType('dropoff')}
@@ -119,22 +125,39 @@ export default function Step3Screen() {
               </View>
 
               <Text variant="subheading" style={styles.sectionTitle}>Preferred Date</Text>
-              <View style={styles.chipRow}>
-                {DATES.map((d) => (
+
+              {Platform.OS === 'ios' ? (
+                <View style={styles.iosPickerContainer}>
+                  <DateTimePicker
+                    value={scheduledDate ? new Date(scheduledDate) : new Date()}
+                    mode="date"
+                    display="inline"
+                    onChange={handleDateChange}
+                    minimumDate={new Date()}
+                  />
+                </View>
+              ) : (
+                <>
                   <Pressable
-                    key={d.id}
-                    style={[styles.dateChip, scheduledDate === d.id ? styles.chipSelected : styles.chipUnselected]}
-                    onPress={() => setScheduledDate(d.id)}
+                    style={styles.datePickerBtn}
+                    onPress={() => setShowDatePicker(true)}
                   >
-                    <Text variant="body" style={{ color: scheduledDate === d.id ? colors.surface : colors.navy, textAlign: 'center', marginBottom: 2 }}>
-                      {d.label1}
+                    <Text variant="body" color={scheduledDate ? colors.navy : colors.muted}>
+                      {scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Select Date'}
                     </Text>
-                    <Text variant="caption" style={{ color: scheduledDate === d.id ? colors.surface : colors.navy, opacity: 0.8, textAlign: 'center' }}>
-                      {d.label2}
-                    </Text>
+                    <Text>📅</Text>
                   </Pressable>
-                ))}
-              </View>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={scheduledDate ? new Date(scheduledDate) : new Date()}
+                      mode="date"
+                      display="calendar"
+                      onChange={handleDateChange}
+                      minimumDate={new Date()}
+                    />
+                  )}
+                </>
+              )}
 
               <Text variant="subheading" style={styles.sectionTitle}>Preferred Time</Text>
               <View style={styles.timeGrid}>
@@ -211,7 +234,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
-  
+
   detailsContainer: {
     gap: spacing.sm,
   },
@@ -283,5 +306,22 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingTop: spacing.sm,
     backgroundColor: colors.bg,
+  },
+  iosPickerContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    overflow: 'hidden',
+    padding: spacing.sm,
+  },
+  datePickerBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.btn,
+    padding: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 56,
   },
 });

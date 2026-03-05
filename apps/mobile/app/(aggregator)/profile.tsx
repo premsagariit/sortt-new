@@ -1,84 +1,252 @@
-/**
- * app/(aggregator)/profile.tsx
- * ──────────────────────────────────────────────────────────────────
- * PLACEHOLDER — Day 2 §2.1 Navigation Shell only.
- * Full implementation follows in §3.5 Aggregator Profile Screen.
- * ──────────────────────────────────────────────────────────────────
- */
-
-import React from 'react';
-import { StyleSheet, View, ScrollView, Pressable } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, Animated, Dimensions } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { SealCheck, CaretRight, SignOut, Trash, ArrowsLeftRight, CheckCircle } from 'phosphor-react-native';
+import { SorttLogo } from '../../components/ui/SorttLogo';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
-import { Text } from '../../components/ui/Typography';
+import { Text, Numeric } from '../../components/ui/Typography';
+import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
-import { NavBar } from '../../components/ui/NavBar';
+import { useAuthStore } from '../../store/authStore';
 
-interface InfoRowProps {
+const { width } = Dimensions.get('window');
+const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
+
+interface MenuItemProps {
   icon: string;
   title: string;
   subtitle?: string;
-  rowKey: string;
-  onPress?: () => void;
+  onPress: () => void;
   isLast?: boolean;
+  isDestructive?: boolean;
+  hasVerifiedBadge?: boolean;
 }
 
-function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProps) {
+function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVerifiedBadge }: MenuItemProps) {
   return (
     <Pressable
       style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
       onPress={onPress}
     >
-      <View style={styles.menuIconWrap}>
-        <Text style={styles.menuIcon as any}>{icon}</Text>
+      <View style={[styles.menuIconWrap, isDestructive && { backgroundColor: 'rgba(192, 57, 43, 0.1)' }]}>
+        <Text style={[styles.menuIconEmoji, isDestructive && { color: colors.red }] as any}>{icon}</Text>
       </View>
       <View style={styles.menuTextContent}>
-        <Text variant="body" style={styles.menuTitle as any}>{title}</Text>
+        <View style={styles.menuTitleRow}>
+          <Text variant="body" style={[styles.menuTitle, isDestructive && { color: colors.red }] as any}>{title}</Text>
+          {hasVerifiedBadge && (
+            <View style={styles.verifiedBadgeMini}>
+              <SealCheck size={14} color={colors.teal} weight="fill" />
+            </View>
+          )}
+        </View>
         {subtitle && <Text variant="caption" color={colors.muted} style={styles.menuSubtitle as any}>{subtitle}</Text>}
       </View>
-      <Text variant="body" color={colors.border}>›</Text>
+      <CaretRight size={18} color={isDestructive ? colors.red : colors.border} weight="bold" />
     </Pressable>
   );
 }
 
 export default function AggregatorProfileScreen() {
   const router = useRouter();
+  const authStore = useAuthStore();
+  const [heroHeight, setHeroHeight] = useState(300);
+
+
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Header Animations
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, heroHeight - 120],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const compactOpacity = scrollY.interpolate({
+    inputRange: [heroHeight - 140, heroHeight - 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const headerTranslate = scrollY.interpolate({
+    inputRange: [0, heroHeight - 100],
+    outputRange: [0, -40],
+    extrapolate: 'clamp',
+  });
+
+  const handleSignOut = async () => {
+    authStore.signOut();
+    router.replace('/(auth)/user-type' as any);
+  };
+
+  const handleSwitchUserType = async () => {
+    // Development only switch
+    router.replace('/(seller)/home' as any);
+  };
 
   return (
     <View style={styles.container}>
-      <NavBar title="Profile" variant="light" />
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.placeholderCard}>
-          <Text variant="body" style={styles.label}>
-            Aggregator Profile — Coming Soon
-          </Text>
-        </View>
+      {/* Floating Header (Hero) */}
+      <Animated.View
+        onLayout={(e) => setHeroHeight(e.nativeEvent.layout.height)}
+        style={[
+          styles.heroHeaderContainer,
+          { opacity: headerOpacity, transform: [{ translateY: headerTranslate }] }
+        ]}
+      >
+        <SafeAreaView edges={['top']} style={styles.heroSafeWrapper}>
+          <View style={styles.geometricShape1} pointerEvents="none" />
+          <View style={styles.geometricShape2} pointerEvents="none" />
 
-        <View style={styles.menuContainer}>
-          <InfoRow
-            rowKey="language" icon="🌐" title="Language" subtitle="English"
+          <View style={styles.logoWrap}>
+            <SorttLogo variant="compact-dark" />
+          </View>
+
+          <View style={styles.hero}>
+            <View style={styles.avatarWrap}>
+              <Avatar
+                name="Vijay Kumar"
+                userType="aggregator"
+                size="xl"
+                source={AVATAR_SOURCE}
+              />
+            </View>
+
+            <View style={styles.nameRow}>
+              <Text
+                variant="heading"
+                style={styles.heroName}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                Vijay Kumar
+              </Text>
+              <CheckCircle size={24} color={colors.teal} weight="fill" />
+            </View>
+
+            <View style={styles.badgeRow}>
+              <View style={styles.localityPill}>
+                <View style={styles.localityDot} />
+                <Text variant="caption" style={styles.localityText}>Banjara Hills</Text>
+              </View>
+            </View>
+
+            {/* Injected Stats Bar - Unified style */}
+            <View style={styles.heroStatsContainer}>
+              <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Pickups</Text>
+                <Numeric size={20} color={colors.surface}>
+                  142
+                </Numeric>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Rating</Text>
+                <View style={styles.ratingBox}>
+                  <Text style={styles.starTextMini}>★</Text>
+                  <Numeric size={20} color={colors.surface}>4.8</Numeric>
+                </View>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Completion</Text>
+                <Numeric size={20} color={colors.surface}>98%</Numeric>
+              </View>
+            </View>
+
+          </View>
+        </SafeAreaView>
+      </Animated.View>
+
+      {/* Compact Header (Visible on Scroll) */}
+      <Animated.View style={[styles.compactHeader, { opacity: compactOpacity }]} pointerEvents="none">
+        <SafeAreaView edges={['top']}>
+          <View style={styles.compactContent}>
+            <Avatar name="Vijay Kumar" userType="aggregator" size="sm" source={AVATAR_SOURCE} />
+            <View style={styles.compactTextWrap}>
+              <Text variant="body" style={styles.compactName as any}>Vijay Kumar</Text>
+              <View style={styles.compactVerified}>
+                <SealCheck size={12} color={colors.teal} weight="fill" />
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Animated.View>
+
+      <Animated.ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+      >
+        <View style={styles.menuGroup}>
+          <MenuItem
+            icon="💰" title="My Buy Rates" subtitle="Update per-material buying prices"
+            onPress={() => router.push('/(aggregator)/profile/buy-rates')}
+          />
+          <MenuItem
+            icon="📍" title="Operating Areas" subtitle="5 areas active"
+            onPress={() => router.push('/(aggregator)/profile/operating-areas')}
+          />
+          <MenuItem
+            icon="⏰" title="Hours & Availability" subtitle="Mon–Sat · 8 AM–7 PM"
+            onPress={() => router.push('/(aggregator)/profile/hours-availability')}
+          />
+          <MenuItem
+            icon="🆔" title="KYC Documents" subtitle="Aadhaar + Shop photo — Verified"
+            onPress={() => router.push('/(aggregator)/profile/kyc-documents')}
+            hasVerifiedBadge
+          />
+          <MenuItem
+            icon="👤" title="Account Settings" subtitle="Personal & secure login"
+            onPress={() => router.push('/(aggregator)/settings')}
+          />
+
+          <MenuItem
+            icon="🔔" title="Notifications" subtitle="Alerts & updates"
+            onPress={() => router.push('/(shared)/notifications')}
+          />
+          <MenuItem
+            icon="🌐" title="Language" subtitle="English"
             onPress={() => router.push('/(shared)/language')}
           />
-          <InfoRow
-            rowKey="help" icon="❓" title="Help & Support" subtitle="FAQs & contact"
-            onPress={() => router.push('/(shared)/help')}
+          <MenuItem
+            icon="❓" title="Help Center" subtitle="FAQs & support"
+            onPress={() => router.push('/(shared)/help' as any)}
           />
-          <InfoRow
-            rowKey="terms" icon="🛡️" title="Terms & Privacy" subtitle="Legal information" isLast
-            onPress={() => router.push('/(shared)/terms-privacy')}
+          <MenuItem
+            isLast icon="🛡️" title="Terms & Privacy" subtitle="Legal information"
+            onPress={() => router.push('/(shared)/terms-privacy' as any)}
           />
         </View>
 
-        <View style={{ paddingHorizontal: spacing.md, width: '100%', gap: spacing.sm }}>
+        <View style={styles.logoutContainer}>
           <PrimaryButton
-            label="Dev Toggle: Seller View"
-            onPress={() => router.replace('/(seller)/home')}
+            label="Log Out"
+            onPress={handleSignOut}
           />
         </View>
-      </ScrollView>
+
+        <View style={styles.devContainer}>
+          <SecondaryButton
+            label="Dev Toggle: Switch to Seller View"
+            color="navy"
+            onPress={handleSwitchUserType}
+          />
+        </View>
+
+        <View style={styles.footer}>
+          <Text variant="caption" color={colors.muted}>Sortt v1.0.0 (42)</Text>
+        </View>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -87,27 +255,171 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  heroHeaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
+  heroSafeWrapper: {
+    backgroundColor: colors.navy,
+    overflow: 'hidden',
+  },
+  geometricShape1: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 15,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  geometricShape2: {
+    position: 'absolute',
+    left: -40,
+    bottom: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  logoWrap: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  hero: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+
+
+
+    alignItems: 'center',
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: spacing.sm,
+  },
+  nameRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 0,
+    gap: 8,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  heroName: {
+    color: colors.surface,
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+
+  },
+  localityPill: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  localityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.statusOnline,
+  },
+  localityText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  heroStatsContainer: {
+
+    flexDirection: 'row',
+    marginTop: spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    padding: spacing.md,
+    width: '100%',
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginHorizontal: spacing.md,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabelHero: {
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 4,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  ratingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  starTextMini: {
+    color: '#FFD700',
+    fontSize: 14,
+  },
+
+  compactHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 110,
+    backgroundColor: colors.navy,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  compactContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    height: 60,
+    gap: spacing.sm,
+  },
+  compactTextWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  compactName: {
+    color: colors.surface,
+    fontWeight: '700',
+  },
+  compactVerified: {
+    marginTop: 2,
   },
   scrollContent: {
     paddingBottom: spacing.xxl,
   },
-  placeholderCard: {
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  label: {
-    color: colors.slate,
-  },
-  menuContainer: {
+  menuGroup: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 20,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xl,
+
     borderWidth: 1,
     borderColor: colors.border,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.lg,
+    overflow: 'hidden',
   },
   menuRow: {
     flexDirection: 'row',
@@ -115,22 +427,27 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    minHeight: 64,
+    minHeight: 76,
   },
   menuIconWrap: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: 12,
     backgroundColor: colorExtended.surface2,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
   },
-  menuIcon: {
+  menuIconEmoji: {
     fontSize: 20,
   },
   menuTextContent: {
     flex: 1,
+  },
+  menuTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   menuTitle: {
     fontWeight: '600',
@@ -138,5 +455,21 @@ const styles = StyleSheet.create({
   },
   menuSubtitle: {
     marginTop: 2,
+  },
+  verifiedBadgeMini: {
+    marginTop: 1,
+  },
+  logoutContainer: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xl,
+  },
+  devContainer: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
 });

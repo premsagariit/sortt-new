@@ -22,8 +22,8 @@ import { create } from 'zustand';
 
 // ─── Session type (populated on Day 5 with real Supabase session) ──
 export interface AuthSession {
-  userId:    string;
-  userType:  'seller' | 'aggregator';
+  userId: string;
+  userType: 'seller' | 'aggregator';
   accessToken: string;
 }
 
@@ -32,62 +32,69 @@ interface AuthState {
   /** 10-digit phone number (no country code prefix) */
   phoneNumber: string;
   /** True while OTP send is in-flight */
-  isLoading:   boolean;
+  isLoading: boolean;
   /** Null until Day 5 live auth */
-  session:     AuthSession | null;
+  session: AuthSession | null;
 
-  // ── Onboarding State ───────────────────────────────────────────
-  userType:    'seller' | 'aggregator' | null;
+  // ── Onboarding & Mock State ───────────────────────────────────────────
+  userId: string | null;
+  userType: 'seller' | 'aggregator' | null;
   accountType: 'individual' | 'business' | null;
-  name:        string;
-  locality:    string;
-  city:        string;
+  name: string;
+  locality: string;
+  city: string;
 
   // ── Actions ────────────────────────────────────────────────────
-  setPhoneNumber: (phone: string)   => void;
-  setIsLoading:   (loading: boolean) => void;
-  setSession:     (session: AuthSession | null) => void;
-  
-  setUserType:    (type: 'seller' | 'aggregator' | null) => void;
+  setPhoneNumber: (phone: string) => void;
+  setIsLoading: (loading: boolean) => void;
+  setSession: (session: AuthSession | null) => void;
+
+  setUserId: (id: string | null) => void;
+  setUserType: (type: 'seller' | 'aggregator' | null) => void;
   setAccountType: (type: 'individual' | 'business' | null) => void;
-  setName:        (name: string)    => void;
-  setLocality:    (locality: string) => void;
-  setCity:        (city: string)    => void;
+  setName: (name: string) => void;
+  setLocality: (locality: string) => void;
+  setCity: (city: string) => void;
 
   /** Reset to initial state — kept as low-level utility */
-  reset:          () => void;
+  reset: () => void;
   /**
    * Sign out the current user and clear all local auth state.
    * Day 5: add `await supabase.auth.signOut()` call here before `set(initialState)`
    * to invalidate the Supabase JWT and prevent token reuse (BSE finding S1).
    */
-  signOut:        () => void;
+  signOut: () => void;
 }
 
-const initialState = {
+const initialState: Pick<AuthState,
+  'phoneNumber' | 'isLoading' | 'session' | 'userId' | 'userType' |
+  'accountType' | 'name' | 'locality' | 'city'
+> = {
   phoneNumber: '',
-  isLoading:   false,
-  session:     null,
-  userType:    null,
+  isLoading: false,
+  session: null,
+  userId: 'user-seller-001', // Mock — replaced with real session on Day 5
+  userType: 'seller',          // Mock — replaced with real session on Day 5
   accountType: null,
-  name:        '',
-  locality:    '',
-  city:        '',
-} as const;
+  name: '',
+  locality: '',
+  city: '',
+};
 
 // ─── Store ────────────────────────────────────────────────────────
 export const useAuthStore = create<AuthState>((set) => ({
   ...initialState,
 
-  setPhoneNumber: (phone)   => set({ phoneNumber: phone }),
-  setIsLoading:   (loading) => set({ isLoading: loading }),
-  setSession:     (session) => set({ session }),
-  setUserType:    (type)    => set({ userType: type }),
-  setAccountType: (type)    => set({ accountType: type }),
-  setName:        (name)    => set({ name }),
-  setLocality:    (locality) => set({ locality }),
-  setCity:        (city)    => set({ city }),
-  reset:          ()        => set(initialState),
+  setPhoneNumber: (phone) => set({ phoneNumber: phone }),
+  setIsLoading: (loading) => set({ isLoading: loading }),
+  setSession: (session) => set({ session }),
+  setUserId: (id) => set({ userId: id }),
+  setUserType: (type) => set({ userType: type }),
+  setAccountType: (type) => set({ accountType: type }),
+  setName: (name) => set({ name }),
+  setLocality: (locality) => set({ locality }),
+  setCity: (city) => set({ city }),
+  reset: () => set(initialState),
   // Day 5: add `await supabase.auth.signOut()` before set() — BSE finding S1
-  signOut:        ()        => set(initialState),
+  signOut: () => set(initialState),
 }));

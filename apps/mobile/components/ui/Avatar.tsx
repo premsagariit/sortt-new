@@ -41,17 +41,17 @@ const SIZES: Record<AvatarSize, { box: number; fontSize: number }> = {
 
 // ── Background colour by user type ────────────────────────────────
 const BG_COLOR: Record<UserType, string> = {
-  seller:     colors.navy,
+  seller: colors.navy,
   aggregator: colors.teal,
 };
 
 export function Avatar({ name, userType, size = 'md', uri, source }: AvatarProps) {
   const { box, fontSize } = SIZES[size];
-  
+
   // Extract up to 2 initials
-  const words = name.trim().split(/\s+/);
+  const words = name.trim().split(/\s+/).filter(w => w.length > 0);
   const initial = words.length > 1
-    ? (words[0][0] + words[1][0]).toUpperCase()
+    ? ((words[0]?.[0] || '') + (words[1]?.[0] || '')).toUpperCase()
     : (words[0]?.[0] || '?').toUpperCase();
 
   const bgColor = BG_COLOR[userType];
@@ -61,8 +61,8 @@ export function Avatar({ name, userType, size = 'md', uri, source }: AvatarProps
       style={[
         styles.container,
         {
-          width:        box,
-          height:       box,
+          width: box,
+          height: box,
           borderRadius: box / 2, // perfect circle
           backgroundColor: bgColor,
         },
@@ -72,14 +72,14 @@ export function Avatar({ name, userType, size = 'md', uri, source }: AvatarProps
       accessibilityLabel={`Avatar for ${name}`}
     >
       {source ? (
-        <Image 
-          source={source} 
+        <Image
+          source={source}
           style={{ width: box, height: box, borderRadius: box / 2 }}
           resizeMode="cover"
         />
       ) : uri ? (
-        <Image 
-          source={{ uri }} 
+        <Image
+          source={{ uri }}
           style={{ width: box, height: box, borderRadius: box / 2 }}
           resizeMode="cover"
         />
@@ -100,11 +100,11 @@ export function Avatar({ name, userType, size = 'md', uri, source }: AvatarProps
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
-    alignItems:     'center',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   initial: {
-    color:      colors.surface, // white on navy / white on teal
+    color: colors.surface, // white on navy / white on teal
     fontFamily: 'DMSans-Bold',
   },
 });

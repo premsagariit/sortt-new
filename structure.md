@@ -15,6 +15,11 @@ Sortt
 │   │   │   ├── (aggregator) # Scrap dealer specific screens
 │   │   │   │   ├── _layout.tsx # Aggregator tab layout and navigation
 │   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
+│   │   │   │   ├── execution # Order Execution Flow
+│   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
+│   │   │   │   │   ├── navigate.tsx # Map guidance to seller
+│   │   │   │   │   ├── weighing.tsx # Material weighing and camera capture
+│   │   │   │   │   └── otp.tsx # Waiting for seller OTP confirmation
 │   │   │   │   ├── home.tsx # Nearby orders feed for dealers
 │   │   │   │   ├── orders.tsx # Ongoing and completed pickup management
 │   │   │   │   ├── profile.tsx # Dealer public profile and shop details
@@ -49,7 +54,7 @@ Sortt
 │   │   │   │   │   ├── index.tsx # Selling flow entry point
 │   │   │   │   │   ├── step1.tsx # Select items and materials
 │   │   │   │   │   ├── step2.tsx # Capture or upload scrap photos
-│   │   │   │   │   ├── step3.tsx # Weight estimation and pricing
+│   │   │   │   │   ├── step3.tsx # Weight estimation, pricing, and DateTimePicker
 │   │   │   │   │   └── step4.tsx # Final review and post to marketplace
 │   │   │   │   ├── notifications.tsx # Activity feed
 │   │   │   │   ├── orders.tsx # Seller order tracking (Active/Past)

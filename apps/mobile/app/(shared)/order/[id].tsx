@@ -38,8 +38,9 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { SecondaryButton } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useAuthStore } from '../../../store/authStore';
+import { useOrderStore } from '../../../store/orderStore';
 import type { OrderStatus } from '../../../components/ui/StatusChip';
-import { MapPin, Phone, CheckCircle } from 'phosphor-react-native';
+import { MapPin, Phone, CheckCircle, CaretRight } from 'phosphor-react-native';
 
 // ── Mock data ──────────────────────────────────────────────────────
 type StatusHistoryEntry = {
@@ -142,6 +143,34 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
       phoneLast4: '9901',
     },
   },
+  'ORD-7777': {
+    orderId: 'ORD-7777',
+    status: 'arrived',
+    materials: ['paper', 'plastic'],
+    estimatedAmount: 280,
+    date: 'Today, 3:30 PM',
+    pickupLocality: 'Kondapur, Hitech City',
+    pickupAddress: 'Plot 42, Silicon Valley, Kondapur',
+    aggregator: {
+      name: 'Suresh Metals & More',
+      initials: 'SM',
+      rating: 4.7,
+      completedOrders: 234,
+      phoneLast4: '4521',
+    },
+    statusHistory: [
+      { status: 'created', time: 'Today, 3:00 PM', done: true },
+      { status: 'accepted', time: 'Today, 3:05 PM', done: true },
+      { status: 'en_route', time: 'Today, 3:20 PM', done: true },
+      { status: 'arrived', time: 'Today, 3:30 PM', done: false, active: true },
+      { status: 'completed', time: null, done: false },
+    ],
+    seller: {
+      name: 'Ravi Kumar',
+      rating: 4.8,
+      phoneLast4: '1234',
+    },
+  },
 };
 
 // ── Status labels for timeline ─────────────────────────────────────
@@ -175,10 +204,22 @@ const MATERIAL_BG: Record<string, string> = {
 // ── Component ──────────────────────────────────────────────────────
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userType } = useAuthStore();
-  const order = id ? MOCK_ORDER_DETAIL[id] : undefined;
+  const userType = useAuthStore((s: any) => s.userType);
+  const storeOrders = useOrderStore((s: any) => s.orders);
+  const updateStatus = useOrderStore((s: any) => s.updateOrderStatus);
+
+  const mockOrder = id ? MOCK_ORDER_DETAIL[id] : undefined;
+  const storeOrder = storeOrders.find((o: any) => o.orderId === id);
+
+  // Override mock order with store data if available
+  const order = storeOrder ? {
+    ...mockOrder,
+    orderId: storeOrder.orderId,
+    status: storeOrder.status,
+  } : mockOrder;
 
   // Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6
+  const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
 
   if (!order) {
@@ -278,7 +319,6 @@ export default function OrderDetailScreen() {
                     <Numeric size={12} color={colors.muted}>
                       {order.aggregator.completedOrders}
                     </Numeric>
-                    {' completed orders'}
                   </Text>
                   <Pressable
                     style={styles.chatPillBtn}
@@ -340,8 +380,8 @@ export default function OrderDetailScreen() {
             ORDER TIMELINE
           </Text>
 
-          {order.statusHistory.map((step, idx) => {
-            const isLast = idx === order.statusHistory.length - 1;
+          {(order.statusHistory || []).map((step: any, idx: number) => {
+            const isLast = idx === (order.statusHistory || []).length - 1;
             const isDone = step.done;
             const isActive = !!step.active;
 
@@ -403,7 +443,7 @@ export default function OrderDetailScreen() {
             ORDER SUMMARY
           </Text>
           <View style={styles.metaPillRow}>
-            {order.materials.map((mat, i) => {
+            {(order.materials || []).map((mat: any, i: number) => {
               const weights = [12, 8, 4, 15]; // mock weights
               return (
                 <View key={mat} style={[styles.metaPill, { backgroundColor: MATERIAL_BG[mat], borderColor: MATERIAL_COLORS[mat] }]}>
@@ -447,6 +487,31 @@ export default function OrderDetailScreen() {
             {order.date}
           </Text>
         </View>
+
+        {/* ── OTP Section (Seller only, when arrived) ───────────────────────── */}
+        {userType === 'seller' && order.status === 'arrived' && (
+          <Pressable
+            style={[styles.card, styles.otpCard]}
+            onPress={() => router.push(`/(seller)/order/otp/${id}` as any)}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text variant="caption" color={colors.navy} style={styles.cardSectionLabel}>
+                SHARE OTP WITH AGGREGATOR
+              </Text>
+              <CaretRight size={16} color={colors.navy} />
+            </View>
+            <Text variant="caption" color={colors.muted} style={{ marginBottom: spacing.md }}>
+              Tap to show verification code to the dealer.
+            </Text>
+            <View style={styles.otpCodeRow}>
+              {(storeOrder?.otp || '1234').split('').map((digit: any, i: number) => (
+                <View key={i} style={styles.otpDigitBox}>
+                  <Text variant="heading" style={styles.otpDigitText}>{digit}</Text>
+                </View>
+              ))}
+            </View>
+          </Pressable>
+        )}
 
         {/* ── Action bar ──────────────────────────────────────── */}
         {isCompleted ? (
@@ -755,5 +820,33 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.card,
     padding: spacing.lg,
     paddingBottom: spacing.xl,
+  },
+  // OTP Card
+  otpCard: {
+    backgroundColor: colorExtended.surface2,
+    borderColor: colors.navy,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+  },
+  otpCodeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.sm,
+  },
+  otpDigitBox: {
+    width: 50,
+    height: 60,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpDigitText: {
+    color: colors.navy,
+    fontFamily: 'DMMono-Bold',
+    fontSize: 28,
   },
 });

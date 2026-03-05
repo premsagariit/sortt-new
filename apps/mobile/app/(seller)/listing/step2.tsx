@@ -7,10 +7,10 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, Tray } from 'phosphor-react-native';
+import { Camera, Tray, WarningCircle } from 'phosphor-react-native';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
@@ -20,46 +20,61 @@ import { MaterialChip } from '../../../components/ui/MaterialChip';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
+import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 
 export default function Step2Screen() {
   const {
     selectedMaterials,
     weights,
-    photoUri,
+    photoUri: storedPhotoUri,
     aiHintShown,
     setWeight,
     setPhotoUri,
     setAiHintShown,
   } = useListingStore();
 
-  const handleTakePhoto = () => {
-    // Mock capturing a photo
-    setPhotoUri('mock://photo-123.jpg');
+  // usePhotoCapture is the ONLY place camera is launched — never inline in screens
+  const { photoUri, pickPhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
+
+  // Sync hook URI into store whenever a new photo is captured
+  useEffect(() => {
+    if (photoUri) {
+      setPhotoUri(photoUri);
+      setAiHintShown(false);
+    }
+  }, [photoUri, setPhotoUri, setAiHintShown]);
+
+  const handleRetake = async () => {
+    resetPhoto();
+    setPhotoUri(null);
     setAiHintShown(false);
+    await pickPhoto();
   };
 
-  // Mock AI process
-  useEffect(() => {
-    if (photoUri && !aiHintShown) {
-      const timer = setTimeout(() => {
-        setAiHintShown(true);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [photoUri, aiHintShown, setAiHintShown]);
+  // Source of truth for UI: store (so disabled state is never local state)
+  const capturedUri = storedPhotoUri;
 
   const hasOneValidWeight = selectedMaterials.some(
     (m) => parseFloat(weights[m] || '0') > 0
   );
-  
-  const canProceed = photoUri !== null && hasOneValidWeight;
+
+  // Disabled state reads from STORE (not local state) per hard rules
+  const canProceed = capturedUri !== null && hasOneValidWeight;
+
+  // Mock AI hint (still local — Day 8 replaces with Gemini Vision result)
+  useEffect(() => {
+    if (capturedUri && !aiHintShown) {
+      const timer = setTimeout(() => setAiHintShown(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [capturedUri, aiHintShown, setAiHintShown]);
 
   if (selectedMaterials.length === 0) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <NavBar 
-          title="List Scrap" 
-          onBack={() => router.back()} 
+        <NavBar
+          title="List Scrap"
+          onBack={() => router.back()}
           rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 2 of 4</Text>}
         />
         <WizardStepIndicator currentStep={2} />
@@ -76,38 +91,61 @@ export default function Step2Screen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <NavBar 
-        title="List Scrap" 
+      <NavBar
+        title="List Scrap"
         onBack={() => router.back()}
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 2 of 4</Text>}
       />
-      
+
       <View style={styles.content}>
         <WizardStepIndicator currentStep={2} />
-        
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <Text variant="heading">Add a photo & enter weights</Text>
             <Text variant="caption" color={colors.muted}>Photo is required · AI will analyse your scrap pile</Text>
           </View>
 
+          {/* Permission denied inline banner */}
+          {permissionDenied && (
+            <View style={styles.permissionBanner}>
+              <WarningCircle size={16} color={colors.surface} weight="fill" />
+              <Text variant="caption" color={colors.surface} style={{ flex: 1, marginLeft: spacing.xs }}>
+                Camera access denied. Enable it in Settings.
+              </Text>
+            </View>
+          )}
+
           {/* Photo Section */}
           <View style={styles.section}>
-            {!photoUri ? (
-              <Pressable style={styles.photoBoxEmpty} onPress={handleTakePhoto}>
-                <Camera size={32} color={colors.muted} weight="duotone" />
+            {!capturedUri ? (
+              <Pressable
+                style={styles.photoBoxEmpty}
+                onPress={pickPhoto}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={colors.muted} />
+                ) : (
+                  <Camera size={32} color={colors.muted} weight="light" />
+                )}
                 <Text variant="label" style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                  Tap to take photo or choose from gallery
+                  {isLoading ? 'Opening camera...' : 'Tap to take photo'}
                 </Text>
               </Pressable>
             ) : (
               <View style={styles.photoBoxFilled}>
+                <Image
+                  source={{ uri: capturedUri }}
+                  style={styles.thumbnail}
+                  resizeMode="cover"
+                />
                 <View style={styles.photoHeaderRow}>
                   <View style={styles.photoStatus}>
                     <Text variant="label" color={colors.teal}>✓ Photo added</Text>
                   </View>
                   <View style={{ width: 100 }}>
-                    <SecondaryButton label="Retake" onPress={handleTakePhoto} />
+                    <SecondaryButton label="Retake" onPress={handleRetake} />
                   </View>
                 </View>
 
@@ -146,13 +184,13 @@ export default function Step2Screen() {
             <Text variant="subheading" style={{ marginBottom: spacing.sm }}>
               Approximate Weights
             </Text>
-            
+
             {selectedMaterials.map((code) => (
               <View key={code} style={styles.weightRow}>
                 <View style={styles.chipContainer}>
                   <MaterialChip material={code} variant="chip" />
                 </View>
-                
+
                 <View style={styles.inputContainer}>
                   <TextInput
                     style={styles.input}
@@ -207,7 +245,7 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.xl,
   },
-  
+
   // Photo
   photoBoxEmpty: {
     borderWidth: 2,
@@ -235,8 +273,23 @@ const styles = StyleSheet.create({
   photoStatus: {
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+    backgroundColor: colorExtended.tealLight,
     borderRadius: 8,
+  },
+  thumbnail: {
+    width: '100%',
+    height: 180,
+    borderRadius: radius.card,
+    backgroundColor: colors.border,
+  },
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.amber,
+    borderRadius: radius.btn,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
   },
   aiBox: {
     backgroundColor: 'rgba(0,0,0,0.03)',

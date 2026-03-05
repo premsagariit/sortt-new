@@ -1,19 +1,18 @@
 /**
- * app/(aggregator)/otp/[id].tsx
+ * app/(aggregator)/execution/otp/[id].tsx
  * ──────────────────────────────────────────────────────────────────
  * OTP Verification — Aggregator enters OTP provided by seller.
- * 
- * V25: Success animation and redirection to Home.
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, Animated } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
-import { NavBar } from '../../../components/ui/NavBar';
-import { Text, Numeric } from '../../../components/ui/Typography';
-import { PrimaryButton } from '../../../components/ui/Button';
+import { colors, spacing, radius, colorExtended } from '../../../../constants/tokens';
+import { NavBar } from '../../../../components/ui/NavBar';
+import { useOrderStore } from '../../../../store/orderStore';
+import { Text, Numeric } from '../../../../components/ui/Typography';
+import { PrimaryButton } from '../../../../components/ui/Button';
 import { CheckCircle } from 'phosphor-react-native';
 
 export default function OTPVerificationScreen() {
@@ -22,6 +21,15 @@ export default function OTPVerificationScreen() {
     const [otp, setOtp] = useState(['', '', '', '']);
     const [isSuccess, setIsSuccess] = useState(false);
     const inputs = useRef<TextInput[]>([]);
+
+    // Animation refs for success screen
+    const scaleAnim = useRef(new Animated.Value(0)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    const storeOrders = useOrderStore((s: any) => s.orders);
+    const updateStatus = useOrderStore((s: any) => s.updateOrderStatus);
+    const order = storeOrders.find((o: any) => o.orderId === id);
+    const targetOtp = order?.otp || '1234';
 
     const handleOtpChange = (val: string, index: number) => {
         const newOtp = [...otp];
@@ -35,15 +43,30 @@ export default function OTPVerificationScreen() {
     };
 
     const handleVerify = () => {
-        // Mock verification
-        if (otp.join('') === '1234') {
+        if (otp.join('') === targetOtp) {
+            updateStatus(id, 'completed');
             setIsSuccess(true);
+
+            // Trigger animation
+            Animated.parallel([
+                Animated.spring(scaleAnim, {
+                    toValue: 1,
+                    friction: 6,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 400,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+
             setTimeout(() => {
                 router.dismissAll();
                 router.replace('/(aggregator)/home');
-            }, 2000);
+            }, 3500);
         } else {
-            Alert.alert('Invalid OTP', 'Use 1234 for mock verification.');
+            Alert.alert('Invalid OTP', `Use ${targetOtp} for mock verification.`);
         }
     };
 
@@ -51,11 +74,38 @@ export default function OTPVerificationScreen() {
         return (
             <View style={styles.successContainer}>
                 <Stack.Screen options={{ headerShown: false }} />
-                <CheckCircle size={80} color={colors.teal} weight="fill" />
-                <Text variant="heading" style={{ marginTop: spacing.lg }}>Payment Scripted!</Text>
-                <Text variant="body" color={colors.muted} style={{ textAlign: 'center', marginTop: 8, paddingHorizontal: 40 }}>
-                    ₹{amount} has been processed for Order #{id}.
-                </Text>
+
+                <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center' }}>
+                    <CheckCircle size={80} color={colors.teal} weight="fill" />
+                </Animated.View>
+
+                <Animated.View style={[{ opacity: fadeAnim }, styles.successContent]}>
+                    <Text variant="heading" style={styles.successHeading}>Payment Processed!</Text>
+                    <Text variant="body" color={colors.muted} style={styles.successMessage}>
+                        Order #{id} has been marked as completed successfully.
+                    </Text>
+
+                    <View style={styles.receiptCard}>
+                        <View style={styles.receiptRow}>
+                            <Text variant="body" color={colors.slate}>Amount Paid</Text>
+                            <Numeric size={20} color={colors.teal}>₹{amount}</Numeric>
+                        </View>
+                        <View style={styles.receiptDivider} />
+                        <View style={styles.receiptRow}>
+                            <Text variant="body" color={colors.slate}>Order Number</Text>
+                            <Numeric size={14} color={colors.navy}>{id}</Numeric>
+                        </View>
+                    </View>
+
+                    <PrimaryButton
+                        label="Back to Home"
+                        onPress={() => {
+                            router.dismissAll();
+                            router.replace('/(aggregator)/home');
+                        }}
+                        style={{ marginTop: spacing.xxl, width: '100%' }}
+                    />
+                </Animated.View>
             </View>
         );
     }
@@ -166,7 +216,40 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.bg,
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: spacing.xl,
+        paddingTop: 120, // push down a bit
+        paddingHorizontal: spacing.xl,
+    },
+    successContent: {
+        alignItems: 'center',
+        width: '100%',
+    },
+    successHeading: {
+        marginTop: spacing.xl,
+        marginBottom: spacing.xs,
+        textAlign: 'center',
+    },
+    successMessage: {
+        textAlign: 'center',
+        marginBottom: spacing.xxl,
+        paddingHorizontal: spacing.sm,
+    },
+    receiptCard: {
+        width: '100%',
+        backgroundColor: colors.surface,
+        borderRadius: radius.card,
+        padding: spacing.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        gap: spacing.md,
+    },
+    receiptRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    receiptDivider: {
+        height: 1,
+        backgroundColor: colors.border,
+        width: '100%',
     },
 });

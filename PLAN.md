@@ -201,43 +201,51 @@
 - [x] Aggregator Registration Screens (3-Screen Wizard: Profile, Area, Materials)
 
 ### 3.2 Aggregator Order Feed
-- [ ] **Nearby Orders Feed** (`(aggregator)/home.tsx`):
+- [x] **Nearby Orders Feed** (`(aggregator)/home.tsx`):
   - NavBar: "Nearby Orders" + online/offline toggle pill.
   - Order list: `OrderCard` showing material chip, locality (NOT full address — V25), estimated weight, estimated ₹, time posted.
   - Empty state, skeleton loader.
-- [ ] **Order Detail — Pre-Acceptance** (aggregator view of `(shared)/order/[id].tsx`):
+- [x] **Order Detail — Pre-Acceptance** (aggregator view of `(shared)/order/[id].tsx`):
   - Material breakdown, locality only (NOT full address — V25), quantised map pin.
   - `PrimaryButton` "Accept Order".
   - 409 state: "Order already taken — accepted moments ago." + "Back to Feed".
-- [ ] **Order Detail — Post-Acceptance**:
+- [x] **Order Detail — Post-Acceptance**:
   - Full address revealed. Seller name + phone last 4.
   - "Get Directions", "Chat with Seller" actions.
   - Status update buttons: "Mark En Route" → "Mark Arrived" → "Start Weighing".
 
 ### 3.3 Aggregator Order Execution Flow
-- [ ] **Weighing Screen**:
+- [x] **Weighing Screen**:
   - Scale photo capture (mandatory). Per-material confirmed weight entry (DM Mono). Running total (DM Mono, `colors.amber`).
   - `PrimaryButton` "Send for Seller Confirmation". Disabled until all weights > 0 AND scale photo captured.
-- [ ] **Waiting for OTP Screen**:
+- [x] **Waiting for OTP Screen**:
   - "Waiting for seller to confirm..." animated pulse. Transaction summary (read-only). Timeout/resend state.
 
 ### 3.4 Aggregator Map & Earnings
-- [ ] **Route Screen** (`(aggregator)/route.tsx`):
+- [x] **Route Screen** (`(aggregator)/route.tsx`):
   - Static map placeholder. Order pins list. `PrimaryButton` "Plan Route" (disabled in static).
-- [ ] **Earnings Screen** (`(aggregator)/earnings.tsx`):
+- [x] **Earnings Screen** (`(aggregator)/earnings.tsx`):
   - Today / This Week / This Month tabs. Total earnings (DM Mono, `colors.amber`). Completed orders list. Avg rating.
-- [ ] **Price Setting Dashboard**:
+- [x] **Price Setting Dashboard**:
   - Per-material rate editor. Market reference hint. `PrimaryButton` "Save Rates".
 
 ### 3.5 Aggregator Profile
-- [ ] **Aggregator Profile Screen** (`(aggregator)/profile.tsx`):
+- [x] **Aggregator Profile Screen** (`(aggregator)/profile.tsx`):
   - Avatar (teal), business name, rating stars. KYC status chip. Operating Hours, Materials, Area, Log Out.
 
 ### 3.6 In-App Chat Screen (Shared)
-- [ ] **Chat Screen** (`(shared)/chat/[id].tsx`):
+- [x] **Chat Screen** (`(shared)/chat/[id].tsx`):
   - Message bubbles (navy right, surface left). Timestamps DM Mono.
   - `[phone number removed]` renders as greyed italic (V26 server-filtered display).
   - Text input + send button. Empty state, skeleton.
+
+### 3.6.1 Functional Photo Capture (Camera — Local State Only) — [COMPLETE]
+- [x] `expo-image-picker` installed (`~16.0.6`). `app.json`: iOS `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, Android `CAMERA`+`READ_MEDIA_IMAGES`. Plugin registered.
+- [x] `hooks/usePhotoCapture.ts` created — single source of truth for all camera logic. No screen imports ImagePicker directly. Day 8 extension point documented inline.
+- [x] `(seller)/listing/step2.tsx` — real camera wired. Thumbnail preview. Permission denied inline amber banner. CTA disabled state reads `listingStore.photoUri` (STORE, not local state).
+- [x] `(aggregator)/execution/weighing/[id].tsx` — real camera wired. Thumbnail preview. Permission banner. CTA disabled until `scalePhotoUri !== null` AND all weights > 0. Reads from `aggregatorStore.scalePhotoUri`.
+- [x] `(auth)/aggregator/kyc.tsx` — new screen. Two independent `usePhotoCapture` instances. Each card independent. Submit disabled until both `kycAadhaarUri` + `kycShopPhotoUri` non-null.
+- [x] `aggregatorStore.ts` — added `scalePhotoUri`, `kycAadhaarUri`, `kycShopPhotoUri` + 3 setters.
 
 ### 3.7 Next.js Web Portal Shell (Static)
 - [ ] Scaffold Next.js 15 App Router in `apps/web/`:

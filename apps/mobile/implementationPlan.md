@@ -1,77 +1,117 @@
-# Implementation Plan: Home + Listing Wizard UI Alignment (S11–S18)
+# Implementation Plan: Camera Functional Photo Capture (Day 3 §3.X)
 
-## Overview
-This task closes all visual gaps for the Seller Home screen (S11) and the 4-step Listing Wizard (S14–S18) according to the specifications in `sortt_seller_ui.html` and `differences.md` (§5–10). This is strictly a UI-only task; no existing logic, routes, API calls, or Zustand mappings will be altered.
+## Summary
+Wire the placeholder camera zones in three screens to `expo-image-picker`. Photos are captured from the device camera and stored in local Zustand state only — no upload, no backend. Day 8 slots the upload as a second step inside the hook without touching any screen file.
 
-## Relevant MEMORY.md Lessons & TRD Rules
-- **Rule 9 (TRD §10):** AI outputs should only serve as UI hints and never directly mutate the definitive store or model without explicit user confirmation.
-- **Scroll Compression Radius (MEMORY.md):** The navy greeting strip at the top of the Home screen must have a bottom border-radius of `0`.
-- **DM Mono Typography (MEMORY.md):** All numeric data (prices, weights, earnings, dates, times) MUST use the `DM Mono` font family.
-- **Component Mocking for Adornments (MEMORY.md):** When a global text input component does not natively support an ad-hoc icon or suffix that is only needed once, an ad-hoc wrapper around standard `Text` should be used to simulate a disabled input if the input isn't interactive.
-- **Hardcoded Hex Rule (MEMORY.md):** Zero hardcoded hex colors except where overlay transparencies over absolute photos/images structurally demand an `rgba` formula (such as `rgba(0,0,0,0.6)` for badges), which will be explicitly documented with standard comments.
-- **SafeAreaView Usage (MEMORY.md):** `SafeAreaView` from `react-native-safe-area-context` with `edges={['bottom']}` is universally required.
+---
 
-## Changed Files & Actions
+## BSE Numbered Finding List
 
-### 1. `apps/mobile/app/(seller)/home.tsx` (Reference: id="s-home", id="s-home-empty", id="s-home-skeleton")
-*   **Change 1 — Remove back button from NavBar:** Clean up unused `onBack` or left action hooks so that no back button appears on this root tab.
-*   **Change 2 — NavBar brand content:** **CRITICAL UPDATE**: We MUST use `<NavBar />` from `components/ui/NavBar.tsx` with `variant="dark"`. Instead of "Sortt SELLER" centered, we will clear the title and pass a custom left element (or rely on absolute placement within the layout if `NavBar` lacks a left element slot, though since we remove `onBack`, we can render the brand mark where the title usually goes, or absolute position it on the left of the `NavBar` container). Actually, since `NavBar` centers the `title` and has a `rightAction`, we might need to cleverly overlay the brand text or inject it as a sibling to `<NavBar />` if no leftAction prop is available, or modify `home.tsx` layout to position it. Wait, `NavBar` is strict. I will render "♻ {APP_NAME}" (imported) absolutely on top of the NavBar's left side padding, or modify `NavBar`'s usage. The user said: "use NavBar (variant="dark") using the brand mark as a custom left element". The current `NavBar` doesn't expose a `leftAction`, only `onBack` and `rightAction`. I will have to either absolute position the brand mark over it, or we handle it gracefully. The right side will carry a stroked Bell icon and a navy circular avatar with "R".
-*   **Change 3 — Stat card labels:** Adjust copy to "Total earned", "Pickups done", and "Active orders". The active label shifts formatting into `colors.teal` and `DM Mono`.
-*   **Change 4 — Today's Rates Section:** Update the heading grouping to "Today's Rates" on the left and a "See all →" red routing link to `/(seller)/browse` on the right.
-*   **Change 5 — Active Orders Heading:** Similarly update the order lists' heading grouping to "Active Orders" on the left and a red "View all →" to `/(seller)/orders` on the right.
-*   **Change 6 — Active order card format:** Relocate aggregator data from the bottom string directly underneath the Order ID (top-left left-aligned column). Modify Order ID into `DM Mono` `11px`.
-*   **Change 7 — Ad banner:** Pre-spacer full-width promotional banner block added identically matching S11's bottom specification.
-*   **Change 8 — Empty state (S14):** Remove any list skeletons and plug in the custom centered graphical mock matching S14. Reset dummy values in empty state strictly to "—", "0", and "0" using `DM Mono`.
-*   **Change 9 — Skeleton Loading state (S15)**: Implement the skeleton state (when `isLoading` is true) using `<SkeletonLoader />` from `components/ui/SkeletonLoader.tsx`:
-    - NavBar right: skeleton circle (32×32, shape built from `<SkeletonLoader>` or regular View with skeleton color) instead of avatar.
-    - Greeting strip: three skeleton rects (80×13, 150×22, 110×26 border-radius 20).
-    - Stats strip: skeleton value + label blocks per card.
-    - Rates section: heading skeleton + two skeleton rate card rows.
-    - Orders section: heading skeleton + one full-width 100×12 border-radius block.
+> **ALL screens, the hook, and the stores must pass this list before implementation begins.**
 
-### 2. `apps/mobile/app/(seller)/listing/step1.tsx` (Reference: id="s-list1")
-*   **Change 1 — NavBar:** Set variant to `light`, title left-aligned "List Scrap", adding "Step 1 of 4" step indicator typography in the `rightAction` prop constraint.
-*   **Change 2 — Progress bar:** Generate a standard pre-scroll global strip with a backgrounded track and 25% navy-filled metric.
-*   **Change 3 — Info banner:** Implement an informational block preceding primary CTAs representing selected properties ("2 materials selected. Our AI will verify from your photo...").
-*   **Change 4 — Primary CTA button:** Standardize text strictly to "Next →".
+1. **[PASS] EXIF not stripped client-side** — By design per V18. The hook returns only the raw `file.uri` from `expo-image-picker`. No image parsing, no EXIF traversal, no ArrayBuffer operations occur client-side. EXIF is stripped on Day 8 server-side via `sharp` before the image reaches Uploadthing or Gemini.
+2. **[PASS] No upload endpoint called** — `usePhotoCapture.ts` calls only `ImagePicker.launchCameraAsync()`. The returned `result.assets[0].uri` is stored directly in Zustand state. No `fetch`, `axios`, or Uploadthing call anywhere.
+3. **[PASS] Permission denial handled gracefully** — Hook sets `permissionDenied: true` when either Camera or MediaLibrary permission is denied. The calling screen renders an inline amber banner "Camera access denied. Enable it in Settings." — **no `alert()` call**, **no crash path**, no `throw`.
+4. **[BLOCK → FIXED] Camera permission strings in app.json** — `app.json` currently has NO `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, or `android.permissions`. These will be added as the **first step** of execution (before any screen code). Without them, camera silently fails on physical devices.
+5. **[PASS] Photo URI never logged** — No `console.log`, `console.debug`, or Sentry/Crashlytics call will reference `photoUri`, `scalePhotoUri`, `kycAadhaarUri`, or `kycShopPhotoUri` in any file created or modified by this task.
 
-### 3. `apps/mobile/app/(seller)/listing/step2.tsx` (Reference: id="s-list2" and id="s-list2-ai")
-*   **Change 1 — NavBar:** Configure identically to `step1.tsx` with parameter shifts ("Step 2 of 4").
-*   **Change 2 — Progress bar:** Generate identical container logic but configured mechanically for 50% navy-fill metric.
-*   **Change 3 — Page heading:** Shift copy into "Add a photo & enter weights" with subtitle "Photo is required · AI will analyse your scrap pile".
-*   **Change 4 — Photo upload zone (No Photo State):** Remap the upload module replacing simple buttons with the 1.5px dashed border graphical interactive placeholder.
-*   **Change 5 — Weights section heading (No Photo State):** Set copy from "Estimated Weights" into "Approximate Weights".
-*   **Change 6 — Warning banner (No Photo State):** Construct the AMBER context-banner specifying "Approximate weight is fine here."
-*   **Change 7 — CTA button (No Photo State):** Deactivate interactions and mutate text label dynamically into "Next → (Add photo first)".
-*   **Change 8 — Photo thumbnail (Photo Added State):** Enclose chosen inputs within a 150px constrained visual block matching border spec, inserting absolute badge component ("✓ Photo added" `rgba(0,0,0,0.6)` bg logic).
-*   **Change 9 — AI badge (Photo Added State):** Deconstruct old typography parameters and reconstruct the full "AI ESTIMATE" complex structural card, establishing static parameters logically tied to mock references.
-*   **Change 10 — Weights section heading (Photo Added State):** Set structural copy from "Estimated" to "Confirm Weights", applying graphical `teal` parameter updates to any form fields validating automated entry conditions.
-*   **Change 11 — Notes textarea (Photo Added State):** Mount a multiline textual block underneath the verified weights specifically isolated to the Photo Added scenario.
-*   **Change 12 — CTA button in state B:** Change to active "Next →".
+**SCR Pre-Assessment:** LGTM contingent on finding #4 being resolved as first execution step.
 
-### 4. `apps/mobile/app/(seller)/listing/step3.tsx` (Reference: id="s-list3")
-*   **Change 1 — NavBar:** Standard update ("Step 3 of 4").
-*   **Change 2 — Progress bar:** Fill parameter shifts to 75%.
-*   **Change 3 — Page heading:** Shift to single block "Pickup preference".
-*   **Change 4 — Pickup type option labels:** Overhaul toggle block into complex description labels linking 🏠/🏪 indicators visually with absolute checkmarks.
-*   **Change 5 — Address input:** Update textual components into static text variables aligned as simulated inputs, appending Map graphical mock underneath.
-*   **Change 6 — Date selection:** Delete standard pill variants. Code horizontal scroll module managing formatted numerical/chronological slots simulating dynamic constraints ("Selected", "Disabled").
-*   **Change 7 — Time selection:** Formulate dual-row flex grid maintaining 6 independent 3-column slots managing similar formatting and simulated constraints.
-*   **Change 8 — CTA button:** Set identically to "Next →".
+---
 
-### 5. `apps/mobile/app/(seller)/listing/step4.tsx` (Reference: id="s-list4")
-*   **Change 1 — NavBar:** Standard update ("Review & Submit", "Step 4 of 4").
-*   **Change 2 — Progress bar:** Fill parameter updates to `100%`. Color updates to `teal`.
-*   **Change 3 — Earnings Calculator card:** Modify simple mock typography bounds to complex row-based calculations matching tabular parameter layout mapping "Metal" / "Paper" to dynamic output bounds.
-*   **Change 4 — Earnings total block:** Inject unified graphic header logic projecting dynamic outputs above warning textual strings.
-*   **Change 5 — Listing summary card:** Build secondary static informational breakdown listing inputs ("Materials", "Address", "Window") appending specific visual formatting strings linked implicitly with backwards navigation strings ("Edit").
-*   **Change 6 — Info banner:** Implement bottom informational parameter text ("Your listing will be sent...").
-*   **Change 7 — Remove Cancel button:** Standard bottom row isolation mechanics.
-*   **Change 8 — CTA button:** Unify to "Submit Listing →".
+## Files to Create or Modify
 
-## Risks and Clarifications
-- We are maintaining mock logic throughout steps. The `AI Estimate` structural badge will only parse fixed values without altering `listingStore` or modifying state representations, adhering absolutely strictly to TRD rule 9 constraints regarding static estimates representing UI hints ONLY.
+### 1. `apps/mobile/app.json` — [MODIFY]
+Add iOS permission strings and Android permissions to unblock camera on physical devices.
 
-## Verification Checklist
-- Once files are applied, Developer verification using `pnpm dev:mobile` and loading `Expo Go` must strictly conform to identical layout outputs parsing no native `Error` boundaries globally.
-- TypeScript compiler (`npx tsc --noEmit`) verified error-free following application.
+> **Design choice: literal strings in `app.json` (not `app.config.ts`).**
+> `app.json` is static JSON — template variables like `${APP_NAME}` are not interpolated. Options are:
+> (a) Use literal strings in `app.json` — simpler, no migration risk, managed workflow unchanged.
+> (b) Migrate to `app.config.ts` and import from `constants/app.ts` — enables dynamic APP_NAME but is an unnecessary scope expansion for this task.
+> **Decision: option (a).** Permission strings describe the app to the OS user — they are read at install time and are not re-deployed dynamically. Hardcoding the human-readable description here is acceptable. `APP_NAME` placeholder is for generated code only, not for OS-level native strings that will change when the project renames.
+
+- **iOS keys added:**
+  - `NSCameraUsageDescription` → `"Sortt uses the camera to photograph your scrap pile and weighing scale."`
+  - `NSPhotoLibraryUsageDescription` → `"Sortt needs photo library access to attach images to your listing."`
+- **Android keys added:**
+  - `android.permissions` array → `["CAMERA", "READ_MEDIA_IMAGES"]`
+- **Plugin added:** `"expo-image-picker"` added to `plugins` array (required for managed workflow permission injection on both platforms)
+
+### 2. `apps/mobile/package.json` — [MODIFY]
+Add `expo-image-picker` to `dependencies`. Verify the Expo 54 compatible version.
+- `"expo-image-picker": "~16.0.6"` (Expo SDK 54 compatible version based on `expo` `~54.0.33`)
+
+### 3. `apps/mobile/hooks/usePhotoCapture.ts` — [NEW]
+Single reusable hook. ALL camera logic lives here — no screen imports `ImagePicker` directly.
+- **Accepts:** `options?: { allowsEditing?: boolean; aspect?: [number, number] }`  
+- **Requests** `Camera` permission via `ImagePicker.requestCameraPermissionsAsync()`
+- **Launches** `ImagePicker.launchCameraAsync()` with `quality: 0.7`, `mediaTypes: ImagePicker.MediaTypeOptions.Images`, and options passthrough
+- **Returns:** `{ photoUri: string | null; pickPhoto: () => Promise<void>; permissionDenied: boolean; isLoading: boolean }`
+- **Day 8 extension point:** `pickPhoto()` will gain a second async step after URI capture: call `presignUpload(uri)` → `attachUri(storageKey)` → return `storageKey`. Only this file changes on Day 8. Screen interface is unchanged.
+
+### 4. `apps/mobile/store/listingStore.ts` — [NO CHANGE NEEDED]
+`listingStore` already has `photoUri: string | null` and `setPhotoUri: (uri: string | null) => void`. No store changes required for Screen 1.
+
+### 5. `apps/mobile/store/aggregatorStore.ts` — [MODIFY]
+Add three new KYC/execution photo fields to `AggregatorStoreState`:
+- `scalePhotoUri: string | null` — the weighing scale photo (Weighing screen)
+- `kycAadhaarUri: string | null` — Aadhaar card photo (KYC screen card 1)
+- `kycShopPhotoUri: string | null` — Shop/vehicle photo (KYC screen card 2)
+- Three corresponding setters: `setScalePhotoUri`, `setKycAadhaarUri`, `setKycShopPhotoUri`
+
+### 6. `apps/mobile/app/(seller)/listing/step2.tsx` — [MODIFY]
+Replace the mock `handleTakePhoto` function (currently just calls `setPhotoUri('mock://photo-123.jpg')`) with `usePhotoCapture` hook.
+- Import `usePhotoCapture` from `../../../hooks/usePhotoCapture`
+- Call `setPhotoUri(photoUri)` from hook into store when `photoUri` changes via `useEffect`
+- Show inline amber banner if `permissionDenied === true`
+- Show loading spinner if `isLoading === true` while camera is launching
+- Camera icon: `<Camera weight="light" />` (already using `Camera` from phosphor — just update `weight` prop)
+- `canProceed` reads from `listingStore.photoUri !== null` (store-driven, not local state)
+
+### 7. `apps/mobile/app/(aggregator)/execution/weighing.tsx` — [MODIFY]
+Wire photo zone to `usePhotoCapture` hook; store result in `aggregatorStore.scalePhotoUri`.
+- After capture: show thumbnail preview container + "✓ Scale photo captured" badge in `colors.teal`
+- "Retake" `SecondaryButton` below thumbnail
+- `PrimaryButton` "Upload Scale Photo & Send OTP →" disabled until `scalePhotoUri !== null` AND all entered material weights > 0
+- Amber inline banner on permission denial
+- Touch target for camera zone: minimum 48dp height enforced via `minHeight: 48`
+
+### 8. `apps/mobile/app/(auth)/aggregator/kyc.tsx` — [MODIFY] (or [NEW] if file doesn't exist)
+Two independent camera cards, each using a separate `usePhotoCapture` call.
+- Card 1: Aadhaar front photo → `aggregatorStore.kycAadhaarUri`
+- Card 2: Shop/vehicle photo → `aggregatorStore.kycShopPhotoUri`
+- Each card independently shows: placeholder (camera icon + "Tap to upload") vs thumbnail + "✓ Uploaded" badge
+- "Submit & Continue" button enabled only when BOTH URIs are non-null
+- Amber inline banner per card if that card's permission is denied
+
+---
+
+## Day 8 Extension Point Design
+
+The hook's return interface **will not change** on Day 8. Only the `pickPhoto()` implementation body adds:
+```ts
+// Day 8 — add these lines inside pickPhoto() AFTER local uri is set:
+// const storageKey = await uploadViaProvider(uri); // IStorageProvider
+// onUploadComplete?.(storageKey); // optional callback
+```
+Screens call `usePhotoCapture()` and read `photoUri` → this interface is stable. Day 8 only modifies `usePhotoCapture.ts`.
+
+---
+
+## Verification Plan
+
+### Automated
+- `pnpm type-check` must exit 0 across all modified files
+- `grep -r "launchCameraAsync\|ImagePicker" apps/mobile/app/` must return 0 results (all camera logic is in the hook only)
+- `grep -r "#[0-9A-Fa-f]\{6\}" apps/mobile/hooks/ apps/mobile/app/\(seller\)/listing/step2.tsx apps/mobile/app/\(aggregator\)/execution/weighing.tsx` must return 0 results
+
+### Manual (Expo Go on physical device)
+1. Run `pnpm dev:mobile` and open in Expo Go.
+2. Navigate: Seller → "List Scrap" → Step 2. Tap the camera zone. Verify OS permission prompt appears. Grant permission. Verify camera opens. Take photo. Verify:
+   - Photo thumbnail appears in place of placeholder
+   - "✓ Photo added" badge appears
+   - "Retake" secondary button appears
+   - "Next →" button becomes enabled
+3. Navigate: Aggregator → active order → Weighing screen. Tap camera zone. Take scale photo. Verify thumbnail + badge + "Retake" appear. Enter non-zero weights. Verify the main CTA becomes enabled.
+4. Navigate: Aggregator Onboarding → KYC screen. Tap Aadhaar card. Capture. Tap shop photo card. Capture. Verify both cards show thumbnails and "Submit" becomes enabled.
+5. Deny camera permission (revoke in device Settings). Return to any camera zone. Tap it. Verify amber inline banner appears — no JS alert, no crash.
