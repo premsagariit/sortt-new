@@ -42,12 +42,8 @@ export default function OTPVerificationScreen() {
         }
     };
 
-    const handleVerify = () => {
-        if (otp.join('') === targetOtp) {
-            updateStatus(id, 'completed');
-            setIsSuccess(true);
-
-            // Trigger animation
+    useEffect(() => {
+        if (isSuccess) {
             Animated.parallel([
                 Animated.spring(scaleAnim, {
                     toValue: 1,
@@ -61,10 +57,19 @@ export default function OTPVerificationScreen() {
                 }),
             ]).start();
 
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 router.dismissAll();
                 router.replace('/(aggregator)/home');
             }, 3500);
+
+            return () => clearTimeout(timer);
+        }
+    }, [isSuccess, scaleAnim, fadeAnim, router]);
+
+    const handleVerify = () => {
+        if (otp.join('') === targetOtp) {
+            updateStatus(id, 'completed');
+            setIsSuccess(true);
         } else {
             Alert.alert('Invalid OTP', `Use ${targetOtp} for mock verification.`);
         }
