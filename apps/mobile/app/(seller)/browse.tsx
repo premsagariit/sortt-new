@@ -71,12 +71,13 @@ const MOCK_AGGREGATORS: Aggregator[] = [
 const FILTERS = ['All (14)', 'Metal', 'Paper', 'Plastic', 'E-Waste'];
 
 const MATERIAL_LABEL: Record<MaterialCode, string> = {
-  metal:   '⚙ Metal',
+  metal: '⚙ Metal',
   plastic: '🧴 Plastic',
-  paper:   '📄 Paper',
-  ewaste:  '💻 E-Waste',
-  fabric:  '👗 Fabric',
-  glass:   '🍶 Glass',
+  paper: '📄 Paper',
+  ewaste: '💻 E-Waste',
+  fabric: '👗 Fabric',
+  glass: '🍶 Glass',
+  custom: '📦 Other',
 };
 
 // ── Component ──────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ export default function SellerBrowseScreen() {
             autoCorrect={false}
           />
           {searchQuery.length > 0 && (
-            <Pressable 
+            <Pressable
               onPress={() => setSearchQuery('')}
               hitSlop={12}
             >
@@ -197,7 +198,7 @@ export default function SellerBrowseScreen() {
         title="Nearby Aggregators"
         rightAction={
           <Pressable style={styles.mapButton}>
-             <Text variant="caption" style={styles.mapButtonText}>🗺 Map</Text>
+            <Text variant="caption" style={styles.mapButtonText}>🗺 Map</Text>
           </Pressable>
         }
       />
@@ -227,7 +228,7 @@ export default function SellerBrowseScreen() {
 // ── Styles ─────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
   },
   listContent: {
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
   },
   filtersScroll: {
     gap: 8,
-     paddingRight: spacing.md,
+    paddingRight: spacing.md,
   },
   filterChip: {
     paddingHorizontal: 14,

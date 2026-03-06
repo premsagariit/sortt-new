@@ -37,6 +37,7 @@ const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
   ewaste: { min: 50, max: 150 },
   fabric: { min: 10, max: 18 },
   glass: { min: 2, max: 6 },
+  custom: { min: 0, max: 0 },
 };
 
 export default function Step1Screen() {

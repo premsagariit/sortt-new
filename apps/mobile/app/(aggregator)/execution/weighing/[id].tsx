@@ -50,6 +50,7 @@ const MATERIAL_MAP: Record<MaterialCode, { label: string; rate: number }> = {
     ewaste: { label: 'E-Waste', rate: 50 },
     glass: { label: 'Glass Bottles', rate: 5 },
     fabric: { label: 'Fabric / Textiles', rate: 8 },
+    custom: { label: 'Other Item', rate: 0 },
 };
 
 export default function WeighingScreen() {

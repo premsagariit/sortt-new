@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Sortt",
-    "slug": "sortt-mobile",
+    "slug": "sortt",
     "version": "1.0.0",
     "android": {
       "package": "com.sagar.sortt"
