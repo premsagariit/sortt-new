@@ -22,6 +22,7 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 // Camera logic is ONLY in this hook — never call ImagePicker directly in screens
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
+import { safeBack } from '../../../utils/navigation';
 
 export default function KycScreen() {
     const {
@@ -65,7 +66,7 @@ export default function KycScreen() {
             <NavBar
                 variant="light"
                 title="KYC Documents"
-                onBack={() => router.back()}
+                onBack={() => safeBack('/(auth)/aggregator/materials-setup')}
                 rightAction={
                     <Text variant="caption" style={{ color: colors.muted }}>Step 4 of 4</Text>
                 }
@@ -114,7 +115,7 @@ export default function KycScreen() {
             <View style={styles.footer}>
                 <PrimaryButton
                     label="Submit & Continue →"
-                    onPress={() => router.push('/(auth)/aggregator/kyc-pending' as any)}
+                    onPress={() => router.replace('/(aggregator)/home' as any)}
                     disabled={!canSubmit}
                 />
             </View>

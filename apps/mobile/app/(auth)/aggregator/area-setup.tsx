@@ -10,10 +10,11 @@ import { ProgressBar } from '../../../components/ui/ProgressBar';
 import { ZoneChip } from '../../../components/ui/ZoneChip';
 import { colors, spacing, radius } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { safeBack } from '../../../utils/navigation';
 
 const POPULAR_ZONES = [
-  'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 
-  'Kondapur', 'Madhapur', 'Hitech City', 
+  'Banjara Hills', 'Jubilee Hills', 'Gachibowli',
+  'Kondapur', 'Madhapur', 'Hitech City',
   'Manikonda', 'Miyapur'
 ];
 
@@ -31,7 +32,7 @@ export default function AggregatorAreaSetup() {
   };
 
   const handleBack = () => {
-    router.back();
+    safeBack('/(auth)/aggregator/profile-setup');
   };
 
   const toggleArea = (area: string) => {
@@ -41,19 +42,19 @@ export default function AggregatorAreaSetup() {
     setOperatingAreas(newAreas);
   };
 
-  const filteredZones = POPULAR_ZONES.filter(z => 
+  const filteredZones = POPULAR_ZONES.filter(z =>
     z.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <NavBar 
-        title="Operating Area" 
-        variant="light" 
+      <NavBar
+        title="Operating Area"
+        variant="light"
         onBack={handleBack}
         rightAction={<Text variant="caption">Step 2 of 3</Text>}
       />
-      
+
       <View style={styles.progressContainer}>
         <ProgressBar progress={0.66} color={colors.red} />
       </View>
@@ -68,7 +69,7 @@ export default function AggregatorAreaSetup() {
 
         <View style={styles.searchWrap}>
           <MagnifyingGlass size={20} color={colors.muted} />
-          <TextInput 
+          <TextInput
             style={styles.searchInput}
             placeholder="Search for neighborhoods..."
             placeholderTextColor={colors.muted}
@@ -81,7 +82,7 @@ export default function AggregatorAreaSetup() {
           <Text variant="label" style={styles.sectionLabel}>Popular Zones</Text>
           <View style={styles.chipGrid}>
             {filteredZones.map((zone) => (
-              <ZoneChip 
+              <ZoneChip
                 key={zone}
                 label={zone}
                 selected={operatingAreas.includes(zone)}
@@ -93,8 +94,8 @@ export default function AggregatorAreaSetup() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <PrimaryButton 
-          label="Next →" 
+        <PrimaryButton
+          label="Next →"
           onPress={handleNext}
           disabled={operatingAreas.length === 0}
         />
@@ -105,18 +106,18 @@ export default function AggregatorAreaSetup() {
 
 const styles = StyleSheet.create({
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
   },
   progressContainer: {
     paddingHorizontal: spacing.md,
-    backgroundColor:   colors.surface,
+    backgroundColor: colors.surface,
   },
   header: {
     marginBottom: spacing.lg,
   },
   title: {
-    color:        colors.navy,
+    color: colors.navy,
     marginBottom: spacing.xs,
   },
   subtitle: {
@@ -127,45 +128,45 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop:        spacing.xl,
-    paddingBottom:     spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   searchWrap: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   colors.surface, // Pure white for input
-    borderRadius:      radius.input,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface, // Pure white for input
+    borderRadius: radius.input,
     paddingHorizontal: spacing.md,
-    height:            52,
-    marginBottom:      spacing.xl,
-    borderWidth:       1,
-    borderColor:       colors.border,
+    height: 52,
+    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   searchInput: {
-    flex:              1,
-    marginLeft:        spacing.sm,
-    fontFamily:        'DMSans-Regular',
-    fontSize:          15,
-    color:             colors.navy,
+    flex: 1,
+    marginLeft: spacing.sm,
+    fontFamily: 'DMSans-Regular',
+    fontSize: 15,
+    color: colors.navy,
   },
   section: {
     marginBottom: spacing.xxl,
   },
   sectionLabel: {
     marginBottom: spacing.md,
-    color:        colors.muted,
+    color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   chipGrid: {
     flexDirection: 'row',
-    flexWrap:      'wrap',
+    flexWrap: 'wrap',
   },
   footer: {
-    padding:           spacing.md,
-    paddingBottom:     spacing.lg,
-    borderTopWidth:    1,
-    borderTopColor:    colors.border,
-    backgroundColor:   colors.bg,
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
 });

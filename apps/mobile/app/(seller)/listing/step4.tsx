@@ -10,7 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-
+import { CheckCircle, Nut, Jar, FileText, Laptop, Package, MapPin, Calendar, Info, Dress, Martini } from 'phosphor-react-native';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
@@ -18,6 +18,7 @@ import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator'
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
+import { safeBack } from '../../../utils/navigation';
 
 // Mock rates logic matching Step 1
 const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
@@ -27,6 +28,7 @@ const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
   ewaste: { min: 50, max: 150 },
   fabric: { min: 10, max: 18 },
   glass: { min: 2, max: 6 },
+  custom: { min: 5, max: 15 },
 };
 
 export default function Step4Screen() {
@@ -39,6 +41,7 @@ export default function Step4Screen() {
     addressLine,
     notes,
     resetListing,
+    customNames,
   } = useListingStore();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,7 +93,9 @@ export default function Step4Screen() {
 
     return {
       code,
-      label: code.charAt(0).toUpperCase() + code.slice(1),
+      label: code === 'custom'
+        ? (customNames[code] || 'Other Item')
+        : (code.charAt(0).toUpperCase() + code.slice(1)),
       weight: weightNum,
       rate,
       total: itemTotal,
@@ -109,39 +114,41 @@ export default function Step4Screen() {
 
   if (showSuccess) {
     return (
-      <SafeAreaView style={styles.successContainer} edges={['top', 'bottom']}>
-        <Animated.View style={[styles.successContent, { opacity: fadeAnim }]}>
-          <Animated.View style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}>
-            <Text style={{ fontSize: 40 }}>✅</Text>
+      <View style={{ flex: 1, backgroundColor: colors.teal }}>
+        <SafeAreaView style={styles.successContainer} edges={['top', 'bottom']}>
+          <Animated.View style={[styles.successContent, { opacity: fadeAnim }]}>
+            <Animated.View style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}>
+              <CheckCircle size={48} color={colors.teal} weight="fill" />
+            </Animated.View>
+
+            <Text variant="heading" style={styles.successTitle}>Listing Submitted!</Text>
+            <Text variant="body" style={styles.successBody}>
+              We're finding nearby aggregators. You'll get a notification when someone accepts.
+            </Text>
+
+            <View style={styles.successFooter}>
+              <Pressable
+                style={styles.backHomeBtn}
+                onPress={() => {
+                  if (timerRef.current) clearTimeout(timerRef.current);
+                  router.dismissAll();
+                  router.replace('/(seller)/home');
+                }}
+              >
+                <Text style={styles.backHomeBtnText}>Back to Home</Text>
+              </Pressable>
+            </View>
           </Animated.View>
-
-          <Text variant="heading" style={styles.successTitle}>Listing Submitted!</Text>
-          <Text variant="body" style={styles.successBody}>
-            We're finding nearby aggregators. You'll get a notification when someone accepts.
-          </Text>
-
-          <View style={styles.successFooter}>
-            <Pressable
-              style={styles.backHomeBtn}
-              onPress={() => {
-                if (timerRef.current) clearTimeout(timerRef.current);
-                router.dismissAll();
-                router.replace('/(seller)/home');
-              }}
-            >
-              <Text style={styles.backHomeBtnText}>Back to Home</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <NavBar
         title="Review & Submit"
-        onBack={() => router.back()}
+        onBack={() => safeBack('/(seller)/listing/step3')}
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 4 of 4</Text>}
       />
 
@@ -166,28 +173,25 @@ export default function Step4Screen() {
             </View>
 
             {breakDownItems.length > 0 ? (
-              breakDownItems.map((item) => {
-                // Get emoji from MATERIALS logic conceptually, or fallback to icons.
-                let emoji = '📦';
-                if (item.code === 'metal') emoji = '⚙️';
-                if (item.code === 'paper') emoji = '📄';
-                if (item.code === 'plastic') emoji = '🧴';
-                if (item.code === 'ewaste') emoji = '💻';
-
-                return (
-                  <View key={item.code} style={styles.tableRow}>
-                    <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text>{emoji}</Text>
-                      <Text variant="label" color={colors.navy}>{item.label}</Text>
-                    </View>
-                    <Text variant="body" style={styles.monoCell}>{item.weight} kg</Text>
-                    <Text variant="body" color={colors.muted} style={styles.monoCell}>₹{item.rate}</Text>
-                    <Text variant="body" color={colors.amber} style={[styles.monoCell, { flex: 1, textAlign: 'right', fontWeight: '700' }]}>
-                      ₹{item.total.toFixed(0)}
-                    </Text>
+              breakDownItems.map((item) => (
+                <View key={item.code} style={styles.tableRow}>
+                  <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {item.code === 'metal' && <Nut size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'paper' && <FileText size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'plastic' && <Jar size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'ewaste' && <Laptop size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'fabric' && <Dress size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'glass' && <Martini size={18} color={colors.surface} weight="fill" />}
+                    {item.code === 'custom' && <Package size={18} color={colors.surface} weight="fill" />}
+                    <Text variant="label" color={colors.surface}>{item.label}</Text>
                   </View>
-                );
-              })
+                  <Text variant="body" style={styles.monoCell}>{item.weight} kg</Text>
+                  <Text variant="body" color={colors.muted} style={styles.monoCell}>₹{item.rate}</Text>
+                  <Text variant="body" color={colors.amber} style={[styles.monoCell, { flex: 1, textAlign: 'right', fontWeight: '700' }]}>
+                    ₹{item.total.toFixed(0)}
+                  </Text>
+                </View>
+              ))
             ) : (
               <Text variant="body" color={colors.muted} style={{ paddingVertical: spacing.md }}>No weights entered.</Text>
             )}
@@ -206,7 +210,7 @@ export default function Step4Screen() {
           <View style={styles.reviewCard}>
             {/* Materials */}
             <View style={styles.listRow}>
-              <Text style={styles.rowIcon}>📦</Text>
+              <Package size={20} color={colors.navy} style={styles.rowIcon} />
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Materials</Text>
                 <Text variant="caption" color={colors.slate}>
@@ -222,7 +226,7 @@ export default function Step4Screen() {
 
             {/* Address */}
             <View style={styles.listRow}>
-              <Text style={styles.rowIcon}>📍</Text>
+              <MapPin size={20} color={colors.navy} style={styles.rowIcon} />
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Address</Text>
                 <Text variant="caption" color={colors.slate} numberOfLines={2}>
@@ -236,7 +240,7 @@ export default function Step4Screen() {
 
             {/* Window */}
             <View style={[styles.listRow, { borderBottomWidth: 0 }]}>
-              <Text style={styles.rowIcon}>📅</Text>
+              <Calendar size={20} color={colors.navy} style={styles.rowIcon} />
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Window</Text>
                 <Text variant="caption" color={colors.slate}>
@@ -251,7 +255,7 @@ export default function Step4Screen() {
 
           {/* Info Banner */}
           <View style={styles.infoBanner}>
-            <Text>ℹ️</Text>
+            <Info size={18} color={colors.navy} />
             <Text variant="caption" color={colors.slate} style={{ flex: 1, lineHeight: 18 }}>
               Your listing will be sent to verified aggregators near you. You'll be notified when someone accepts.
             </Text>
@@ -266,8 +270,8 @@ export default function Step4Screen() {
             onPress={handleSubmit}
           />
         </View>
-      </View>
-    </SafeAreaView>
+      </View >
+    </SafeAreaView >
   );
 }
 
@@ -312,6 +316,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: spacing.xs,
     alignItems: 'center',
+    gap: 4,
   },
   monoCell: {
     fontFamily: 'DMMono-Regular',
@@ -337,7 +342,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   rowIcon: {
-    fontSize: 18,
     marginRight: spacing.md,
     marginTop: 2,
   },

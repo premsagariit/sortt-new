@@ -39,8 +39,11 @@ import { SecondaryButton } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useAuthStore } from '../../../store/authStore';
 import { useOrderStore } from '../../../store/orderStore';
+import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
 import type { OrderStatus } from '../../../components/ui/StatusChip';
-import { MapPin, Phone, CheckCircle, CaretRight } from 'phosphor-react-native';
+import { MapPin, Phone, CheckCircle, CaretRight, Star, CurrencyInr, Nut, Jar, FileText, Laptop, Dress, Martini, ChatCircleDots } from 'phosphor-react-native';
+import { safeBack } from '../../../utils/navigation';
 
 // ── Mock data ──────────────────────────────────────────────────────
 type StatusHistoryEntry = {
@@ -58,6 +61,7 @@ type OrderMock = {
   date: string;
   pickupLocality: string;
   pickupAddress: string;
+  aggregatorId?: string | null;
   aggregator: {
     name: string;
     initials: string;
@@ -129,6 +133,7 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
     date: 'Today, 1:30 PM',
     pickupLocality: 'Kondapur, Sai Nagar',
     pickupAddress: '55, Sai Nagar Colony, Kondapur', // NEVER shown per V25 (status=created)
+    aggregatorId: null,
     aggregator: null,
     statusHistory: [
       { status: 'created', time: 'Today, 1:30 PM', done: false, active: true },
@@ -177,7 +182,7 @@ const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
 const TIMELINE_LABELS: Record<string, string> = {
   created: 'Order Created',
   accepted: 'Aggregator Accepted',
-  en_route: 'En Route · ETA 8 min',
+  en_route: 'On the Way · ETA 8 min',
   arrived: 'Arrived at Location',
   completed: 'OTP Confirmed & Completed',
 };
@@ -211,16 +216,17 @@ export default function OrderDetailScreen() {
   const mockOrder = id ? MOCK_ORDER_DETAIL[id] : undefined;
   const storeOrder = storeOrders.find((o: any) => o.orderId === id);
 
-  // Override mock order with store data if available
   const order = storeOrder ? {
     ...mockOrder,
     orderId: storeOrder.orderId,
     status: storeOrder.status,
+    aggregatorId: storeOrder.aggregatorId,
   } : mockOrder;
 
   // Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
+  const [cancelReason, setCancelReason] = useState<string | null>(null);
 
   if (!order) {
     return (
@@ -228,7 +234,7 @@ export default function OrderDetailScreen() {
         <NavBar
           title="Order"
           variant="light"
-          onBack={() => router.back()}
+          onBack={() => safeBack('/')}
         />
         <View style={styles.scroll}>
           <EmptyState
@@ -252,9 +258,10 @@ export default function OrderDetailScreen() {
 
   // For Aggregator: can only cancel if accepted but not en-route yet
   // For Seller: can cancel if created or accepted
+  const authUserId = useAuthStore((s: any) => s.user?.id || 'user-agg-001'); // fallback for mocking
   const canCancel = userType === 'seller'
     ? (order.status === 'created' || order.status === 'accepted')
-    : (order.status === 'accepted');
+    : (order.status === 'accepted' && order.aggregatorId === authUserId);
 
   function handleCancelPress() {
     setShowCancelSheet(true);
@@ -262,19 +269,21 @@ export default function OrderDetailScreen() {
 
   // ── Aggregator Actions ──
   const handleAccept = () => {
-    console.log('Order accepted');
-    // In real app: router.replace(...) or refresh
+    if (order.orderId) {
+      useAggregatorStore.getState().acceptOrder(order.orderId);
+      router.push('/(aggregator)/execution/navigate' as any);
+    }
   };
   const handleEnRoute = () => console.log('Marking en route');
   const handleArrived = () => console.log('Marking arrived');
-  const handleWeighing = () => router.push(`/(aggregator)/weighing/${order.orderId}` as any);
+  const handleWeighing = () => router.push(`/(aggregator)/execution/weighing/${order.orderId}` as any);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={[]}>
       <NavBar
         title={`Order #${order.orderId}`}
         variant="light"
-        onBack={() => router.back()}
+        onBack={() => safeBack('/')}
         // We do not append status text to the title. It goes purely to the rightAction.
         rightAction={<StatusChip status={order.status} />}
       />
@@ -311,7 +320,7 @@ export default function OrderDetailScreen() {
                     {order.aggregator.name}
                   </Text>
                   <Text variant="caption" color={colors.muted}>
-                    {'⭐ '}
+                    <Star size={12} color={colors.amber} weight="fill" />
                     <Numeric size={12} color={colors.muted}>
                       {order.aggregator.rating.toFixed(1)}
                     </Numeric>
@@ -324,7 +333,8 @@ export default function OrderDetailScreen() {
                     style={styles.chatPillBtn}
                     onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
                   >
-                    <Text variant="caption" style={styles.chatPillText as any}>💬 Chat</Text>
+                    <ChatCircleDots size={14} color={colors.navy} weight="bold" />
+                    <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
                   </Pressable>
                 </View>
               </View>
@@ -355,13 +365,15 @@ export default function OrderDetailScreen() {
                       style={styles.chatPillBtn}
                       onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
                     >
-                      <Text variant="caption" style={styles.chatPillText as any}>💬 Chat</Text>
+                      <ChatCircleDots size={14} color={colors.navy} weight="bold" />
+                      <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
                     </Pressable>
                     <Pressable
                       style={[styles.chatPillBtn, { borderColor: colors.tealLight, backgroundColor: colorExtended.tealLight }]}
                       onPress={() => console.log('Call seller')}
                     >
-                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>📞 Call</Text>
+                      <Phone size={14} color={colors.teal} weight="fill" />
+                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>Call</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -447,13 +459,13 @@ export default function OrderDetailScreen() {
               const weights = [12, 8, 4, 15]; // mock weights
               return (
                 <View key={mat} style={[styles.metaPill, { backgroundColor: MATERIAL_BG[mat], borderColor: MATERIAL_COLORS[mat] }]}>
-                  <Text variant="caption" style={{ color: MATERIAL_COLORS[mat], fontWeight: '600' } as any}>
-                    {mat === 'metal' && '⚙ '}
-                    {mat === 'plastic' && '🧴 '}
-                    {mat === 'paper' && '📄 '}
-                    {mat === 'ewaste' && '💻 '}
-                    {mat === 'fabric' && '👗 '}
-                    {mat === 'glass' && '🍶 '}
+                  {mat === 'metal' && <Nut size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  {mat === 'plastic' && <Jar size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  {mat === 'paper' && <FileText size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  {mat === 'ewaste' && <Laptop size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  {mat === 'fabric' && <Dress size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  {mat === 'glass' && <Martini size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
+                  <Text variant="caption" style={{ color: MATERIAL_COLORS[mat], fontWeight: '600', marginLeft: 4 } as any}>
                     {mat.charAt(0).toUpperCase() + mat.slice(1)} · {weights[i % weights.length]} kg
                   </Text>
                 </View>
@@ -541,7 +553,7 @@ export default function OrderDetailScreen() {
               <PrimaryButton label="Accept Order" onPress={handleAccept} />
             )}
             {order.status === 'accepted' && (
-              <PrimaryButton label="I'm En Route" onPress={handleEnRoute} />
+              <PrimaryButton label="I'm On The Way!" onPress={handleEnRoute} />
             )}
             {order.status === 'en_route' && (
               <View style={{ gap: spacing.sm }}>
@@ -580,39 +592,10 @@ export default function OrderDetailScreen() {
       {/* ── Two-tap cancel confirmation sheet ───────────────────── */}
       {/* Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6 */}
       {showCancelSheet && (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
-          {/* Overlay — opacity via style, never hardcoded rgba */}
-          <Pressable
-            style={styles.modalOuter}
-            onPress={() => setShowCancelSheet(false)}
-          >
-            <View style={styles.modalOverlay} />
-          </Pressable>
-
-          {/* Sheet */}
-          <View style={styles.cancelSheet}>
-            <Text variant="subheading" color={colors.navy}>
-              Cancel this order?
-            </Text>
-            <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.xs }}>
-              This cannot be undone. The order will be removed from the aggregator's feed.
-            </Text>
-            <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-              <PrimaryButton
-                label="Yes, Cancel Order"
-                style={{ backgroundColor: colors.red }}
-                onPress={() => {
-                  console.log(`order cancelled — ${order.orderId}`);
-                  setShowCancelSheet(false);
-                }}
-              />
-              <SecondaryButton
-                label="Keep Order"
-                onPress={() => setShowCancelSheet(false)}
-              />
-            </View>
-          </View>
-        </View>
+        <CancelOrderModal
+          orderId={order.orderId}
+          onClose={() => setShowCancelSheet(false)}
+        />
       )}
     </SafeAreaView>
   );
@@ -647,6 +630,9 @@ const styles = StyleSheet.create({
   },
   mapEmoji: {
     fontSize: 28,
+  },
+  mapPinIcon: {
+    marginBottom: spacing.xs,
   },
   mapDistBadge: {
     position: 'absolute',
@@ -696,6 +682,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   chatPillText: {
     color: colors.navy,

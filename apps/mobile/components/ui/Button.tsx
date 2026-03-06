@@ -48,6 +48,8 @@ interface ButtonBaseProps {
 // ─────────────────────────────────────────────────────────────────────────────
 interface PrimaryButtonProps extends ButtonBaseProps {
   label: string;
+  /** Optional icon to render on the left of the label */
+  icon?: React.ReactNode;
 }
 
 export function PrimaryButton({
@@ -55,6 +57,7 @@ export function PrimaryButton({
   onPress,
   loading = false,
   disabled = false,
+  icon,
   style,
   textStyle,
 }: PrimaryButtonProps) {
@@ -77,9 +80,12 @@ export function PrimaryButton({
       {loading ? (
         <SkeletonLoader variant="list" height={24} width="60%" />
       ) : (
-        <Text variant="button" style={[styles.primaryLabel, textStyle]}>
-          {label}
-        </Text>
+        <View style={styles.primaryInner}>
+          {icon && <View style={styles.iconShift}>{icon}</View>}
+          <Text variant="button" style={[styles.primaryLabel, textStyle]}>
+            {label}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -195,6 +201,11 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     color: colors.surface,
+  },
+  primaryInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Secondary

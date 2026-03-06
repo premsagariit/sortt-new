@@ -24,15 +24,9 @@ import { View, StyleSheet } from 'react-native';
 import { colors, radius } from '../../constants/tokens';
 import { Text } from './Typography';
 
-export type OrderStatus =
-  | 'created'
-  | 'accepted'
-  | 'en_route'
-  | 'arrived'
-  | 'weighing_in_progress'
-  | 'completed'
-  | 'cancelled'
-  | 'disputed';
+// Canonical OrderStatus lives in orderStore — re-export for consumers
+export type { OrderStatus } from '../../store/orderStore';
+import type { OrderStatus } from '../../store/orderStore';
 
 interface StatusChipProps {
   status: OrderStatus;
@@ -40,14 +34,14 @@ interface StatusChipProps {
 
 // ── Status display labels ─────────────────────────────────────────
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  created:               'New',
-  accepted:              'Accepted',
-  en_route:              'En Route',
-  arrived:               'Arrived',
-  weighing_in_progress:  'Weighing',
-  completed:             'Completed',
-  cancelled:             'Cancelled',
-  disputed:              'Disputed',
+  created: 'New',
+  accepted: 'Accepted',
+  en_route: 'On the Way',
+  arrived: 'Arrived',
+  weighing_in_progress: 'Weighing',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  disputed: 'Disputed',
 };
 
 // ── Chip colour map ───────────────────────────────────────────────
@@ -113,13 +107,13 @@ export function StatusChip({ status }: StatusChipProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   chip: {
-    borderRadius:      radius.chip, // 20px pill shape
+    borderRadius: radius.chip, // 20px pill shape
     paddingHorizontal: 12,
-    paddingVertical:   4,
-    alignSelf:         'flex-start',
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   label: {
-    fontSize:   12,
+    fontSize: 12,
     fontWeight: '500',
     lineHeight: 16,
   },

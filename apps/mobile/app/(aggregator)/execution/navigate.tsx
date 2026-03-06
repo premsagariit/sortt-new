@@ -8,6 +8,7 @@ import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
+import { safeBack } from '../../../utils/navigation';
 
 type NavigateState = 'accepted' | 'enroute';
 
@@ -16,7 +17,7 @@ export default function NavigateScreen() {
     const insets = useSafeAreaInsets();
 
     const handleBack = () => {
-        router.back();
+        safeBack('/(aggregator)/orders');
     };
 
     const handleNextState = () => {
@@ -78,7 +79,7 @@ export default function NavigateScreen() {
                             icon={<ChatCenteredText size={20} color={colors.navy} />}
                         />
                         <PrimaryButton
-                            label="Mark En Route"
+                            label="Mark On The Way!"
                             onPress={handleNextState}
                             style={styles.enRouteButton}
                         />

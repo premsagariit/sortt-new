@@ -9,6 +9,7 @@ import { NavBar } from '../../../components/ui/NavBar';
 import { ProgressBar } from '../../../components/ui/ProgressBar';
 import { colors, spacing, radius, colorExtended, materialBg } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { safeBack } from '../../../utils/navigation';
 
 /**
  * Aggregator Materials Setup — Step 3 of 3
@@ -25,18 +26,18 @@ export default function AggregatorMaterialsSetup() {
   };
 
   const handleBack = () => {
-    router.back();
+    safeBack('/(auth)/aggregator/area-setup');
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <NavBar 
-        title="Rates & Materials" 
-        variant="light" 
+      <NavBar
+        title="Rates & Materials"
+        variant="light"
         onBack={handleBack}
         rightAction={<Text variant="caption">Step 3 of 3</Text>}
       />
-      
+
       <View style={styles.progressContainer}>
         <ProgressBar progress={1.0} color={colors.teal} />
       </View>
@@ -55,15 +56,15 @@ export default function AggregatorMaterialsSetup() {
             return (
               <View key={m.id} style={[styles.card, m.selected && styles.cardSelected]}>
                 {/* Left: Checkbox + Name */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.cardInfo}
                   onPress={() => setMaterialSelected(m.id, !m.selected)}
                   activeOpacity={0.7}
                 >
-                  <CheckCircle 
-                    size={24} 
-                    color={m.selected ? colors.teal : colors.border} 
-                    weight={m.selected ? "fill" : "regular"} 
+                  <CheckCircle
+                    size={24}
+                    color={m.selected ? colors.teal : colors.border}
+                    weight={m.selected ? "fill" : "regular"}
                   />
                   <View style={styles.titleWrap}>
                     <Text variant="body" style={styles.materialName}>{m.name}</Text>
@@ -74,7 +75,7 @@ export default function AggregatorMaterialsSetup() {
                 {/* Right: Rate Input */}
                 <View style={[styles.rateWrap, !m.selected && styles.rateWrapDisabled]}>
                   <Text style={styles.currency}>₹</Text>
-                  <TextInput 
+                  <TextInput
                     style={styles.rateInput}
                     value={String(m.ratePerKg)}
                     onChangeText={(txt) => setMaterialRate(m.id, Number(txt) || 0)}
@@ -90,8 +91,8 @@ export default function AggregatorMaterialsSetup() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <PrimaryButton 
-          label="Finish Setup →" 
+        <PrimaryButton
+          label="Finish Setup →"
           onPress={handleFinish}
           disabled={selectedCount === 0}
         />
@@ -102,18 +103,18 @@ export default function AggregatorMaterialsSetup() {
 
 const styles = StyleSheet.create({
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
   },
   progressContainer: {
     paddingHorizontal: spacing.md,
-    backgroundColor:   colors.surface,
+    backgroundColor: colors.surface,
   },
   header: {
     marginBottom: spacing.lg,
   },
   title: {
-    color:        colors.navy,
+    color: colors.navy,
     marginBottom: spacing.xs,
   },
   subtitle: {
@@ -124,81 +125,81 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop:        spacing.xl,
-    paddingBottom:     spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   list: {
     gap: spacing.md,
   },
   card: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    padding:           spacing.md,
-    backgroundColor:   colors.bg,
-    borderRadius:      radius.card,
-    borderWidth:       1.5,
-    borderColor:       'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.bg,
+    borderRadius: radius.card,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   cardSelected: {
-    backgroundColor:   colors.surface,
-    borderColor:       colors.teal,
-    shadowColor:       '#000',
-    shadowOffset:      { width: 0, height: 2 },
-    shadowOpacity:     0.05,
-    shadowRadius:      4,
-    elevation:         2,
+    backgroundColor: colors.surface,
+    borderColor: colors.teal,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardInfo: {
-    flex:          1,
+    flex: 1,
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           spacing.sm,
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   titleWrap: {
     flex: 1,
   },
   materialName: {
     fontWeight: '600',
-    color:      colors.navy,
+    color: colors.navy,
     marginBottom: 2,
   },
   rateWrap: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   colors.surface,
-    borderWidth:       1,
-    borderColor:       colors.border,
-    borderRadius:      radius.input,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
     paddingHorizontal: spacing.sm,
-    height:            44,
-    minWidth:          100,
+    height: 44,
+    minWidth: 100,
   },
   rateWrapDisabled: {
     backgroundColor: 'rgba(0,0,0,0.03)',
-    borderColor:     'transparent',
+    borderColor: 'transparent',
   },
   currency: {
     fontFamily: 'DMMono-Regular',
-    color:      colors.muted,
+    color: colors.muted,
     marginRight: 4,
   },
   rateInput: {
-    flex:       1,
+    flex: 1,
     fontFamily: 'DMMono-Regular',
-    fontSize:   16,
-    color:      colors.navy,
-    padding:    0,
+    fontSize: 16,
+    color: colors.navy,
+    padding: 0,
   },
   unit: {
-    color:      colors.muted,
-    fontSize:   12,
+    color: colors.muted,
+    fontSize: 12,
     marginLeft: 4,
   },
   footer: {
-    padding:           spacing.md,
-    paddingBottom:     spacing.lg,
-    borderTopWidth:    1,
-    borderTopColor:    colors.border,
-    backgroundColor:   colors.bg,
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
 });

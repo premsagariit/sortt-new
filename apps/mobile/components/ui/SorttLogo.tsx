@@ -2,7 +2,7 @@ import React from 'react';
 import Svg, { Rect, Circle, Path, G, Text, Ellipse, Line } from 'react-native-svg';
 import { colors } from '../../constants/tokens';
 
-export type SorttLogoVariant = 
+export type SorttLogoVariant =
   | 'compact-dark'      // NavBar dark (navy bg)
   | 'compact-light'     // NavBar light (white bg)
   | 'tab-home'          // Bottom tab bar Home icon
@@ -24,7 +24,7 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
     case 'compact-dark':
       // From sortt_logo_splash_v2.html Section 2 (lines 775-791)
       return (
-        <Svg width={size || 130} height={(size || 130) * (34/130)} viewBox="0 0 130 34" fill="none">
+        <Svg width={size || 130} height={(size || 130) * (34 / 130)} viewBox="0 0 130 34" fill="none">
           <Rect x="1" y="4" width="13" height="16" rx="2.5" fill="white" opacity={0.9} />
           <Rect x="2.5" y="5.5" width="7.5" height="5.5" rx="1.2" fill={colors.navy} />
           <Circle cx="12" cy="17" r="2" fill="#B7791F" />
@@ -38,13 +38,13 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
           <Circle cx="24" cy="23" r="1.8" fill="#0D4E47" />
           <Circle cx="32" cy="23" r="4" fill="#1A6B63" />
           <Circle cx="32" cy="23" r="1.8" fill="#0D4E47" />
-          <Text 
-            x="44" 
-            y="18" 
-            fontFamily="DMSans-Bold" 
-            fontWeight="700" 
-            fontSize="17" 
-            fill="white" 
+          <Text
+            x="44"
+            y="18"
+            fontFamily="DMSans-Bold"
+            fontWeight="700"
+            fontSize="17"
+            fill="white"
             letterSpacing="-0.2"
           >
             Sortt
@@ -56,7 +56,7 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
     case 'compact-light':
       // From sortt_logo_splash_v2.html Section 2 (lines 799-815)
       return (
-        <Svg width={size || 130} height={(size || 130) * (34/130)} viewBox="0 0 130 34" fill="none">
+        <Svg width={size || 130} height={(size || 130) * (34 / 130)} viewBox="0 0 130 34" fill="none">
           <Rect x="1" y="4" width="13" height="16" rx="2.5" fill={colors.navy} />
           <Rect x="2.5" y="5.5" width="7.5" height="5.5" rx="1.2" fill="white" opacity={0.85} />
           <Circle cx="12" cy="17" r="2" fill="#B7791F" />
@@ -70,13 +70,13 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
           <Circle cx="24" cy="23" r="1.8" fill="#0D4E47" />
           <Circle cx="32" cy="23" r="4" fill="#1A6B63" />
           <Circle cx="32" cy="23" r="1.8" fill="#0D4E47" />
-          <Text 
-            x="44" 
-            y="18" 
-            fontFamily="DMSans-Bold" 
-            fontWeight="700" 
-            fontSize="17" 
-            fill={colors.navy} 
+          <Text
+            x="44"
+            y="18"
+            fontFamily="DMSans-Bold"
+            fontWeight="700"
+            fontSize="17"
+            fill={colors.navy}
             letterSpacing="-0.2"
           >
             Sortt
@@ -89,7 +89,7 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
       // From sortt_logo_splash_v2.html Section 3 (lines 838-854 & 858-868)
       if (active) {
         return (
-          <Svg width={size || 26} height={(size || 26) * (20/26)} viewBox="0 0 52 40" fill="none">
+          <Svg width={size || 26} height={(size || 26) * (20 / 26)} viewBox="0 0 52 40" fill="none">
             <Rect x="2" y="8" width="14" height="18" rx="3" fill="#1A6B63" />
             <Rect x="3.5" y="9.5" width="8" height="7" rx="1.5" fill="white" opacity={0.8} />
             <Circle cx="13" cy="22" r="2.5" fill="#B7791F" />
@@ -106,7 +106,7 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
         );
       }
       return (
-        <Svg width={size || 26} height={(size || 26) * (20/26)} viewBox="0 0 52 40" fill="none">
+        <Svg width={size || 26} height={(size || 26) * (20 / 26)} viewBox="0 0 52 40" fill="none">
           <Rect x="2" y="8" width="14" height="18" rx="3" fill="#8E9BAA" />
           <Rect x="3.5" y="9.5" width="8" height="7" rx="1.5" fill="white" opacity={0.6} />
           <Rect x="16" y="4" width="26" height="22" rx="2.5" fill="#8E9BAA" opacity={0.7} />
@@ -212,7 +212,7 @@ export function SorttLogo({ variant, size, active, color }: SorttLogoProps) {
     case 'loading':
       // From sortt_logo_splash_v2.html Section 3 (lines 915-932)
       return (
-        <Svg width={size || 56} height={(size || 56) * (40/56)} viewBox="0 0 80 56" fill="none">
+        <Svg width={size || 56} height={(size || 56) * (40 / 56)} viewBox="0 0 80 56" fill="none">
           <Rect x="4" y="10" width="18" height="22" rx="3.5" fill="white" opacity={0.9} />
           <Rect x="6" y="12" width="10" height="9" rx="2" fill="#1C2E4A" />
           <Circle cx="19" cy="28" r="3" fill="#B7791F" />

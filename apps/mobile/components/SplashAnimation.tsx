@@ -97,48 +97,48 @@ interface SplashAnimationProps {
 export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
 
   // ── Phase 1: Part assembly ─────────────────────────────────────
-  const cabX         = useRef(new Animated.Value(-260)).current; // cab from left
-  const cabOpacity   = useRef(new Animated.Value(0)).current;
-  const cargoX       = useRef(new Animated.Value(260)).current;  // cargo from right
+  const cabX = useRef(new Animated.Value(-260)).current; // cab from left
+  const cabOpacity = useRef(new Animated.Value(0)).current;
+  const cargoX = useRef(new Animated.Value(260)).current;  // cargo from right
   const cargoOpacity = useRef(new Animated.Value(0)).current;
-  const chassisY     = useRef(new Animated.Value(120)).current;  // chassis from below
-  const chassisOp    = useRef(new Animated.Value(0)).current;
-  const wFrontX      = useRef(new Animated.Value(-120)).current; // front wheel diag BL
-  const wFrontY      = useRef(new Animated.Value(80)).current;
-  const wFrontOp     = useRef(new Animated.Value(0)).current;
-  const wRearX       = useRef(new Animated.Value(120)).current;  // rear wheels diag BR
-  const wRearY       = useRef(new Animated.Value(80)).current;
-  const wRearOp      = useRef(new Animated.Value(0)).current;
+  const chassisY = useRef(new Animated.Value(120)).current;  // chassis from below
+  const chassisOp = useRef(new Animated.Value(0)).current;
+  const wFrontX = useRef(new Animated.Value(-120)).current; // front wheel diag BL
+  const wFrontY = useRef(new Animated.Value(80)).current;
+  const wFrontOp = useRef(new Animated.Value(0)).current;
+  const wRearX = useRef(new Animated.Value(120)).current;  // rear wheels diag BR
+  const wRearY = useRef(new Animated.Value(80)).current;
+  const wRearOp = useRef(new Animated.Value(0)).current;
 
   // ── Phase 2: Scrap items fall ─────────────────────────────────
   // Start at -420 (off-screen above truck) per HTML @keyframes spec
-  const scrap1Y  = useRef(new Animated.Value(-420)).current;
+  const scrap1Y = useRef(new Animated.Value(-420)).current;
   const scrap1Op = useRef(new Animated.Value(0)).current;
-  const scrap2Y  = useRef(new Animated.Value(-420)).current;
+  const scrap2Y = useRef(new Animated.Value(-420)).current;
   const scrap2Op = useRef(new Animated.Value(0)).current;
-  const scrap3Y  = useRef(new Animated.Value(-420)).current;
+  const scrap3Y = useRef(new Animated.Value(-420)).current;
   const scrap3Op = useRef(new Animated.Value(0)).current;
 
   // ── Phase 3: Drive ────────────────────────────────────────────
-  const truckGroupX   = useRef(new Animated.Value(0)).current;
+  const truckGroupX = useRef(new Animated.Value(0)).current;
   const wheelRotation = useRef(new Animated.Value(0)).current;
   const motionLinesOp = useRef(new Animated.Value(0)).current;
 
   // ── Phase 4: Brand reveal ─────────────────────────────────────
-  const wordmarkY      = useRef(new Animated.Value(22)).current;  // HTML: translateY(22px)
-  const wordmarkOp     = useRef(new Animated.Value(0)).current;
-  const taglineY       = useRef(new Animated.Value(4)).current;   // HTML: translateY(4px)
-  const taglineOp      = useRef(new Animated.Value(0)).current;
+  const wordmarkY = useRef(new Animated.Value(22)).current;  // HTML: translateY(22px)
+  const wordmarkOp = useRef(new Animated.Value(0)).current;
+  const taglineY = useRef(new Animated.Value(4)).current;   // HTML: translateY(4px)
+  const taglineOp = useRef(new Animated.Value(0)).current;
   const underlineScale = useRef(new Animated.Value(0)).current;   // HTML: scaleX 0→1
-  const loaderOp       = useRef(new Animated.Value(0)).current;
-  const loaderScale    = useRef(new Animated.Value(0)).current;
+  const loaderOp = useRef(new Animated.Value(0)).current;
+  const loaderScale = useRef(new Animated.Value(0)).current;
 
   // ── Fade out ──────────────────────────────────────────────────
   const splashOp = useRef(new Animated.Value(1)).current;
 
   // Wheel rotation: 0→1 maps to 0deg→360deg (linear loop, 320ms/rev)
   const wheelRotateDeg = wheelRotation.interpolate({
-    inputRange:  [0, 1],
+    inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
@@ -270,18 +270,18 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         // HTML: translateX(-380px) but we use -(SCREEN_W + TRUCK_W)
         // to guarantee full exit on all screen widths
         Animated.timing(truckGroupX, {
-          toValue:  -(SCREEN_W + TRUCK_W),
+          toValue: -(SCREEN_W + TRUCK_W),
           duration: 1000,
-          easing:   Easing.in(Easing.cubic), // approx cubic-bezier(0.2,0,0.8,0.95)
+          easing: Easing.in(Easing.cubic), // approx cubic-bezier(0.2,0,0.8,0.95)
           useNativeDriver: true,
         }).start();
 
         // Motion lines appear as truck accelerates
         // HTML: motion-lines-drive 0.25s ease-out
         Animated.timing(motionLinesOp, {
-          toValue:  1,
+          toValue: 1,
           duration: 250,
-          easing:   Easing.out(Easing.ease),
+          easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start();
 
@@ -289,9 +289,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         // HTML: wheel-roll 0.32s linear infinite
         Animated.loop(
           Animated.timing(wheelRotation, {
-            toValue:  1,
+            toValue: 1,
             duration: 320,
-            easing:   Easing.linear,
+            easing: Easing.linear,
             useNativeDriver: true,
           })
         ).start();
@@ -376,9 +376,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
     timers.push(
       setTimeout(() => {
         Animated.timing(splashOp, {
-          toValue:  0,
+          toValue: 0,
           duration: 600,
-          easing:   Easing.in(Easing.ease),
+          easing: Easing.in(Easing.ease),
           useNativeDriver: true,
         }).start(({ finished }) => {
           if (finished) onComplete();
@@ -423,7 +423,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.partChassis,
           {
-            opacity:   chassisOp,
+            opacity: chassisOp,
             transform: [{ translateY: chassisY }],
           },
         ]}>
@@ -443,7 +443,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.partCargo,
           {
-            opacity:   cargoOpacity,
+            opacity: cargoOpacity,
             transform: [{ translateX: cargoX }],
           },
         ]}>
@@ -474,24 +474,24 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.scrapNewspaper,
           {
-            opacity:   scrap1Op,
+            opacity: scrap1Op,
             transform: [{ translateY: scrap1Y }],
           },
         ]}>
           <Svg width={24} height={36} viewBox="0 0 24 36">
             {/* 4 stacked newspaper layers — bottom to top */}
             {/* #C4842A #B47020 #C98828 #D09030 — amber tone exceptions */}
-            <Rect x={0} y={21} width={23} height={13} rx={2}   fill="#C4842A" />
-            <Rect x={0} y={14} width={23} height={9}  rx={1.5} fill="#B47020" />
-            <Rect x={0} y={7}  width={23} height={9}  rx={1.5} fill="#C98828" />
-            <Rect x={0} y={0}  width={23} height={9}  rx={1.5} fill="#D09030" />
+            <Rect x={0} y={21} width={23} height={13} rx={2} fill="#C4842A" />
+            <Rect x={0} y={14} width={23} height={9} rx={1.5} fill="#B47020" />
+            <Rect x={0} y={7} width={23} height={9} rx={1.5} fill="#C98828" />
+            <Rect x={0} y={0} width={23} height={9} rx={1.5} fill="#D09030" />
             {/* Top folded edge curve */}
             <Path d="M0 0 Q11.5 -2.5 23 0"
               stroke="#B47020" strokeWidth={1} fill="none" opacity={0.7} />
             {/* Text line details on top sheet */}
-            <Line x1={3}  y1={3}   x2={20} y2={3}
+            <Line x1={3} y1={3} x2={20} y2={3}
               stroke="white" strokeWidth={0.7} opacity={0.38} />
-            <Line x1={3}  y1={5.5} x2={16} y2={5.5}
+            <Line x1={3} y1={5.5} x2={16} y2={5.5}
               stroke="white" strokeWidth={0.7} opacity={0.26} />
             {/* Binding twine band — #7A4E08 token exception */}
             <Rect x={-1} y={17.5} width={25} height={2.5} rx={1.2}
@@ -511,24 +511,24 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.scrapRods,
           {
-            opacity:   scrap2Op,
+            opacity: scrap2Op,
             transform: [{ translateY: scrap2Y }],
           },
         ]}>
           <Svg width={28} height={46} viewBox="0 0 28 46">
             {/* 5 individual rods — HTML: cx=91,96,101,106,111 → local 2,7,12,17,22 */}
-            <Rect x={2}  y={1}  width={3.5} height={42} rx={1.5} fill="#9CA3AF" />
-            <Rect x={7}  y={3}  width={3.5} height={40} rx={1.5} fill="#6B7280" />
-            <Rect x={12} y={0}  width={3.5} height={43} rx={1.5} fill="#B0B9C3" />
+            <Rect x={2} y={1} width={3.5} height={42} rx={1.5} fill="#9CA3AF" />
+            <Rect x={7} y={3} width={3.5} height={40} rx={1.5} fill="#6B7280" />
+            <Rect x={12} y={0} width={3.5} height={43} rx={1.5} fill="#B0B9C3" />
             {/* #B0B9C3 — rod highlight, token exception */}
-            <Rect x={17} y={2}  width={3.5} height={41} rx={1.5} fill="#6B7280" />
-            <Rect x={22} y={1}  width={3.5} height={42} rx={1.5} fill="#9CA3AF" />
+            <Rect x={17} y={2} width={3.5} height={41} rx={1.5} fill="#6B7280" />
+            <Rect x={22} y={1} width={3.5} height={42} rx={1.5} fill="#9CA3AF" />
             {/* Rod-end highlights (top caps) */}
-            <Rect x={2}  y={1}  width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
-            <Rect x={7}  y={3}  width={3.5} height={3} rx={1} fill="white" opacity={0.3}  />
-            <Rect x={12} y={0}  width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
-            <Rect x={17} y={2}  width={3.5} height={3} rx={1} fill="white" opacity={0.3}  />
-            <Rect x={22} y={1}  width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
+            <Rect x={2} y={1} width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
+            <Rect x={7} y={3} width={3.5} height={3} rx={1} fill="white" opacity={0.3} />
+            <Rect x={12} y={0} width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
+            <Rect x={17} y={2} width={3.5} height={3} rx={1} fill="white" opacity={0.3} />
+            <Rect x={22} y={1} width={3.5} height={3} rx={1} fill="white" opacity={0.42} />
             {/* Amber binding band — colors.amber from tokens */}
             <Rect x={0} y={29} width={28} height={3} rx={1.5}
               fill={colors.amber} opacity={0.9} />
@@ -548,7 +548,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.scrapFridge,
           {
-            opacity:   scrap3Op,
+            opacity: scrap3Op,
             transform: [{ translateY: scrap3Y }],
           },
         ]}>
@@ -556,19 +556,19 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             {/* Outer body — #7A8E9C token exception */}
             <Rect x={0} y={0} width={31} height={52} rx={3.5} fill="#7A8E9C" />
             {/* Face slightly lighter — #8FA3B0 token exception */}
-            <Rect x={1} y={1} width={29} height={50} rx={3}   fill="#8FA3B0" />
+            <Rect x={1} y={1} width={29} height={50} rx={3} fill="#8FA3B0" />
             {/* Freezer section (top third) — #9BB0BB token exception */}
-            <Rect x={1} y={1} width={29} height={17} rx={3}   fill="#9BB0BB" />
+            <Rect x={1} y={1} width={29} height={17} rx={3} fill="#9BB0BB" />
             {/* Door divider line */}
-            <Rect x={2} y={20} width={27} height={1.5}        fill="white" opacity={0.55} />
+            <Rect x={2} y={20} width={27} height={1.5} fill="white" opacity={0.55} />
             {/* Freezer handle — HTML: x=148 y=17 → local x=26 y=5 */}
-            <Rect x={26} y={5}  width={2.5} height={7}  rx={1.2} fill="white" opacity={0.72} />
+            <Rect x={26} y={5} width={2.5} height={7} rx={1.2} fill="white" opacity={0.72} />
             {/* Fridge handle — HTML: x=148 y=36 → local x=26 y=24 */}
             <Rect x={26} y={24} width={2.5} height={10} rx={1.2} fill="white" opacity={0.72} />
             {/* Dent — #5C6E7C token exception */}
-            <Ellipse cx={13} cy={9}  rx={3.5} ry={2.5} fill="#5C6E7C" opacity={0.55} />
+            <Ellipse cx={13} cy={9} rx={3.5} ry={2.5} fill="#5C6E7C" opacity={0.55} />
             {/* Rust streak — #8B6050 token exception */}
-            <Ellipse cx={8}  cy={35} rx={2}   ry={1.5} fill="#8B6050" opacity={0.4} />
+            <Ellipse cx={8} cy={35} rx={2} ry={1.5} fill="#8B6050" opacity={0.4} />
             <SvgText
               x={14} y={42} textAnchor="middle"
               fontFamily="DM Sans" fontSize={5.5} fontWeight="700"
@@ -584,7 +584,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.partCab,
           {
-            opacity:   cabOpacity,
+            opacity: cabOpacity,
             transform: [{ translateX: cabX }],
           },
         ]}>
@@ -623,7 +623,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.wheelFront,
           {
-            opacity:   wFrontOp,
+            opacity: wFrontOp,
             transform: [{ translateX: wFrontX }, { translateY: wFrontY }],
           },
         ]}>
@@ -631,18 +631,18 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
             <Svg width={28} height={28} viewBox="0 0 28 28">
               {/* #0D1620 outer ring — token exception (near-black) */}
-              <Circle cx={14} cy={14} r={13}  fill="#0D1620" />
+              <Circle cx={14} cy={14} r={13} fill="#0D1620" />
               {/* #1A2B3E inner ring — token exception */}
-              <Circle cx={14} cy={14} r={9}   fill="#1A2B3E" />
+              <Circle cx={14} cy={14} r={9} fill="#1A2B3E" />
               {/* Hub — colors.muted (#8E9BAA) */}
               <Circle cx={14} cy={14} r={4.5} fill="#8E9BAA" />
-              <Circle cx={14} cy={14} r={2}   fill="white"   opacity={0.5} />
+              <Circle cx={14} cy={14} r={2} fill="white" opacity={0.5} />
               {/* Spokes at N/S/E/W — colors.slate (#5C6B7A) */}
-              <Line x1={14} y1={5}  x2={14} y2={1}
+              <Line x1={14} y1={5} x2={14} y2={1}
                 stroke="#5C6B7A" strokeWidth={1.5} opacity={0.55} />
               <Line x1={14} y1={23} x2={14} y2={27}
                 stroke="#5C6B7A" strokeWidth={1.5} opacity={0.55} />
-              <Line x1={5}  y1={14} x2={1}  y2={14}
+              <Line x1={5} y1={14} x2={1} y2={14}
                 stroke="#5C6B7A" strokeWidth={1.5} opacity={0.55} />
               <Line x1={23} y1={14} x2={27} y2={14}
                 stroke="#5C6B7A" strokeWidth={1.5} opacity={0.55} />
@@ -660,7 +660,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         <AnimatedView style={[
           styles.wheelRearGroup,
           {
-            opacity:   wRearOp,
+            opacity: wRearOp,
             transform: [{ translateX: wRearX }, { translateY: wRearY }],
           },
         ]}>
@@ -669,15 +669,15 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
                 {/* #155952 token exception */}
-                <Circle cx={14} cy={14} r={13}  fill="#155952" />
-                <Circle cx={14} cy={14} r={9}   fill="#1A6B63" />
+                <Circle cx={14} cy={14} r={13} fill="#155952" />
+                <Circle cx={14} cy={14} r={9} fill="#1A6B63" />
                 <Circle cx={14} cy={14} r={4.5} fill="#0D4E47" />
-                <Circle cx={14} cy={14} r={2}   fill="white"   opacity={0.4} />
-                <Line x1={14} y1={5}  x2={14} y2={1}
+                <Circle cx={14} cy={14} r={2} fill="white" opacity={0.4} />
+                <Line x1={14} y1={5} x2={14} y2={1}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={14} y1={23} x2={14} y2={27}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
-                <Line x1={5}  y1={14} x2={1}  y2={14}
+                <Line x1={5} y1={14} x2={1} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
@@ -689,15 +689,15 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           <AnimatedView style={[styles.rearWheel, { left: 38 }]}>
             <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
-                <Circle cx={14} cy={14} r={13}  fill="#155952" />
-                <Circle cx={14} cy={14} r={9}   fill="#1A6B63" />
+                <Circle cx={14} cy={14} r={13} fill="#155952" />
+                <Circle cx={14} cy={14} r={9} fill="#1A6B63" />
                 <Circle cx={14} cy={14} r={4.5} fill="#0D4E47" />
-                <Circle cx={14} cy={14} r={2}   fill="white"   opacity={0.4} />
-                <Line x1={14} y1={5}  x2={14} y2={1}
+                <Circle cx={14} cy={14} r={2} fill="white" opacity={0.4} />
+                <Line x1={14} y1={5} x2={14} y2={1}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={14} y1={23} x2={14} y2={27}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
-                <Line x1={5}  y1={14} x2={1}  y2={14}
+                <Line x1={5} y1={14} x2={1} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
@@ -709,15 +709,15 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           <AnimatedView style={[styles.rearWheel, { left: 58 }]}>
             <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
-                <Circle cx={14} cy={14} r={13}  fill="#155952" />
-                <Circle cx={14} cy={14} r={9}   fill="#1A6B63" />
+                <Circle cx={14} cy={14} r={13} fill="#155952" />
+                <Circle cx={14} cy={14} r={9} fill="#1A6B63" />
                 <Circle cx={14} cy={14} r={4.5} fill="#0D4E47" />
-                <Circle cx={14} cy={14} r={2}   fill="white"   opacity={0.4} />
-                <Line x1={14} y1={5}  x2={14} y2={1}
+                <Circle cx={14} cy={14} r={2} fill="white" opacity={0.4} />
+                <Line x1={14} y1={5} x2={14} y2={1}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={14} y1={23} x2={14} y2={27}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
-                <Line x1={5}  y1={14} x2={1}  y2={14}
+                <Line x1={5} y1={14} x2={1} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
@@ -737,16 +737,16 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         ]}>
           <Svg width={16} height={31} viewBox="0 0 16 31">
             {/* HTML: x1=3 y1=30 → local x1=2 y1=0 */}
-            <Line x1={2}  y1={0}  x2={13} y2={0}
-              stroke="#B7791F" strokeWidth={3}   strokeLinecap="round" opacity={0.85} />
+            <Line x1={2} y1={0} x2={13} y2={0}
+              stroke="#B7791F" strokeWidth={3} strokeLinecap="round" opacity={0.85} />
             {/* HTML: x1=1 y1=40 → local x1=0 y1=10 */}
-            <Line x1={0}  y1={10} x2={10} y2={10}
-              stroke="#B7791F" strokeWidth={2}   strokeLinecap="round" opacity={0.65} />
+            <Line x1={0} y1={10} x2={10} y2={10}
+              stroke="#B7791F" strokeWidth={2} strokeLinecap="round" opacity={0.65} />
             {/* HTML: x1=3 y1=50 → local x1=2 y1=20 */}
-            <Line x1={2}  y1={20} x2={11} y2={20}
-              stroke="#B7791F" strokeWidth={2}   strokeLinecap="round" opacity={0.5}  />
+            <Line x1={2} y1={20} x2={11} y2={20}
+              stroke="#B7791F" strokeWidth={2} strokeLinecap="round" opacity={0.5} />
             {/* HTML: x1=2 y1=59 → local x1=1 y1=29 */}
-            <Line x1={1}  y1={29} x2={8}  y2={29}
+            <Line x1={1} y1={29} x2={8} y2={29}
               stroke="#B7791F" strokeWidth={1.5} strokeLinecap="round" opacity={0.35} />
           </Svg>
         </AnimatedView>
@@ -771,7 +771,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       <AnimatedView style={[
         styles.wordmarkGroup,
         {
-          opacity:   wordmarkOp,
+          opacity: wordmarkOp,
           transform: [{ translateY: wordmarkY }],
         },
       ]}>
@@ -792,7 +792,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         {/* Tagline — rises and fades at t=2750ms
             HTML: .splash-tagline tagline-fade 0.35s @ 2.75s        */}
         <AnimatedView style={{
-          opacity:   taglineOp,
+          opacity: taglineOp,
           transform: [{ translateY: taglineY }],
         }}>
           <Text variant="caption" style={styles.tagline}>
@@ -825,40 +825,40 @@ const styles = StyleSheet.create({
 
   // Full-screen navy container — overflow hidden clips scrap fall
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.navy,
-    alignItems:      'center',
-    justifyContent:  'center',
-    overflow:        'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   } as ViewStyle,
 
   // Decorative background circles — match HTML ::before and ::after
   // rgba(255,255,255,0.025) and rgba(255,255,255,0.02) — rgba exceptions
   bgCircle1: {
-    position:        'absolute',
-    width:           320,
-    height:          320,
-    borderRadius:    160,
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
     backgroundColor: 'white',
-    opacity:         0.025,
-    top:             -80,
-    right:           -80,
+    opacity: 0.025,
+    top: -80,
+    right: -80,
   } as ViewStyle,
 
   bgCircle2: {
-    position:        'absolute',
-    width:           180,
-    height:          180,
-    borderRadius:    90,
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: 'white',
-    opacity:         0.02,
-    bottom:          -40,
-    left:            -40,
+    opacity: 0.02,
+    bottom: -40,
+    left: -40,
   } as ViewStyle,
 
   // Truck group: mirrors HTML SVG viewBox "0 0 180 90"
   truckGroup: {
-    width:  TRUCK_W,  // 180
+    width: TRUCK_W,  // 180
     height: TRUCK_H,  // 90
   } as ViewStyle,
 
@@ -867,22 +867,22 @@ const styles = StyleSheet.create({
   // Chassis: HTML rect x=14 y=59 → left=14, top=59
   partChassis: {
     position: 'absolute',
-    left:     14,
-    top:      59,
+    left: 14,
+    top: 59,
   } as ViewStyle,
 
   // Cargo bed: HTML rect x=54 y=12 → left=54, top=12
   partCargo: {
     position: 'absolute',
-    left:     54,
-    top:      12,
+    left: 54,
+    top: 12,
   } as ViewStyle,
 
   // Cab: HTML rect x=18 y=20 → left=18, top=20
   partCab: {
     position: 'absolute',
-    left:     18,
-    top:      20,
+    left: 18,
+    top: 20,
   } as ViewStyle,
 
   // ── Scrap item landing positions (translateY: -420 → 0) ──────────
@@ -890,22 +890,22 @@ const styles = StyleSheet.create({
   // Newspaper: HTML x=60 y=22 → left=60, top=22
   scrapNewspaper: {
     position: 'absolute',
-    left:     60,
-    top:      22,
+    left: 60,
+    top: 22,
   } as ViewStyle,
 
   // Iron rods: HTML x=89 y=15 → left=89, top=15
   scrapRods: {
     position: 'absolute',
-    left:     89,
-    top:      15,
+    left: 89,
+    top: 15,
   } as ViewStyle,
 
   // Fridge: HTML x=122 y=12 → left=122, top=12
   scrapFridge: {
     position: 'absolute',
-    left:     122,
-    top:      12,
+    left: 122,
+    top: 12,
   } as ViewStyle,
 
   // ── Wheel positions ───────────────────────────────────────────────
@@ -913,8 +913,8 @@ const styles = StyleSheet.create({
   // Front wheel: HTML cx=30 cy=70 r=13 → left=30-14=16, top=70-14=56
   wheelFront: {
     position: 'absolute',
-    left:     16,
-    top:      56,
+    left: 16,
+    top: 56,
   } as ViewStyle,
 
   // Rear wheel GROUP container:
@@ -922,87 +922,87 @@ const styles = StyleSheet.create({
   // width covers cx=79 to cx=163 (cx150+r13) = 84
   wheelRearGroup: {
     position: 'absolute',
-    left:     79,
-    top:      57,
-    width:    84,
-    height:   28,
+    left: 79,
+    top: 57,
+    width: 84,
+    height: 28,
   } as ViewStyle,
 
   // Individual rear wheel — positioned absolutely within group
   rearWheel: {
     position: 'absolute',
-    top:      0,
+    top: 0,
   } as ViewStyle,
 
   // Motion lines: HTML global x=1–14, y=30–59 → left=1, top=30
   motionLines: {
     position: 'absolute',
-    left:     1,
-    top:      30,
+    left: 1,
+    top: 30,
   } as ViewStyle,
 
   // Ground shadow: HTML y=85 in 90px group → top=84
   groundShadow: {
     position: 'absolute',
-    left:     0,
-    top:      84,
+    left: 0,
+    top: 84,
   } as ViewStyle,
 
   // ── Brand reveal ──────────────────────────────────────────────────
 
   // marginTop 20 matches HTML: .wordmark-group margin-top: 20px
   wordmarkGroup: {
-    marginTop:  20,
+    marginTop: 20,
     alignItems: 'flex-start',
   } as ViewStyle,
 
   // HTML: .splash-name font-size 36px letter-spacing -1px
   wordmark: {
-    fontSize:      36,
-    color:         'white',
+    fontSize: 36,
+    color: 'white',
     letterSpacing: -1,
-    lineHeight:    40,
+    lineHeight: 40,
   },
 
   // HTML: .splash-name::after — 24px wide, 3px tall, amber, scaleX 0→1
   underline: {
-    width:           24,
-    height:          3,
+    width: 24,
+    height: 3,
     backgroundColor: colors.amber,
-    borderRadius:    2,
-    marginTop:       3,
-    opacity:         0.85,
-    alignSelf:       'flex-start',
+    borderRadius: 2,
+    marginTop: 3,
+    opacity: 0.85,
+    alignSelf: 'flex-start',
   } as ViewStyle,
 
   // HTML: .splash-tagline — 11px, white 45% opacity, letter-spacing 1.2px
   tagline: {
-    fontSize:      11,
-    color:         'rgba(255,255,255,0.45)', // rgba exception
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.45)', // rgba exception
     letterSpacing: 1.2,
-    marginTop:     8,
+    marginTop: 8,
   },
 
   // HTML: .splash-loader — 40px wide, 3px tall, centered, bottom 32px
   loaderTrack: {
-    position:        'absolute',
-    bottom:          32,
-    width:           40,
-    height:          3,
+    position: 'absolute',
+    bottom: 32,
+    width: 40,
+    height: 3,
     backgroundColor: 'rgba(255,255,255,0.1)', // rgba exception
-    borderRadius:    2,
-    overflow:        'hidden', // clips scaleX fill to look like left→right
+    borderRadius: 2,
+    overflow: 'hidden', // clips scaleX fill to look like left→right
   } as ViewStyle,
 
   // HTML: .splash-loader::after — amber fill, scaleX 0→1
   loaderFill: {
-    position:        'absolute',
-    left:            0,
-    top:             0,
-    bottom:          0,
-    width:           '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '100%',
     backgroundColor: colors.amber,
-    borderRadius:    2,
+    borderRadius: 2,
   } as ViewStyle,
 
 });

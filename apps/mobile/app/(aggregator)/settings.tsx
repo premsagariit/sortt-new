@@ -17,8 +17,16 @@ import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { Text } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { Avatar } from '../../components/ui/Avatar';
+import { useAggregatorStore } from '../../store/aggregatorStore';
+import { useAuthStore } from '../../store/authStore';
 
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
+
+// Mock fallbacks (replaced by backend data on Day 4)
+const MOCK_AGG_FULLNAME = 'Vijay Kumar';
+const MOCK_PHONE_DISPLAY = '+91 ••••• 78900';
+const MOCK_BUSINESS_TYPE = 'Shop-Based';
+const MOCK_LOCALITY = 'Banjara Hills';
 
 interface SettingToggleProps {
     title: string;
@@ -67,6 +75,16 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 
 export default function AggregatorSettingsScreen() {
     const router = useRouter();
+    const { fullName, businessType, primaryArea } = useAggregatorStore();
+    const phoneNumber = useAuthStore((s) => s.phoneNumber);
+
+    // Read from store with mock fallbacks (Day 4: store populated from backend)
+    const displayName = fullName || MOCK_AGG_FULLNAME;
+    const displayPhone = phoneNumber
+      ? `+91 •••••${phoneNumber.slice(-5)}`
+      : MOCK_PHONE_DISPLAY;
+    const displayType = businessType === 'shop' ? 'Shop-Based' : businessType === 'mobile' ? 'Mobile' : MOCK_BUSINESS_TYPE;
+    const displayLocality = primaryArea || MOCK_LOCALITY;
 
     // States match the UI requirements
     const [onlineStatus, setOnlineStatus] = useState(true);
@@ -89,11 +107,11 @@ export default function AggregatorSettingsScreen() {
                 <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>ACCOUNT</Text>
                 <View style={styles.card}>
                     <View style={styles.accountRow}>
-                        <Avatar name="Vijay Kumar" userType="aggregator" size="lg" source={AVATAR_SOURCE} />
+                        <Avatar name={displayName} userType="aggregator" size="lg" source={AVATAR_SOURCE} />
                         <View style={styles.accountInfo}>
-                            <Text variant="body" style={styles.userName}>Vijay Kumar</Text>
+                            <Text variant="body" style={styles.userName}>{displayName}</Text>
                             <Text variant="caption" color={colors.muted} style={styles.userDetail}>
-                                +91 ••••• 78900 · Shop-Based · Banjara Hills
+                                {displayPhone} · {displayType} · {displayLocality}
                             </Text>
                         </View>
                         <Pressable onPress={() => router.push('/(aggregator)/edit-profile')}>

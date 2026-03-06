@@ -1,35 +1,54 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Switch, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Switch, Pressable, Modal, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Clock, Info, CaretRight, Copy } from 'phosphor-react-native';
+import { Clock, Info, CaretRight, Copy, X } from 'phosphor-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { PrimaryButton } from '../../../components/ui/Button';
+import { safeBack } from '../../../utils/navigation';
+import { useAggregatorStore, DaySchedule } from '../../../store/aggregatorStore';
 
-interface DaySchedule {
-    day: string;
-    isOpen: boolean;
-    start: string;
-    end: string;
-}
+// Helper to parse "09:00 AM" to Date
+const parseTimeString = (timeStr: string) => {
+    try {
+        const [time, modifier] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        if (modifier === 'PM' && hours < 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+        const d = new Date();
+        d.setHours(hours, minutes, 0, 0);
+        return d;
+    } catch (e) {
+        return new Date();
+    }
+};
 
-const INITIAL_SCHEDULE: DaySchedule[] = [
-    { day: 'Monday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
-    { day: 'Tuesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
-    { day: 'Wednesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
-    { day: 'Thursday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
-    { day: 'Friday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
-    { day: 'Saturday', isOpen: true, start: '10:00 AM', end: '04:00 PM' },
-    { day: 'Sunday', isOpen: false, start: '10:00 AM', end: '02:00 PM' },
-];
+// Helper to format Date to "09:00 AM"
+const formatTimeDate = (date: Date) => {
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const modifier = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${modifier}`;
+};
 
 export default function HoursAvailabilityScreen() {
     const router = useRouter();
+    const storeSchedule = useAggregatorStore((s) => s.weeklySchedule);
+    const setProfile = useAggregatorStore((s) => s.setProfile);
+
     const [isOpenNow, setIsOpenNow] = useState(true);
-    const [schedule, setSchedule] = useState<DaySchedule[]>(INITIAL_SCHEDULE);
+    const [schedule, setSchedule] = useState<DaySchedule[]>(storeSchedule);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Modal state
+    const [pickerVisible, setPickerVisible] = useState(false);
+    const [editingDayIndex, setEditingDayIndex] = useState<number | null>(null);
+    const [editingType, setEditingType] = useState<'start' | 'end'>('start');
+    const [tempDate, setTempDate] = useState(new Date());
 
     const toggleDay = (index: number) => {
         const newSchedule = [...schedule];
@@ -42,15 +61,41 @@ export default function HoursAvailabilityScreen() {
         setSchedule(schedule.map(d => ({ ...d, isOpen: monday.isOpen, start: monday.start, end: monday.end })));
     };
 
+    const openTimePicker = (index: number, type: 'start' | 'end') => {
+        setEditingDayIndex(index);
+        setEditingType(type);
+        const currentTimeStr = type === 'start' ? schedule[index].start : schedule[index].end;
+        setTempDate(parseTimeString(currentTimeStr));
+        setPickerVisible(true);
+    };
+
+    const handleTimeConfirm = (event: any, date?: Date) => {
+        // Android dismisses immediately on select/cancel
+        if (Platform.OS === 'android') {
+            setPickerVisible(false);
+        }
+
+        if (event.type === 'set' && date && editingDayIndex !== null) {
+            const newSchedule = [...schedule];
+            const formatted = formatTimeDate(date);
+            if (editingType === 'start') {
+                newSchedule[editingDayIndex].start = formatted;
+            } else {
+                newSchedule[editingDayIndex].end = formatted;
+            }
+            setSchedule(newSchedule);
+        } else if (event.type === 'dismissed') {
+            setPickerVisible(false);
+        }
+    };
+
     const handleSave = async () => {
         setIsSaving(true);
+        // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 800));
+        setProfile({ weeklySchedule: schedule });
         setIsSaving(false);
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/(aggregator)/profile');
-        }
+        safeBack('/(aggregator)/profile');
     };
 
     return (
@@ -96,23 +141,30 @@ export default function HoursAvailabilityScreen() {
                         <View key={item.day} style={styles.dayRow}>
                             <View style={styles.dayMain}>
                                 <View style={styles.daySwitch}>
-                                    <Switch
-                                        value={item.isOpen}
-                                        onValueChange={() => toggleDay(index)}
-                                        trackColor={{ false: colors.border, true: colors.teal }}
-                                        thumbColor={colors.surface}
-                                        style={{ transform: [{ scale: 0.8 }] }}
-                                    />
-                                    <Text variant="body" style={[styles.dayName, !item.isOpen && styles.textMuted] as any}>
+                                    <View style={styles.switchWrapper}>
+                                        <Switch
+                                            value={item.isOpen}
+                                            onValueChange={() => toggleDay(index)}
+                                            trackColor={{ false: colors.border, true: colors.teal }}
+                                            thumbColor={colors.surface}
+                                            style={{ transform: [{ scale: 0.8 }] }}
+                                        />
+                                    </View>
+                                    <Text variant="body" numberOfLines={1} style={[styles.dayName, !item.isOpen && styles.textMuted] as any}>
                                         {item.day}
                                     </Text>
                                 </View>
 
                                 {item.isOpen ? (
-                                    <Pressable style={styles.timeDisplay}>
-                                        <Numeric size={14} color={colors.navy}>{item.start} – {item.end}</Numeric>
-                                        <CaretRight size={14} color={colors.muted} />
-                                    </Pressable>
+                                    <View style={styles.timeRange}>
+                                        <Pressable style={styles.timeDisplay} onPress={() => openTimePicker(index, 'start')}>
+                                            <Numeric size={13} color={colors.navy}>{item.start}</Numeric>
+                                        </Pressable>
+                                        <Text variant="caption" color={colors.muted}>–</Text>
+                                        <Pressable style={styles.timeDisplay} onPress={() => openTimePicker(index, 'end')}>
+                                            <Numeric size={13} color={colors.navy}>{item.end}</Numeric>
+                                        </Pressable>
+                                    </View>
                                 ) : (
                                     <Text variant="caption" color={colors.red} style={styles.closedText}>Closed</Text>
                                 )}
@@ -122,6 +174,13 @@ export default function HoursAvailabilityScreen() {
                     ))}
                 </View>
 
+                {/* For iOS, we need a way to close the inline picker since it doesn't have a native 'OK' dialog */}
+                {Platform.OS === 'ios' && pickerVisible && (
+                    <View style={styles.iosPickerDone}>
+                        <PrimaryButton label="Done Selection" onPress={() => setPickerVisible(false)} />
+                    </View>
+                )}
+
                 <View style={styles.saveContainer}>
                     <PrimaryButton
                         label={isSaving ? "Saving..." : "Save Schedule"}
@@ -130,6 +189,18 @@ export default function HoursAvailabilityScreen() {
                     />
                 </View>
             </ScrollView>
+
+            {/* Time Picker Trigger */}
+            {pickerVisible && (
+                <DateTimePicker
+                    value={tempDate}
+                    mode="time"
+                    is24Hour={false}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleTimeConfirm}
+                    textColor={colors.navy}
+                />
+            )}
         </View>
     );
 }
@@ -202,29 +273,39 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: spacing.sm,
     },
     daySwitch: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
+        flex: 1,
+    },
+    switchWrapper: {
+        width: 44, // Consistent switch width
+        alignItems: 'center',
     },
     dayName: {
         fontWeight: '600',
-        width: 80,
+        flex: 1,
     },
     textMuted: {
         color: colors.muted,
     },
-    timeDisplay: {
+    timeRange: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colorExtended.surface2,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: 6,
-        borderRadius: 100,
         gap: 4,
+    },
+    timeDisplay: {
+        backgroundColor: colorExtended.surface2,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: colors.border,
+        minWidth: 80,
+        alignItems: 'center',
     },
     closedText: {
         fontWeight: '700',
@@ -237,4 +318,9 @@ const styles = StyleSheet.create({
     saveContainer: {
         marginTop: spacing.xl,
     },
+    iosPickerDone: {
+        marginTop: spacing.lg,
+        paddingHorizontal: spacing.sm,
+    },
 });
+

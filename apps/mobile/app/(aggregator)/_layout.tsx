@@ -30,6 +30,7 @@ import {
 export default function AggregatorLayout() {
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarStyle: TAB_BAR_STYLE,
@@ -67,7 +68,10 @@ export default function AggregatorLayout() {
       <Tabs.Screen name="profile/operating-areas" options={{ href: null }} />
       <Tabs.Screen name="profile/hours-availability" options={{ href: null }} />
       <Tabs.Screen name="profile/kyc-documents" options={{ href: null }} />
+      <Tabs.Screen name="profile/order-summary" options={{ href: null }} />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
+      <Tabs.Screen name="active-order-detail" options={{ href: null }} />
+      <Tabs.Screen name="order-history-detail" options={{ href: null }} />
       <Tabs.Screen name="execution" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />

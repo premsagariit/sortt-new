@@ -4,10 +4,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type OrderStatus =
   | 'created' | 'accepted' | 'en_route'
-  | 'arrived' | 'completed' | 'disputed' | 'cancelled';
+  | 'arrived' | 'weighing_in_progress' | 'completed'
+  | 'cancelled' | 'disputed';
 
-export type MaterialCode =
-  | 'metal' | 'plastic' | 'paper' | 'ewaste' | 'fabric' | 'glass';
+// MaterialCode canonical source is MaterialChip.tsx — import for local use + re-export
+import type { MaterialCode } from '../components/ui/MaterialChip';
+export type { MaterialCode };
 
 export interface Order {
   orderId: string;
@@ -40,6 +42,32 @@ interface OrderStoreState {
 }
 
 const INITIAL_ORDERS: Order[] = [
+  {
+    orderId: 'order-agg-001',
+    status: 'created',
+    materials: ['metal', 'paper'],
+    estimatedAmount: 850,
+    confirmedAmount: null,
+    pickupLocality: 'Banjara Hills',
+    pickupAddress: 'Road No. 12, Hyderabad',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    aggregatorId: null, // Visible in feed
+    otp: '1234',
+  },
+  {
+    orderId: 'order-agg-002',
+    status: 'accepted',
+    materials: ['plastic', 'ewaste'],
+    estimatedAmount: 320,
+    confirmedAmount: null,
+    pickupLocality: 'Kondapur',
+    pickupAddress: 'Block B, Kondapur',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    aggregatorId: 'user-agg-001', // Visible in Active tab
+    otp: '5678',
+  },
   {
     orderId: 'ORD-7777',
     status: 'arrived',

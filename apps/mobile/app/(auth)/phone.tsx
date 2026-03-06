@@ -41,6 +41,7 @@ import { colors, radius, spacing, colorExtended, materialBg } from '../../consta
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
+import { ChatCircleDots, Globe } from 'phosphor-react-native';
 import { useAuthStore } from '../../store/authStore';
 
 // ── Indian mobile number validation ──────────────────────────────
@@ -67,14 +68,14 @@ export default function PhoneScreen() {
   const inputRef = useRef<TextInput>(null);
 
   // ── Zustand ────────────────────────────────────────────────────
-  const isLoading      = useAuthStore((s) => s.isLoading);
-  const setIsLoading   = useAuthStore((s) => s.setIsLoading);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const setIsLoading = useAuthStore((s) => s.setIsLoading);
   const setPhoneNumber = useAuthStore((s) => s.setPhoneNumber);
 
   // ── Derived validation state ───────────────────────────────────
-  const isValid     = isValidIndianMobile(phoneDigits);
+  const isValid = isValidIndianMobile(phoneDigits);
   // Only show error after first submit attempt (never on first keystroke)
-  const showError   = hasSubmitted && !isValid;
+  const showError = hasSubmitted && !isValid;
 
   // ── Handlers ───────────────────────────────────────────────────
   const handleChangeText = useCallback((raw: string) => {
@@ -128,7 +129,7 @@ export default function PhoneScreen() {
 
             {/* Headline */}
             <Text variant="heading" style={[styles.headline, { letterSpacing: -0.4 }]}>
-              Welcome to Sortt
+              Welcome to {APP_NAME}
             </Text>
 
             {/* Sub-copy */}
@@ -144,7 +145,7 @@ export default function PhoneScreen() {
               <View style={styles.inputRow}>
                 {/* Country prefix — non-editable, DM Mono */}
                 <View style={styles.prefixContainer}>
-                  <Text variant="body">🇮🇳</Text>
+                  <Globe size={20} color={colors.navy} weight="bold" />
                   <Numeric size={16} color={colors.navy} style={{ fontWeight: '600' }}>
                     +91
                   </Numeric>
@@ -160,19 +161,19 @@ export default function PhoneScreen() {
                   accessible={false}
                 >
                   <TextInput
-                ref={inputRef}
-                style={styles.textInput}
-                value={phoneDigits}
-                onChangeText={handleChangeText}
-                keyboardType="numeric"
-                maxLength={10}
-                placeholder="XXXXXXXXXX"
-                placeholderTextColor={colors.muted}
-                returnKeyType="done"
-                onSubmitEditing={handleSend}
-                editable={!isLoading}
-                accessibilityLabel="Mobile number"
-                accessibilityHint="Enter your 10-digit Indian mobile number"
+                    ref={inputRef}
+                    style={styles.textInput}
+                    value={phoneDigits}
+                    onChangeText={handleChangeText}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    placeholder="XXXXXXXXXX"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSend}
+                    editable={!isLoading}
+                    accessibilityLabel="Mobile number"
+                    accessibilityHint="Enter your 10-digit Indian mobile number"
                   />
                 </Pressable>
               </View>
@@ -180,7 +181,7 @@ export default function PhoneScreen() {
 
             {/* WhatsApp Info Banner */}
             <View style={styles.infoBanner}>
-              <Text variant="body" style={{ fontSize: 18 }}>💬</Text>
+              <ChatCircleDots size={22} color={colors.teal} weight="fill" />
               <View style={{ flex: 1 }}>
                 <Text variant="caption" style={{ fontWeight: '600', color: colors.slate }}>
                   OTP via WhatsApp
@@ -206,7 +207,8 @@ export default function PhoneScreen() {
           {/* ── Bottom action area ──────────────────────────────── */}
           <View style={styles.bottomArea}>
             <PrimaryButton
-              label="💬 Send OTP via WhatsApp"
+              label="Send OTP via WhatsApp"
+              icon={<ChatCircleDots size={20} color={colors.surface} weight="bold" />}
               onPress={handleSend}
               loading={isLoading}
             />
@@ -227,18 +229,18 @@ export default function PhoneScreen() {
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
   },
   flex: {
     flex: 1,
   },
   scrollContent: {
-    flexGrow:          1,
-    justifyContent:    'space-between',
+    flexGrow: 1,
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingTop:        spacing.xl,
-    paddingBottom:     spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
   },
 
   // ── Content ──────────────────────────────────────────────────
@@ -260,14 +262,14 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flex: 1,
-    flexDirection:   'row',
-    alignItems:      'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colorExtended.surface2,
-    borderRadius:    radius.input,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    minHeight:       52, // ≥ 48dp WCAG AA
-    overflow:        'hidden',
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 52, // ≥ 48dp WCAG AA
+    overflow: 'hidden',
   },
   inputContainerError: {
     borderColor: colors.red,
@@ -284,13 +286,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   textInput: {
-    flex:          1,
-    fontFamily:    'DMMono-Regular', // numeric data — DM Mono per MEMORY.md §2
-    fontSize:      16,
-    color:         colors.slate,
+    flex: 1,
+    fontFamily: 'DMMono-Regular', // numeric data — DM Mono per MEMORY.md §2
+    fontSize: 16,
+    color: colors.slate,
     paddingHorizontal: spacing.sm,
-    paddingVertical:   spacing.sm,
-    minHeight:     52, // ≥ 48dp WCAG AA
+    paddingVertical: spacing.sm,
+    minHeight: 52, // ≥ 48dp WCAG AA
   },
 
   // ── Error ─────────────────────────────────────────────────────
@@ -300,12 +302,12 @@ const styles = StyleSheet.create({
 
   // ── Bottom ────────────────────────────────────────────────────
   bottomArea: {
-    gap:       spacing.md,
+    gap: spacing.md,
     marginTop: spacing.xl,
   },
   termsText: {
     textAlign: 'center',
-    color:     colors.muted,
+    color: colors.muted,
   },
   infoBanner: {
     flexDirection: 'row',

@@ -11,22 +11,23 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { Nut, Jar, FileText, Laptop, TShirt, Martini, Lightbulb, ArrowRight } from 'phosphor-react-native';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
-import { colors, radius, spacing } from '../../../constants/tokens';
+import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 
 // ── Mock data ────────────────────────────────────────────────────────
-const MATERIALS: { code: MaterialCode; label: string; emoji: string }[] = [
-  { code: 'metal', label: 'Metal / Iron', emoji: '🔩' },
-  { code: 'plastic', label: 'Plastic', emoji: '🧴' },
-  { code: 'paper', label: 'Paper', emoji: '📰' },
-  { code: 'ewaste', label: 'E-Waste', emoji: '💻' },
-  { code: 'fabric', label: 'Fabric', emoji: '👕' },
-  { code: 'glass', label: 'Glass', emoji: '🍶' },
+const MATERIALS: { code: MaterialCode; label: string; icon: React.ReactNode }[] = [
+  { code: 'metal', label: 'Metal / Iron', icon: <Nut size={24} color={colors.navy} weight="fill" /> },
+  { code: 'plastic', label: 'Plastic', icon: <Jar size={24} color={colors.navy} weight="fill" /> },
+  { code: 'paper', label: 'Paper', icon: <FileText size={24} color={colors.navy} weight="fill" /> },
+  { code: 'ewaste', label: 'E-Waste', icon: <Laptop size={24} color={colors.navy} weight="fill" /> },
+  { code: 'fabric', label: 'Fabric', icon: <TShirt size={24} color={colors.navy} weight="fill" /> },
+  { code: 'glass', label: 'Glass', icon: <Martini size={24} color={colors.navy} weight="fill" /> },
 ];
 
 const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
@@ -66,14 +67,14 @@ export default function Step1Screen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <NavBar 
-        title="List Scrap" 
+      <NavBar
+        title="List Scrap"
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 1 of 4</Text>}
       />
-      
+
       <View style={styles.content}>
         <WizardStepIndicator currentStep={1} />
-        
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <Text variant="heading">What are you selling?</Text>
@@ -96,15 +97,18 @@ export default function Step1Screen() {
                 >
                   <View style={styles.cardHeader}>
                     {/* Dot */}
-                    <View 
+                    <View
                       style={[
-                        styles.dot, 
+                        styles.dot,
                         { backgroundColor: isSelected ? colors.surface : fg }
-                      ]} 
+                      ]}
                     />
-                    <Text style={styles.emoji}>{mat.emoji}</Text>
+                    {React.cloneElement(mat.icon as React.ReactElement<any>, {
+                      color: isSelected ? colors.surface : colors.navy,
+                      size: 24
+                    })}
                   </View>
-                  <Text 
+                  <Text
                     variant="label"
                     style={{
                       color: isSelected ? colors.surface : colors.slate,
@@ -123,8 +127,9 @@ export default function Step1Screen() {
           {/* Info Banner */}
           {selectedMaterials.length > 0 && (
             <View style={styles.infoBanner}>
+              <Lightbulb size={18} color={colors.teal} weight="fill" />
               <Text variant="caption" style={styles.infoText}>
-                💡 {selectedMaterials.length} material{selectedMaterials.length !== 1 ? 's' : ''} selected. Our AI will verify this in the next step.
+                {selectedMaterials.length} material{selectedMaterials.length !== 1 ? 's' : ''} selected. Our AI will verify this in the next step.
               </Text>
             </View>
           )}
@@ -142,9 +147,10 @@ export default function Step1Screen() {
           </View>
 
           <PrimaryButton
-            label="Next →"
-            disabled={selectedMaterials.length === 0}
+            label="Next"
+            icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             onPress={() => router.push('/(seller)/listing/step2')}
+            disabled={selectedMaterials.length === 0}
           />
         </View>
       </View>
@@ -198,8 +204,16 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginTop: 4,
   },
-  emoji: {
-    fontSize: 24,
+  infoBanner: {
+    backgroundColor: colorExtended.tealLight,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
   },
   footer: {
     padding: spacing.lg,
@@ -218,14 +232,6 @@ const styles = StyleSheet.create({
   estimateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  infoBanner: {
-    backgroundColor: colors.surfaceLight,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    marginBottom: spacing.md,
   },
   infoText: {
     color: colors.slate,

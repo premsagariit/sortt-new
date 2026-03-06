@@ -30,13 +30,14 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle } from 'phosphor-react-native';
+import { CheckCircle, FileText, CaretRight } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../../constants/tokens';
 import { Text } from '../../../components/ui/Typography';
 import { Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { SecondaryButton } from '../../../components/ui/Button';
+import { useAuthStore } from '../../../store/authStore';
 
 // ── Mock data (reuses same shape as otp-confirm) ───────────────────
 type WeightEntry = {
@@ -91,6 +92,8 @@ const MOCK_RECEIPT: Record<string, ReceiptMock> = {
 export default function ReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const receipt = id ? MOCK_RECEIPT[id] : undefined;
+  const userType = useAuthStore((s: any) => s.userType);
+  const homeRoute = userType === 'aggregator' ? '/(aggregator)/home' : '/(seller)/home';
 
   if (!receipt) {
     return (
@@ -101,7 +104,7 @@ export default function ReceiptScreen() {
             variant="caption"
             color={colors.red}
             style={{ marginTop: spacing.sm }}
-            onPress={() => router.replace('/(seller)/home' as any)}
+            onPress={() => router.replace(homeRoute as any)}
           >
             Back to Home
           </Text>
@@ -190,7 +193,8 @@ export default function ReceiptScreen() {
         {/* ── GST Invoice (Business only, currently disabled) ── */}
         <View style={styles.gstSection}>
           <SecondaryButton
-            label="Download GST Invoice 📄"
+            label="Download GST Invoice"
+            icon={<FileText size={18} color={colors.navy} />}
             onPress={() => console.log('GST invoice download — business only')}
             disabled
           />
@@ -225,15 +229,13 @@ export default function ReceiptScreen() {
             </View>
           </View>
           {/* Chevron right › */}
-          <Text variant="body" style={{ color: colors.muted, fontSize: 20 } as any}>
-            ›
-          </Text>
+          <CaretRight size={18} color={colors.muted} weight="bold" />
         </Pressable>
 
         <View style={{ marginTop: spacing.md }}>
           <PrimaryButton
             label="Back to Home"
-            onPress={() => router.replace('/(seller)/home' as any)}
+            onPress={() => router.replace(homeRoute as any)}
           />
           <Pressable
             onPress={() => router.push('/(shared)/dispute' as any)}

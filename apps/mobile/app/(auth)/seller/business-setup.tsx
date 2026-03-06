@@ -20,6 +20,7 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { StepIndicator } from './account-type';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useAuthStore } from '../../../store/authStore';
+import { safeBack } from '../../../utils/navigation';
 
 const INDUSTRIES = ['Manufacturing', 'Retail', 'Corporate', 'Warehouse'] as const;
 
@@ -40,8 +41,8 @@ export default function BusinessSetupScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar title="Business Setup" variant="light" onBack={() => router.replace('/(auth)/seller/seller-setup' as any)} />
-      
+      <NavBar title="Business Setup" variant="light" onBack={() => safeBack('/(auth)/seller/seller-setup')} />
+
       <View style={styles.content}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.headerArea}>
@@ -60,7 +61,7 @@ export default function BusinessSetupScreen() {
               onChangeText={setBusinessName}
               autoCapitalize="words"
             />
-            
+
             <Input
               label="GSTIN *"
               placeholder="15-character GSTIN"

@@ -73,8 +73,8 @@ const initialState: Pick<AuthState,
   phoneNumber: '',
   isLoading: false,
   session: null,
-  userId: 'user-seller-001', // Mock — replaced with real session on Day 5
-  userType: 'seller',          // Mock — replaced with real session on Day 5
+  userId: null,       // Set after auth — Day 5 populates from Supabase session
+  userType: null,     // Set on user-type screen — null until user makes a choice
   accountType: null,
   name: '',
   locality: '',

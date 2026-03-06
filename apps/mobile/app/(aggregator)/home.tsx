@@ -13,59 +13,22 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { StyleSheet, View, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { House, Bell } from 'phosphor-react-native';
+import { House, Bell, ArrowRight, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { MaterialCode } from '../../components/ui/Card';
 import { IconButton } from '../../components/ui/Button';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { Avatar } from '../../components/ui/Avatar';
-import { useAggregatorStore } from '../../store/aggregatorStore';
-import { useOrderStore } from '../../store/orderStore';
+import { useAggregatorStore, NewOrderRequest } from '../../store/aggregatorStore';
+import type { MaterialCode } from '../../components/ui/MaterialChip';
 
-// ── Mock Data ──────────────────────────────────────────────────────
-
-interface MockFeedCard {
-  id: string;
-  locality: string;
-  postedMinutesAgo: number;
-  estimatedKg: number;
-  distanceKm: number;
-  materials: MaterialCode[];
-}
-
-const MOCK_FEED: MockFeedCard[] = [
-  {
-    id: 'FEED-01',
-    locality: 'Madhapur, 3rd Phase',
-    postedMinutesAgo: 8,
-    estimatedKg: 22,
-    distanceKm: 1.4,
-    materials: ['paper', 'metal'],
-  },
-  {
-    id: 'FEED-02',
-    locality: 'Kondapur, Sai Nagar',
-    postedMinutesAgo: 22,
-    estimatedKg: 8,
-    distanceKm: 2.9,
-    materials: ['ewaste', 'plastic'],
-  },
-  {
-    id: 'ORD-7777',
-    locality: 'Kondapur, Hitech City',
-    postedMinutesAgo: 2,
-    estimatedKg: 15,
-    distanceKm: 0.8,
-    materials: ['paper', 'plastic'],
-  },
-];
+// ── Note: Feed is now sourced from aggregatorStore.newOrders ────────
 
 interface MockCompactRate {
   code: MaterialCode;
@@ -76,9 +39,9 @@ interface MockCompactRate {
 }
 
 const MOCK_COMPACT_RATES: MockCompactRate[] = [
-  { code: 'metal', label: 'Iron scrap', rateDisplay: '₹28/kg', changePercent: '↑ 2.1%', trend: 'up' },
-  { code: 'paper', label: 'Newspaper', rateDisplay: '₹10/kg', changePercent: '↑ 0.8%', trend: 'up' },
-  { code: 'plastic', label: 'PET Bottles', rateDisplay: '₹12/kg', changePercent: '↓ 0.5%', trend: 'down' },
+  { code: 'metal', label: 'Iron scrap', rateDisplay: '₹28/kg', changePercent: '2.1%', trend: 'up' },
+  { code: 'paper', label: 'Newspaper', rateDisplay: '₹10/kg', changePercent: '0.8%', trend: 'up' },
+  { code: 'plastic', label: 'PET Bottles', rateDisplay: '₹12/kg', changePercent: '0.5%', trend: 'down' },
 ];
 
 const MATERIAL_LABEL: Record<MaterialCode, string> = {
@@ -88,7 +51,14 @@ const MATERIAL_LABEL: Record<MaterialCode, string> = {
   ewaste: 'E-Waste',
   fabric: 'Fabric',
   glass: 'Glass',
+  custom: 'Other',
 };
+
+// ── Mock fallbacks (replaced by backend data on Day 4) ──────────────
+const MOCK_AGG_NAME = 'Suresh Metals';
+const MOCK_AGG_AREA = 'Madhapur · 3rd Phase';
+const MOCK_AGG_AREA_SHORT = 'Madhapur';
+const MOCK_PENDING_COUNT = '04';
 
 // ── Main Screen ────────────────────────────────────────────────────
 
@@ -96,15 +66,22 @@ export default function AggregatorHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { isOnline, setOnline, earnings } = useAggregatorStore();
+  const { isOnline, setOnline, earnings, businessName, primaryArea } = useAggregatorStore();
 
-  // ── Feed Card Component (Inside to access router) ──────────────────
-  const FeedCard = ({ item }: { item: MockFeedCard }) => {
-    const { rejectOrder } = useOrderStore();
-    const handleAccept = () => console.log(`accept pressed: ${item.locality}`);
-    const handleChat = () => router.push(`/(shared)/chat/${item.id}`);
-    const handleReject = () => rejectOrder(item.id);
+  // Read from store with mock fallbacks (Day 4: store populated from backend)
+  const displayName = businessName || MOCK_AGG_NAME;
+  const displayArea = primaryArea || MOCK_AGG_AREA;
+  const displayAreaShort = primaryArea ? primaryArea.split(',')[0]?.trim() || primaryArea : MOCK_AGG_AREA_SHORT;
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning,';
+    if (hour < 17) return 'Good afternoon,';
+    return 'Good evening,';
+  }, []);
+
+  const FeedCard = ({ item }: { item: NewOrderRequest }) => {
+    const { dismissNewOrder } = useAggregatorStore();
     return (
       <View style={styles.feedCard}>
         {/* Top row */}
@@ -138,16 +115,15 @@ export default function AggregatorHomeScreen() {
 
         {/* Action buttons */}
         <View style={styles.feedActions}>
-          <Pressable style={[styles.feedBtn, styles.feedBtnAccept]} onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}>
-            <Text variant="button" style={styles.feedBtnAcceptText}>✓ View</Text>
+          <Pressable
+            style={[styles.feedBtn, styles.feedBtnAccept]}
+            onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}
+          >
+            <Text variant="button" style={styles.feedBtnAcceptText}>View</Text>
           </Pressable>
           <View style={styles.feedBtnDivider} />
-          <Pressable style={[styles.feedBtn, styles.feedBtnChat]} onPress={handleChat}>
-            <Text variant="button" style={styles.feedBtnChatText}>💬 Chat</Text>
-          </Pressable>
-          <View style={styles.feedBtnDivider} />
-          <Pressable style={[styles.feedBtn, styles.feedBtnReject]} onPress={handleReject}>
-            <Text variant="button" style={styles.feedBtnRejectText}>✕</Text>
+          <Pressable style={[styles.feedBtn, styles.feedBtnReject]} onPress={() => dismissNewOrder(item.id)}>
+            <Text variant="button" style={styles.feedBtnRejectText}>Dismiss</Text>
           </Pressable>
         </View>
       </View>
@@ -187,8 +163,8 @@ export default function AggregatorHomeScreen() {
 
   // ── Screen State ──────────────────────────────────────────────────
   const [screenState, setScreenState] = React.useState<'loading' | 'empty' | 'populated'>('populated');
-  const rejectedOrderIds = useOrderStore((s) => s.rejectedOrderIds);
-  const activeFeed = MOCK_FEED.filter(item => !rejectedOrderIds.includes(item.id));
+  // Use newOrders from store so Dismiss causes immediate re-render
+  const activeFeed = useAggregatorStore((s) => s.newOrders);
 
   const renderHeader = () => (
     <View>
@@ -200,8 +176,8 @@ export default function AggregatorHomeScreen() {
         <Animated.View style={{ opacity: greetingOpacity }}>
           <View style={styles.heroTopRow}>
             <View>
-              <Text variant="caption" style={styles.heroGreeting}>Good afternoon,</Text>
-              <Text variant="heading" style={styles.heroName}>Suresh Metals</Text>
+              <Text variant="caption" style={styles.heroGreeting}>{greeting}</Text>
+              <Text variant="heading" style={styles.heroName}>{displayName}</Text>
             </View>
             <Pressable
               style={[styles.onlinePill, isOnline ? styles.onlinePillActive : styles.onlinePillInactive]}
@@ -216,7 +192,7 @@ export default function AggregatorHomeScreen() {
 
           <View style={styles.locationPill}>
             <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
-            <Text variant="caption" style={styles.locationText}>Madhapur · 3rd Phase</Text>
+            <Text variant="caption" style={styles.locationText}>{displayArea}</Text>
           </View>
 
           {/* Stats Row */}
@@ -230,7 +206,7 @@ export default function AggregatorHomeScreen() {
               <Text variant="caption" style={styles.heroStatLabel}>Pickups</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>04</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_PENDING_COUNT}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Pending</Text>
             </View>
           </View>
@@ -241,8 +217,9 @@ export default function AggregatorHomeScreen() {
         {/* Section: New Orders Nearby */}
         <View style={styles.sectionHeader}>
           <Text variant="subheading" style={styles.sectionTitle}>New Orders Nearby</Text>
-          <Pressable onPress={() => router.push('/(aggregator)/orders')}>
-            <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all →</Text>
+          <Pressable onPress={() => router.push('/(aggregator)/orders')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all</Text>
+            <ArrowRight size={14} color={colors.red} weight="bold" />
           </Pressable>
         </View>
       </View>
@@ -254,8 +231,9 @@ export default function AggregatorHomeScreen() {
       {/* Section: Today's Rate Index (ROW LAYOUT per user request) */}
       <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
         <Text variant="subheading" style={styles.sectionTitle}>Today's Rate Index</Text>
-        <Pressable onPress={() => router.push('/(aggregator)/price-index' as any)}>
-          <Text variant="caption" color={colors.red} style={styles.seeAllText}>See All ›</Text>
+        <Pressable onPress={() => router.push('/(aggregator)/price-index' as any)} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Text variant="caption" color={colors.red} style={styles.seeAllText}>See All</Text>
+          <ArrowRight size={14} color={colors.red} weight="bold" />
         </Pressable>
       </View>
 
@@ -264,14 +242,19 @@ export default function AggregatorHomeScreen() {
           const changeColor = rate.trend === 'up' ? colors.teal : rate.trend === 'down' ? colors.red : colors.muted;
           return (
             <View key={rate.code} style={styles.rateCard}>
-              <View style={[styles.rateBorder, { backgroundColor: colors.material[rate.code].fg }]} />
+              <View style={[styles.rateBorder, { backgroundColor: (colors.material[rate.code as keyof typeof colors.material] ?? colors.material.metal).fg }]} />
               <View style={styles.rateInfo}>
                 <Text variant="body" style={styles.rateMaterial}>{rate.label}</Text>
                 <View style={styles.rateRight}>
                   <Numeric style={styles.ratePrice}>{rate.rateDisplay}</Numeric>
-                  <Text variant="caption" style={[styles.rateChange, { color: changeColor }]}>
-                    {rate.changePercent}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    {rate.trend === 'up' && <CaretUp size={10} color={colors.teal} weight="bold" />}
+                    {rate.trend === 'down' && <CaretDown size={10} color={colors.red} weight="bold" />}
+                    {rate.trend === 'flat' && <Minus size={10} color={colors.muted} weight="bold" />}
+                    <Text variant="caption" style={[styles.rateChange, { color: changeColor }]}>
+                      {rate.changePercent}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -304,10 +287,10 @@ export default function AggregatorHomeScreen() {
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
           <View style={styles.compressedRow}>
             <View style={styles.navLeft}>
-              <Text variant="subheading" style={styles.navMinimizedName}>Suresh Metals</Text>
+              <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
               <View style={styles.navMinimizedLoc}>
                 <View style={[styles.locationDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
-                <Text variant="caption" style={styles.navMinimizedLocText}>Madhapur</Text>
+                <Text variant="caption" style={styles.navMinimizedLocText}>{displayAreaShort}</Text>
               </View>
             </View>
           </View>
@@ -326,7 +309,7 @@ export default function AggregatorHomeScreen() {
           />
           <Pressable onPress={() => router.push('/(aggregator)/profile')} hitSlop={8}>
             <Avatar
-              name="Suresh Metals"
+              name={displayName}
               userType="aggregator"
               size="sm"
             />
@@ -341,7 +324,7 @@ export default function AggregatorHomeScreen() {
         </View>
       ) : (
         <Animated.FlatList
-          data={screenState === 'empty' ? [] : MOCK_FEED}
+          data={screenState === 'empty' ? [] : activeFeed}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={renderHeader}

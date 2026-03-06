@@ -53,9 +53,13 @@ export default function RootLayout() {
 
   // ── Load DM Mono (used ONLY for numeric data — amounts, weights, OTPs,
   //    order IDs, timestamps)
+  // DM Mono only ships Regular (400) and Medium (500) — no Bold weight.
+  // DMMono-Bold maps to 500Medium (heaviest available) so screens
+  // referencing fontFamily: 'DMMono-Bold' render correctly.
   const [monoLoaded, monoError] = useFontsMono({
     'DMMono-Regular': DMMono_400Regular,
     'DMMono-Medium':  DMMono_500Medium,
+    'DMMono-Bold':    DMMono_500Medium,
   });
 
   const fontsReady = (sansLoaded || !!sansError) && (monoLoaded || !!monoError);

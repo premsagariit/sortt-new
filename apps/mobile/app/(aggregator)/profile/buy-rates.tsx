@@ -86,8 +86,8 @@ export default function BuyRatesScreen() {
     };
 
     const getComparison = (user: number, market: number) => {
-        if (user > market) return { label: 'Your rate is above avg', color: colors.teal, icon: ArrowUp };
-        if (user < market) return { label: 'Your rate is below avg', color: colors.amber, icon: ArrowDown };
+        if (user > market) return { label: 'Above avg', color: colors.teal, icon: ArrowUp };
+        if (user < market) return { label: 'Below avg', color: colors.amber, icon: ArrowDown };
         return { label: 'At avg', color: colors.slate, icon: null };
     };
 
@@ -145,6 +145,8 @@ export default function BuyRatesScreen() {
                                                 onChangeText={(val) => handleRateChange(item.label, val)}
                                                 keyboardType="numeric"
                                                 style={styles.priceInput}
+                                                placeholder="0"
+                                                placeholderTextColor={colors.muted}
                                             />
                                         </View>
                                         <Text variant="caption" color={colors.muted}>/kg</Text>
@@ -255,6 +257,7 @@ const styles = StyleSheet.create({
     },
     matInfo: {
         flex: 1,
+        marginRight: spacing.sm, // give space before input box
     },
     matLabel: {
         fontWeight: '700',
@@ -263,6 +266,7 @@ const styles = StyleSheet.create({
     marketInfo: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexWrap: 'wrap', // Prevent overlapping content
         marginTop: 2,
     },
     compareText: {

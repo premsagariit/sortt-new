@@ -8,6 +8,7 @@ import { Text } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { ZoneChip } from '../../../components/ui/ZoneChip';
 import { PrimaryButton } from '../../../components/ui/Button';
+import { safeBack } from '../../../utils/navigation';
 
 const ALL_ZONES = [
     'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'Kondapur', 'Madhapur',
@@ -37,11 +38,7 @@ export default function OperatingAreasScreen() {
         setIsSaving(true);
         await new Promise(resolve => setTimeout(resolve, 800));
         setIsSaving(false);
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/(aggregator)/profile');
-        }
+        safeBack('/(aggregator)/profile');
     };
 
     return (

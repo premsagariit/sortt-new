@@ -20,6 +20,12 @@ import { StatusChip } from './StatusChip';
 import { MaterialChip } from './MaterialChip';
 import { TrendUp, TrendDown, Minus } from 'phosphor-react-native';
 
+// Re-export canonical types so existing consumers of Card.tsx keep working
+export type { OrderStatus } from '../../store/orderStore';
+export type { MaterialCode } from './MaterialChip';
+import type { OrderStatus } from '../../store/orderStore';
+import type { MaterialCode } from './MaterialChip';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BaseCard
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,18 +45,6 @@ export function BaseCard({ children, style }: BaseCardProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 // OrderCard
 // ─────────────────────────────────────────────────────────────────────────────
-export type OrderStatus =
-  | 'created'
-  | 'accepted'
-  | 'en_route'
-  | 'arrived'
-  | 'weighing_in_progress'
-  | 'completed'
-  | 'cancelled'
-  | 'disputed';
-
-export type MaterialCode = 'metal' | 'plastic' | 'paper' | 'ewaste' | 'fabric' | 'glass';
-
 interface OrderCardProps {
   /** Order ID — rendered in DM Mono */
   orderId: string;

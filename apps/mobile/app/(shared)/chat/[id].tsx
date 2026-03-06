@@ -20,6 +20,7 @@ import { Text } from '../../../components/ui/Typography';
 import { MessageBubble } from '../../../components/ui/MessageBubble';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore, ChatMessage } from '../../../store/chatStore';
+import { safeBack } from '../../../utils/navigation';
 
 // Skeleton Loader State
 const SkeletonLoader = () => (
@@ -96,7 +97,7 @@ export default function ChatScreen() {
     }
 
     // Apply V26 Regex: defense in depth before render
-    const V26_REGEX = /(?:\+91|0)?[6-9]\d{9}/g;
+    const V26_REGEX = /(?:\+91|0)?[6-9]\d{9}/;
     const isSystemMessage = V26_REGEX.test(item.body);
     const body = isSystemMessage ? 'Phone sharing blocked for your safety' : item.body;
 
@@ -118,7 +119,7 @@ export default function ChatScreen() {
       <NavBar
         variant="light"
         title={otherPartyName}
-        onBack={() => router.back()}
+        onBack={() => safeBack('/')}
       />
 
       <KeyboardAvoidingView

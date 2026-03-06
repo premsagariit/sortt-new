@@ -13,6 +13,7 @@ import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { StatusBar } from 'expo-status-bar';
+import { safeBack } from '../../utils/navigation';
 
 export default function AggregatorProfileScreen() {
   const router = useRouter();
@@ -23,16 +24,10 @@ export default function AggregatorProfileScreen() {
       <NavBar
         variant="dark"
         title="Aggregator Profile"
-        onBack={() => {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace('/(seller)/browse');
-          }
-        }}
+        onBack={() => safeBack('/(seller)/home')}
       />
-      
-      <ScrollView 
+
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         style={{ backgroundColor: colors.bg }}
       >
@@ -42,26 +37,26 @@ export default function AggregatorProfileScreen() {
         {/* Dark Hero Section */}
         <View style={styles.heroSection}>
           <View style={styles.heroHeader}>
-             <View style={styles.avatar}>
-               <Text style={styles.avatarText}>K</Text>
-             </View>
-             <View style={styles.heroInfo}>
-               <Text style={styles.aggName}>Kumar Scrap Co.</Text>
-               <Text style={styles.aggType}>Mobile Aggregator · Since 2021</Text>
-               <View style={styles.ratingRow}>
-                 <View style={styles.stars}>
-                   <Star size={16} weight="fill" color={colors.amber} />
-                   <Star size={16} weight="fill" color={colors.amber} />
-                   <Star size={16} weight="fill" color={colors.amber} />
-                   <Star size={16} weight="fill" color={colors.amber} />
-                   <Star size={16} weight="fill" color={colors.amber} />
-                 </View>
-                 <Numeric style={styles.ratingText}>4.8 · 142 pickups</Numeric>
-               </View>
-             </View>
-             <View style={styles.kycBadge}>
-               <Text style={styles.kycText}>✓ Verified</Text>
-             </View>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>K</Text>
+            </View>
+            <View style={styles.heroInfo}>
+              <Text style={styles.aggName}>Kumar Scrap Co.</Text>
+              <Text style={styles.aggType}>Mobile Aggregator · Since 2021</Text>
+              <View style={styles.ratingRow}>
+                <View style={styles.stars}>
+                  <Star size={16} weight="fill" color={colors.amber} />
+                  <Star size={16} weight="fill" color={colors.amber} />
+                  <Star size={16} weight="fill" color={colors.amber} />
+                  <Star size={16} weight="fill" color={colors.amber} />
+                  <Star size={16} weight="fill" color={colors.amber} />
+                </View>
+                <Numeric style={styles.ratingText}>4.8 · 142 pickups</Numeric>
+              </View>
+            </View>
+            <View style={styles.kycBadge}>
+              <Text style={styles.kycText}>✓ Verified</Text>
+            </View>
           </View>
         </View>
 
@@ -86,83 +81,83 @@ export default function AggregatorProfileScreen() {
           <View style={styles.card}>
             <Text variant="body" style={styles.cardTitle}>Material Rates</Text>
             <View style={styles.table}>
-               <View style={styles.tableHeader}>
-                 <Text variant="caption" color={colors.muted} style={styles.thLeft}>Material</Text>
-                 <Text variant="caption" color={colors.muted} style={styles.thRight}>Rate/kg</Text>
-               </View>
-               <View style={styles.tableRow}>
-                 <Text variant="body">⚙️ Metal (Iron)</Text>
-                 <Numeric style={styles.rateValue}>₹29</Numeric>
-               </View>
-               <View style={styles.tableRow}>
-                 <Text variant="body">📄 Paper</Text>
-                 <Numeric style={styles.rateValue}>₹12</Numeric>
-               </View>
-               <View style={styles.tableRow}>
-                 <Text variant="body">🧴 Plastic</Text>
-                 <Numeric style={styles.rateValue}>₹8</Numeric>
-               </View>
-                <View style={[styles.tableRow, styles.tableRowLast]}>
-                 <Text variant="body">👗 Fabric</Text>
-                 <Numeric style={styles.rateValue}>₹6</Numeric>
-               </View>
+              <View style={styles.tableHeader}>
+                <Text variant="caption" color={colors.muted} style={styles.thLeft}>Material</Text>
+                <Text variant="caption" color={colors.muted} style={styles.thRight}>Rate/kg</Text>
+              </View>
+              <View style={styles.tableRow}>
+                <Text variant="body">⚙️ Metal (Iron)</Text>
+                <Numeric style={styles.rateValue}>₹29</Numeric>
+              </View>
+              <View style={styles.tableRow}>
+                <Text variant="body">📄 Paper</Text>
+                <Numeric style={styles.rateValue}>₹12</Numeric>
+              </View>
+              <View style={styles.tableRow}>
+                <Text variant="body">🧴 Plastic</Text>
+                <Numeric style={styles.rateValue}>₹8</Numeric>
+              </View>
+              <View style={[styles.tableRow, styles.tableRowLast]}>
+                <Text variant="body">👗 Fabric</Text>
+                <Numeric style={styles.rateValue}>₹6</Numeric>
+              </View>
             </View>
           </View>
 
           {/* Operating Details */}
           <View style={styles.card}>
-             <Text variant="body" style={styles.cardTitle}>Operating Details</Text>
-             <View style={styles.listRow}>
-               <Text variant="body" style={styles.iconEmoji}>📍</Text>
-               <View style={styles.listContent}>
-                 <Text variant="body" style={styles.listTitle}>Banjara Hills, Jubilee Hills, Panjagutta</Text>
-                 <Text variant="caption" color={colors.muted}>Operating area</Text>
-               </View>
-             </View>
-             <View style={[styles.listRow, styles.tableRowLast]}>
-               <Text variant="body" style={styles.iconEmoji}>🕐</Text>
-               <View style={styles.listContent}>
-                 <Text variant="body" style={styles.listTitle}>Mon–Sat · 8 AM – 7 PM</Text>
-                 <Text variant="caption" color={colors.muted}>Operating hours</Text>
-               </View>
-             </View>
+            <Text variant="body" style={styles.cardTitle}>Operating Details</Text>
+            <View style={styles.listRow}>
+              <Text variant="body" style={styles.iconEmoji}>📍</Text>
+              <View style={styles.listContent}>
+                <Text variant="body" style={styles.listTitle}>Banjara Hills, Jubilee Hills, Panjagutta</Text>
+                <Text variant="caption" color={colors.muted}>Operating area</Text>
+              </View>
+            </View>
+            <View style={[styles.listRow, styles.tableRowLast]}>
+              <Text variant="body" style={styles.iconEmoji}>🕐</Text>
+              <View style={styles.listContent}>
+                <Text variant="body" style={styles.listTitle}>Mon–Sat · 8 AM – 7 PM</Text>
+                <Text variant="caption" color={colors.muted}>Operating hours</Text>
+              </View>
+            </View>
           </View>
 
           {/* Recent Reviews */}
           <View style={styles.reviewsSection}>
             <Text variant="body" style={styles.cardTitle}>Recent Reviews</Text>
-            
+
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
-                 <View style={styles.reviewerInfo}>
-                   <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>R</Text></View>
-                   <Text variant="body" style={styles.reviewerName}>Rahul S.</Text>
-                 </View>
-                 <View style={styles.stars}>
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                 </View>
+                <View style={styles.reviewerInfo}>
+                  <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>R</Text></View>
+                  <Text variant="body" style={styles.reviewerName}>Rahul S.</Text>
+                </View>
+                <View style={styles.stars}>
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                </View>
               </View>
               <Text variant="caption" style={styles.reviewText}>Quick pickup, fair weighing. Very professional.</Text>
               <Numeric style={styles.reviewDate}>Feb 24, 2026</Numeric>
             </View>
-            
-             <View style={styles.reviewCard}>
+
+            <View style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
-                 <View style={styles.reviewerInfo}>
-                   <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>P</Text></View>
-                   <Text variant="body" style={styles.reviewerName}>Priya K.</Text>
-                 </View>
-                 <View style={styles.stars}>
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="fill" color={colors.amber} />
-                   <Star size={14} weight="regular" color={colors.muted} />
-                 </View>
+                <View style={styles.reviewerInfo}>
+                  <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>P</Text></View>
+                  <Text variant="body" style={styles.reviewerName}>Priya K.</Text>
+                </View>
+                <View style={styles.stars}>
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="fill" color={colors.amber} />
+                  <Star size={14} weight="regular" color={colors.muted} />
+                </View>
               </View>
               <Text variant="caption" style={styles.reviewText}>Good experience. Arrived 10 mins early.</Text>
               <Numeric style={styles.reviewDate}>Feb 18, 2026</Numeric>
@@ -173,8 +168,8 @@ export default function AggregatorProfileScreen() {
 
       {/* Sticky Bottom Bar */}
       <View style={styles.bottomBar}>
-        <PrimaryButton 
-          label="List Scrap for Pickup" 
+        <PrimaryButton
+          label="List Scrap for Pickup"
           onPress={() => router.push('/(seller)/listing/step1')}
         />
       </View>

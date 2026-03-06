@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Sortt",
+    "slug": "sortt-mobile",
+    "version": "1.0.0",
+    "android": {
+      "package": "com.sagar.sortt"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "90966a13-507b-4386-9e20-4d7e18fdb9da"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Animated, Dimensions } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SealCheck, CaretRight, SignOut, Trash, ArrowsLeftRight, CheckCircle } from 'phosphor-react-native';
+import { SealCheck, CaretRight, SignOut, Trash, ArrowsLeftRight, CheckCircle, CurrencyInr, ChartBar, MapPin, Clock, IdentificationCard, User, Bell, Globe, Question, ShieldCheck, Star } from 'phosphor-react-native';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -10,12 +10,17 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { useAggregatorStore } from '../../store/aggregatorStore';
 
 const { width } = Dimensions.get('window');
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
+// Mock fallbacks (replaced by backend data on Day 4)
+const MOCK_AGG_FULLNAME = 'Vijay Kumar';
+const MOCK_AGG_LOCALITY = 'Banjara Hills';
+
 interface MenuItemProps {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   subtitle?: string;
   onPress: () => void;
@@ -31,7 +36,11 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
       onPress={onPress}
     >
       <View style={[styles.menuIconWrap, isDestructive && { backgroundColor: 'rgba(192, 57, 43, 0.1)' }]}>
-        <Text style={[styles.menuIconEmoji, isDestructive && { color: colors.red }] as any}>{icon}</Text>
+        {typeof icon === 'string' ? (
+          <Text style={[styles.menuIconEmoji, isDestructive && { color: colors.red }] as any}>{icon}</Text>
+        ) : (
+          icon
+        )}
       </View>
       <View style={styles.menuTextContent}>
         <View style={styles.menuTitleRow}>
@@ -52,7 +61,12 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
 export default function AggregatorProfileScreen() {
   const router = useRouter();
   const authStore = useAuthStore();
+  const { fullName, primaryArea } = useAggregatorStore();
   const [heroHeight, setHeroHeight] = useState(300);
+
+  // Read from store with mock fallbacks (Day 4: store populated from backend)
+  const displayName = fullName || MOCK_AGG_FULLNAME;
+  const displayLocality = primaryArea || MOCK_AGG_LOCALITY;
 
 
 
@@ -110,7 +124,7 @@ export default function AggregatorProfileScreen() {
           <View style={styles.hero}>
             <View style={styles.avatarWrap}>
               <Avatar
-                name="Vijay Kumar"
+                name={displayName}
                 userType="aggregator"
                 size="xl"
                 source={AVATAR_SOURCE}
@@ -124,7 +138,7 @@ export default function AggregatorProfileScreen() {
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
-                Vijay Kumar
+                {displayName}
               </Text>
               <CheckCircle size={24} color={colors.teal} weight="fill" />
             </View>
@@ -132,7 +146,7 @@ export default function AggregatorProfileScreen() {
             <View style={styles.badgeRow}>
               <View style={styles.localityPill}>
                 <View style={styles.localityDot} />
-                <Text variant="caption" style={styles.localityText}>Banjara Hills</Text>
+                <Text variant="caption" style={styles.localityText}>{displayLocality}</Text>
               </View>
             </View>
 
@@ -148,7 +162,7 @@ export default function AggregatorProfileScreen() {
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Rating</Text>
                 <View style={styles.ratingBox}>
-                  <Text style={styles.starTextMini}>★</Text>
+                  <Star size={16} color="#FFD700" weight="fill" />
                   <Numeric size={20} color={colors.surface}>4.8</Numeric>
                 </View>
               </View>
@@ -167,9 +181,9 @@ export default function AggregatorProfileScreen() {
       <Animated.View style={[styles.compactHeader, { opacity: compactOpacity }]} pointerEvents="none">
         <SafeAreaView edges={['top']}>
           <View style={styles.compactContent}>
-            <Avatar name="Vijay Kumar" userType="aggregator" size="sm" source={AVATAR_SOURCE} />
+            <Avatar name={displayName} userType="aggregator" size="sm" source={AVATAR_SOURCE} />
             <View style={styles.compactTextWrap}>
-              <Text variant="body" style={styles.compactName as any}>Vijay Kumar</Text>
+              <Text variant="body" style={styles.compactName as any}>{displayName}</Text>
               <View style={styles.compactVerified}>
                 <SealCheck size={12} color={colors.teal} weight="fill" />
               </View>
@@ -189,41 +203,45 @@ export default function AggregatorProfileScreen() {
       >
         <View style={styles.menuGroup}>
           <MenuItem
-            icon="💰" title="My Buy Rates" subtitle="Update per-material buying prices"
+            icon={<CurrencyInr size={22} color={colors.navy} />} title="My Buy Rates" subtitle="Update per-material buying prices"
             onPress={() => router.push('/(aggregator)/profile/buy-rates')}
           />
           <MenuItem
-            icon="📍" title="Operating Areas" subtitle="5 areas active"
+            icon={<ChartBar size={22} color={colors.navy} />} title="Order History & Summary" subtitle="View all completed pickups"
+            onPress={() => router.push('/(aggregator)/profile/order-summary')}
+          />
+          <MenuItem
+            icon={<MapPin size={22} color={colors.navy} />} title="Operating Areas" subtitle="5 areas active"
             onPress={() => router.push('/(aggregator)/profile/operating-areas')}
           />
           <MenuItem
-            icon="⏰" title="Hours & Availability" subtitle="Mon–Sat · 8 AM–7 PM"
+            icon={<Clock size={22} color={colors.navy} />} title="Hours & Availability" subtitle="Mon–Sat · 8 AM–7 PM"
             onPress={() => router.push('/(aggregator)/profile/hours-availability')}
           />
           <MenuItem
-            icon="🆔" title="KYC Documents" subtitle="Aadhaar + Shop photo — Verified"
+            icon={<IdentificationCard size={22} color={colors.navy} />} title="KYC Documents" subtitle="Aadhaar + Shop photo — Verified"
             onPress={() => router.push('/(aggregator)/profile/kyc-documents')}
             hasVerifiedBadge
           />
           <MenuItem
-            icon="👤" title="Account Settings" subtitle="Personal & secure login"
+            icon={<User size={22} color={colors.navy} />} title="Account Settings" subtitle="Personal & secure login"
             onPress={() => router.push('/(aggregator)/settings')}
           />
 
           <MenuItem
-            icon="🔔" title="Notifications" subtitle="Alerts & updates"
+            icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates"
             onPress={() => router.push('/(shared)/notifications')}
           />
           <MenuItem
-            icon="🌐" title="Language" subtitle="English"
+            icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle="English"
             onPress={() => router.push('/(shared)/language')}
           />
           <MenuItem
-            icon="❓" title="Help Center" subtitle="FAQs & support"
+            icon={<Question size={22} color={colors.navy} />} title="Help Center" subtitle="FAQs & support"
             onPress={() => router.push('/(shared)/help' as any)}
           />
           <MenuItem
-            isLast icon="🛡️" title="Terms & Privacy" subtitle="Legal information"
+            isLast icon={<ShieldCheck size={22} color={colors.navy} />} title="Terms & Privacy" subtitle="Legal information"
             onPress={() => router.push('/(shared)/terms-privacy' as any)}
           />
         </View>

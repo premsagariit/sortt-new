@@ -15,9 +15,10 @@ import React, { useMemo, useRef } from 'react';
 import { StyleSheet, View, FlatList, Pressable, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bell, Tray } from 'phosphor-react-native';
+import { Bell, Tray, Recycle, ChartLineUp, Truck, CaretUp, CaretDown, Minus, ArrowRight, CaretRight as CaretRightIcon } from 'phosphor-react-native';
 import { APP_NAME } from '../../constants/app';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
+import { useAuthStore } from '../../store/authStore';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { BaseCard, OrderCard, MaterialCode, OrderStatus } from '../../components/ui/Card';
 import { IconButton } from '../../components/ui/Button';
@@ -72,9 +73,22 @@ import { router } from 'expo-router';
 
 // ───────────────────────────────────────────────────────────────────
 
+// ── Mock fallbacks (replaced by backend data on Day 5) ──────────────
+const MOCK_SELLER_NAME = 'Ravi Kumar';
+const MOCK_SELLER_LOCALITY = 'Kondapur';
+const MOCK_SELLER_CITY = 'Hyderabad';
+const MOCK_EARNED = '₹2,840';
+const MOCK_ORDERS_COUNT = '07';
+const MOCK_ACTIVE_COUNT = '01';
+
 export default function SellerHomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Read from store with mock fallbacks (Day 5: store populated from Supabase)
+  const displayName = useAuthStore((s) => s.name) || MOCK_SELLER_NAME;
+  const displayLocality = useAuthStore((s) => s.locality) || MOCK_SELLER_LOCALITY;
+  const displayCity = useAuthStore((s) => s.city) || MOCK_SELLER_CITY;
 
   const titleOpacity = scrollY.interpolate({
     inputRange: [0, 40],
@@ -126,24 +140,24 @@ export default function SellerHomeScreen() {
         <View style={styles.geometricShape2} pointerEvents="none" />
         <Animated.View style={{ opacity: greetingOpacity }}>
           <Text variant="caption" style={styles.greetingSub}>{greeting}</Text>
-          <Text variant="heading" style={styles.greetingName}>Ravi Kumar</Text>
+          <Text variant="heading" style={styles.greetingName}>{displayName}</Text>
           <View style={styles.locationPill}>
             <View style={[styles.locationDot, { backgroundColor: '#4ADE80' }]} />
-            <Text variant="caption" style={styles.locationText}>Hyderabad · Kondapur</Text>
+            <Text variant="caption" style={styles.locationText}>{displayCity} · {displayLocality}</Text>
           </View>
 
           {/* New Hero Stats Row (matches Aggregator pattern) */}
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹2,840</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_EARNED}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Earned</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>07</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_ORDERS_COUNT}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Orders</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>01</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_ACTIVE_COUNT}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Active</Text>
             </View>
           </View>
@@ -155,27 +169,27 @@ export default function SellerHomeScreen() {
         {/* Primary CTA */}
         <Pressable style={styles.primaryCta} onPress={handleCreateListing}>
           <View style={styles.ctaIconBox}>
-            <Text variant="body" style={styles.ctaEmoji}>♻️</Text>
+            <Recycle size={22} color={colors.surface} weight="bold" />
           </View>
           <View style={styles.ctaTextCol}>
             <Text variant="subheading" style={styles.ctaTitle}>SELL SCRAP</Text>
             <Text variant="caption" style={styles.ctaSub}>List your scrap for pickup</Text>
           </View>
-          <Text variant="body" style={styles.ctaArrow}>›</Text>
+          <CaretRightIcon size={20} color={colors.surface} weight="bold" />
         </Pressable>
 
         {/* Secondary CTA Row */}
         <View style={styles.secCtaRow}>
           <Pressable style={styles.secCtaCard} onPress={handleMarketRates} hitSlop={12}>
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.surface2 }]}>
-              <Text variant="body">📊</Text>
+              <ChartLineUp size={20} color={colors.navy} weight="bold" />
             </View>
             <Text variant="caption" style={styles.secCtaTitle}>Market Rates</Text>
             <Text variant="caption" color={colors.muted}>Today's prices</Text>
           </Pressable>
           <Pressable style={styles.secCtaCard} onPress={handleMyOrders} hitSlop={12}>
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.tealLight }]}>
-              <Text variant="body">🚚</Text>
+              <Truck size={20} color={colors.teal} weight="bold" />
             </View>
             <Text variant="caption" style={styles.secCtaTitle}>My Orders</Text>
             <Text variant="caption" color={colors.muted}>Track pickups</Text>
@@ -185,9 +199,10 @@ export default function SellerHomeScreen() {
         {/* Today's Rates Section */}
         <View style={styles.ratesSection}>
           <View style={styles.sectionHeader}>
-            <Text variant="subheading" style={styles.ratesTitle}>Today's Rates</Text>
-            <Pressable onPress={() => router.push('/(seller)/prices')}>
-              <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all →</Text>
+            <Text variant="subheading" style={styles.ratesTitle} numberOfLines={1}>Today's Rates</Text>
+            <Pressable onPress={() => router.push('/(seller)/prices')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+              <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all</Text>
+              <ArrowRight size={14} color={colors.red} weight="bold" />
             </Pressable>
           </View>
 
@@ -197,7 +212,7 @@ export default function SellerHomeScreen() {
                 <Text variant="body" style={styles.rateMaterial}>Metal (Iron)</Text>
                 <Numeric style={styles.ratePrice}>₹28/kg</Numeric>
               </View>
-              <Text variant="body" style={[styles.trendIcon, { color: colors.teal }]}>▲</Text>
+              <CaretUp size={18} color={colors.teal} weight="bold" />
             </View>
 
             <View style={styles.rateCard}>
@@ -205,7 +220,7 @@ export default function SellerHomeScreen() {
                 <Text variant="body" style={styles.rateMaterial}>Paper</Text>
                 <Numeric style={styles.ratePrice}>₹12/kg</Numeric>
               </View>
-              <Text variant="body" style={[styles.trendIcon, { color: colors.muted }]}>—</Text>
+              <Minus size={18} color={colors.muted} weight="bold" />
             </View>
 
             <View style={styles.rateCard}>
@@ -213,7 +228,7 @@ export default function SellerHomeScreen() {
                 <Text variant="body" style={styles.rateMaterial}>Plastic (PET)</Text>
                 <Numeric style={styles.ratePrice}>₹8/kg</Numeric>
               </View>
-              <Text variant="body" style={[styles.trendIcon, { color: colors.red }]}>▼</Text>
+              <CaretDown size={18} color={colors.red} weight="bold" />
             </View>
           </View>
         </View>
@@ -251,10 +266,10 @@ export default function SellerHomeScreen() {
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
           <View style={styles.compressedRow}>
             <View style={styles.navLeft}>
-              <Text variant="subheading" style={styles.navMinimizedName}>Ravi Kumar</Text>
+              <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
               <View style={styles.navMinimizedLoc}>
                 <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
-                <Text variant="caption" style={styles.navMinimizedLocText}>Kondapur</Text>
+                <Text variant="caption" style={styles.navMinimizedLocText}>{displayLocality}</Text>
               </View>
             </View>
           </View>
@@ -273,7 +288,7 @@ export default function SellerHomeScreen() {
           />
           <Pressable onPress={() => router.push('/(seller)/profile')} hitSlop={8}>
             <Avatar
-              name="Ravi Kumar"
+              name={displayName}
               userType="seller"
               size="sm"
               source={AVATAR_SOURCE}
@@ -569,9 +584,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  ctaEmoji: {
-    fontSize: 18,
   },
   ctaTextCol: {
     flex: 1,

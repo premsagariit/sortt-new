@@ -7,6 +7,7 @@ import { colors, spacing, radius, colorExtended } from '../../../constants/token
 import { Text } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { PrimaryButton } from '../../../components/ui/Button';
+import { safeBack } from '../../../utils/navigation';
 
 interface DocumentStatus {
     id: string;
@@ -46,11 +47,7 @@ export default function KycDocumentsScreen() {
         Alert.alert('KYC Updated', 'Any new documents have been submitted for verification.', [
             {
                 text: 'OK', onPress: () => {
-                    if (router.canGoBack()) {
-                        router.back();
-                    } else {
-                        router.replace('/(aggregator)/profile');
-                    }
+                    safeBack('/(aggregator)/profile');
                 }
             }
         ]);

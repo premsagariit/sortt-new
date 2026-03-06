@@ -19,17 +19,18 @@ import { View, StyleSheet } from 'react-native';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { Text } from './Typography';
 
-export type MaterialCode = 'metal' | 'plastic' | 'paper' | 'ewaste' | 'fabric' | 'glass';
+export type MaterialCode = 'metal' | 'plastic' | 'paper' | 'ewaste' | 'fabric' | 'glass' | 'custom';
 export type MaterialVariant = 'chip' | 'listitem';
 
 // ── Display labels for material codes ────────────────────────────
-const MATERIAL_LABELS: Record<MaterialCode, string> = {
-  metal:   'Metal',
+export const MATERIAL_LABELS: Record<MaterialCode, string> = {
+  metal: 'Metal',
   plastic: 'Plastic',
-  paper:   'Paper',
-  ewaste:  'E-Waste',
-  fabric:  'Fabric',
-  glass:   'Glass',
+  paper: 'Paper',
+  ewaste: 'E-Waste',
+  fabric: 'Fabric',
+  glass: 'Glass',
+  custom: 'Other Item',
 };
 
 interface MaterialChipProps {
@@ -71,23 +72,23 @@ export function MaterialChip({
 const styles = StyleSheet.create({
   // Pill chip — coloured background
   chip: {
-    borderRadius:      radius.chip, // 20px pill
+    borderRadius: radius.chip, // 20px pill
     paddingHorizontal: spacing.sm,
-    paddingVertical:   4,
-    alignSelf:         'flex-start',
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   chipLabel: {
-    fontSize:   12,
+    fontSize: 12,
     fontWeight: '500',
     lineHeight: 16,
   },
 
   // List item — transparent bg, 3px solid left border, full-width row
   listitem: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    width:          '100%',
-    paddingLeft:    spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingLeft: spacing.sm,
     paddingVertical: spacing.sm,
     borderLeftWidth: 3,
     backgroundColor: 'transparent',

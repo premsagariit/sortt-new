@@ -10,7 +10,7 @@ import React, { useState, useEffect } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput,
     KeyboardAvoidingView, Platform, Pressable,
-    ActivityIndicator, Image,
+    ActivityIndicator, Image, BackHandler,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Camera, WarningCircle } from 'phosphor-react-native';
@@ -23,6 +23,7 @@ import { PrimaryButton, SecondaryButton } from '../../../../components/ui/Button
 import { MaterialCode } from '../../../../components/ui/Card';
 // Camera logic is ONLY in this hook — never call ImagePicker directly in screens
 import { usePhotoCapture } from '../../../../hooks/usePhotoCapture';
+import { safeBack } from '../../../../utils/navigation';
 
 const MOCK_ORDER_MATERIALS: Record<string, { code: MaterialCode; label: string; rate: number }[]> = {
     'ORD-2841': [
@@ -76,6 +77,12 @@ export default function WeighingScreen() {
         if (photoUri) setScalePhotoUri(photoUri);
     }, [photoUri, setScalePhotoUri]);
 
+    useEffect(() => {
+        const onBackPress = () => true; // Block hardware back
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => subscription.remove();
+    }, []);
+
     const handleRetake = async () => {
         resetPhoto();
         setScalePhotoUri(null);
@@ -113,7 +120,7 @@ export default function WeighingScreen() {
             <NavBar
                 title="Weighing"
                 variant="light"
-                onBack={() => router.back()}
+                onBack={() => safeBack('/(aggregator)/execution/navigate' as any)}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent}>

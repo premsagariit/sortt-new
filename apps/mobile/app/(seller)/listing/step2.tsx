@@ -6,21 +6,24 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Image, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, Tray, WarningCircle } from 'phosphor-react-native';
+import { Camera, Tray, WarningCircle, CheckCircle, ArrowRight, Warning } from 'phosphor-react-native';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
-import { MaterialChip } from '../../../components/ui/MaterialChip';
+import { MaterialChip, MaterialCode, MATERIAL_LABELS } from '../../../components/ui/MaterialChip';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
+import { safeBack } from '../../../utils/navigation';
+
+const ALL_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom'];
 
 export default function Step2Screen() {
   const {
@@ -31,7 +34,13 @@ export default function Step2Screen() {
     setWeight,
     setPhotoUri,
     setAiHintShown,
+    setMaterials,
+    customNames,
+    setCustomName,
   } = useListingStore();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const remainingMaterials = ALL_MATERIALS.filter(m => !selectedMaterials.includes(m));
 
   // usePhotoCapture is the ONLY place camera is launched — never inline in screens
   const { photoUri, pickPhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
@@ -49,6 +58,11 @@ export default function Step2Screen() {
     setPhotoUri(null);
     setAiHintShown(false);
     await pickPhoto();
+  };
+
+  const handleAddMaterial = (code: MaterialCode) => {
+    setMaterials([...selectedMaterials, code]);
+    setShowAddModal(false);
   };
 
   // Source of truth for UI: store (so disabled state is never local state)
@@ -71,10 +85,10 @@ export default function Step2Screen() {
 
   if (selectedMaterials.length === 0) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
         <NavBar
           title="List Scrap"
-          onBack={() => router.back()}
+          onBack={() => safeBack('/(seller)/listing/step1')}
           rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 2 of 4</Text>}
         />
         <WizardStepIndicator currentStep={2} />
@@ -83,7 +97,7 @@ export default function Step2Screen() {
           heading="No materials selected"
           body="Please go back and select at least one material to sell."
           ctaLabel="Go Back"
-          onCtaPress={() => router.back()}
+          onCtaPress={() => safeBack('/(seller)/listing/step1')}
         />
       </SafeAreaView>
     );
@@ -142,7 +156,8 @@ export default function Step2Screen() {
                 />
                 <View style={styles.photoHeaderRow}>
                   <View style={styles.photoStatus}>
-                    <Text variant="label" color={colors.teal}>✓ Photo added</Text>
+                    <CheckCircle size={14} color={colors.teal} weight="fill" />
+                    <Text variant="label" color={colors.teal}>Photo added</Text>
                   </View>
                   <View style={{ width: 100 }}>
                     <SecondaryButton label="Retake" onPress={handleRetake} />
@@ -188,7 +203,17 @@ export default function Step2Screen() {
             {selectedMaterials.map((code) => (
               <View key={code} style={styles.weightRow}>
                 <View style={styles.chipContainer}>
-                  <MaterialChip material={code} variant="chip" />
+                  {code === 'custom' ? (
+                    <TextInput
+                      style={styles.customNameInput}
+                      value={customNames[code] || ''}
+                      onChangeText={(val) => setCustomName(code, val)}
+                      placeholder="Item Name (e.g. Copper)"
+                      placeholderTextColor={colors.muted}
+                    />
+                  ) : (
+                    <MaterialChip material={code} variant="chip" />
+                  )}
                 </View>
 
                 <View style={styles.inputContainer}>
@@ -206,9 +231,19 @@ export default function Step2Screen() {
               </View>
             ))}
 
+            {remainingMaterials.length > 0 && (
+              <Pressable
+                style={styles.addMoreBtn}
+                onPress={() => setShowAddModal(true)}
+              >
+                <Text variant="label" color={colors.red}>+ Add another item</Text>
+              </Pressable>
+            )}
+
             <View style={styles.warnBanner}>
+              <Warning size={16} color={colors.amber} weight="fill" />
               <Text variant="caption" style={styles.warnText}>
-                ⚠️ Approximate weight is fine here. Aggregator will weigh exactly during pickup.
+                Approximate weight is fine here. Aggregator will weigh exactly during pickup.
               </Text>
             </View>
           </View>
@@ -217,12 +252,51 @@ export default function Step2Screen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={photoUri ? "Next →" : "Next → (Add photo first)"}
+            label={photoUri ? "Next" : "Next (Add photo first)"}
+            icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             disabled={!canProceed}
             onPress={() => router.push('/(seller)/listing/step3')}
           />
         </View>
       </View>
+
+      {/* Add Material Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text variant="subheading" style={{ marginBottom: spacing.md }}>Add Scrap Material</Text>
+            <View style={styles.materialGrid}>
+              {remainingMaterials.map((code) => (
+                <Pressable
+                  key={code}
+                  style={styles.materialOption}
+                  onPress={() => handleAddMaterial(code)}
+                >
+                  <MaterialChip material={code} variant="chip" />
+                  <Text variant="caption" color={colors.muted} style={{ marginTop: 4 }}>
+                    {MATERIAL_LABELS[code]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => setShowAddModal(false)}
+            >
+              <Text variant="label" color={colors.muted}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -271,6 +345,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   photoStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 8,
     backgroundColor: colorExtended.tealLight,
@@ -292,7 +369,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   aiBox: {
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: colors.blackAlpha3,
     borderRadius: 8,
     padding: spacing.sm,
   },
@@ -340,6 +417,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     width: 100,
   },
+  customNameInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.navy,
+    fontWeight: '600',
+    paddingVertical: 4,
+  },
   input: {
     flex: 1,
     height: 40,
@@ -374,8 +458,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: colors.amberAlpha30,
     marginTop: spacing.sm,
+    gap: spacing.sm,
+    alignItems: 'center',
   },
   warnText: {
     color: colors.slate,
@@ -385,5 +471,45 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingTop: spacing.sm,
     backgroundColor: colors.bg,
+  },
+  addMoreBtn: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    marginBottom: spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
+  materialGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  materialOption: {
+    width: '30%',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: radius.card,
+    backgroundColor: colorExtended.surface2,
+  },
+  closeBtn: {
+    alignItems: 'center',
+    padding: spacing.md,
   },
 });

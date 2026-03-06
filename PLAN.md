@@ -200,28 +200,28 @@
 ### 3.1 Aggregator Onboarding — [COMPLETE]
 - [x] Aggregator Registration Screens (3-Screen Wizard: Profile, Area, Materials)
 
-### 3.2 Aggregator Order Feed
+### 3.2 Aggregator Order Feed — [COMPLETE — 2026-03-06]
 - [x] **Nearby Orders Feed** (`(aggregator)/home.tsx`):
   - NavBar: "Nearby Orders" + online/offline toggle pill.
   - Order list: `OrderCard` showing material chip, locality (NOT full address — V25), estimated weight, estimated ₹, time posted.
   - Empty state, skeleton loader.
-- [x] **Order Detail — Pre-Acceptance** (aggregator view of `(shared)/order/[id].tsx`):
+- [x] **Order Detail — Pre-Acceptance** (aggregator view of `order-detail.tsx`):
   - Material breakdown, locality only (NOT full address — V25), quantised map pin.
   - `PrimaryButton` "Accept Order".
   - 409 state: "Order already taken — accepted moments ago." + "Back to Feed".
-- [x] **Order Detail — Post-Acceptance**:
+- [x] **Order Detail — Post-Acceptance** (`active-order-detail.tsx`):
   - Full address revealed. Seller name + phone last 4.
   - "Get Directions", "Chat with Seller" actions.
-  - Status update buttons: "Mark En Route" → "Mark Arrived" → "Start Weighing".
+  - Status update buttons: "Mark On the Way" → "Mark Arrived" → "Start Weighing".
 
-### 3.3 Aggregator Order Execution Flow
+### 3.3 Aggregator Order Execution Flow — [COMPLETE — 2026-03-06]
 - [x] **Weighing Screen**:
   - Scale photo capture (mandatory). Per-material confirmed weight entry (DM Mono). Running total (DM Mono, `colors.amber`).
   - `PrimaryButton` "Send for Seller Confirmation". Disabled until all weights > 0 AND scale photo captured.
 - [x] **Waiting for OTP Screen**:
   - "Waiting for seller to confirm..." animated pulse. Transaction summary (read-only). Timeout/resend state.
 
-### 3.4 Aggregator Map & Earnings
+### 3.4 Aggregator Map & Earnings — [COMPLETE — 2026-03-06]
 - [x] **Route Screen** (`(aggregator)/route.tsx`):
   - Static map placeholder. Order pins list. `PrimaryButton` "Plan Route" (disabled in static).
 - [x] **Earnings Screen** (`(aggregator)/earnings.tsx`):
@@ -229,7 +229,7 @@
 - [x] **Price Setting Dashboard**:
   - Per-material rate editor. Market reference hint. `PrimaryButton` "Save Rates".
 
-### 3.5 Aggregator Profile
+### 3.5 Aggregator Profile — [COMPLETE — 2026-03-06]
 - [x] **Aggregator Profile Screen** (`(aggregator)/profile.tsx`):
   - Avatar (teal), business name, rating stars. KYC status chip. Operating Hours, Materials, Area, Log Out.
 

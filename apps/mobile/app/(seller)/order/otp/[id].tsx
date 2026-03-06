@@ -5,8 +5,8 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React from 'react';
-import { View, StyleSheet, Share } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Share, BackHandler } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, spacing, radius } from '../../../../constants/tokens';
 import { NavBar } from '../../../../components/ui/NavBar';
@@ -22,6 +22,12 @@ export default function SellerOTPDisplayScreen() {
 
     // Fallback OTP if not in store
     const otp = order?.otp || '1234';
+
+    useEffect(() => {
+        const onBackPress = () => true;
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => subscription.remove();
+    }, []);
 
     const handleShare = async () => {
         try {
@@ -40,7 +46,6 @@ export default function SellerOTPDisplayScreen() {
             <NavBar
                 title="Share OTP"
                 variant="light"
-                onBack={() => router.back()}
             />
 
             <View style={styles.content}>

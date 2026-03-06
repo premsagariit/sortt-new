@@ -705,6 +705,14 @@ Do not delete old entries. Append only.
 
 - **[2026-03-05] Two-Instance Hook Pattern for KYC:** When a screen needs two independent camera sessions (e.g., KYC with Aadhaar + Shop photo), call `usePhotoCapture()` twice with distinct variable names (`const aadhaar = usePhotoCapture(); const shopPhoto = usePhotoCapture();`). Each instance maintains its own `permissionDenied`, `isLoading`, and `photoUri` state independently. Affects: `kyc.tsx`.
 
+- **[2026-03-06] navigation/safeBack Pattern C:** All back navigation must use the `safeBack(fallbackRoute)` utility from `utils/navigation` instead of inline `router.canGoBack() ? router.back() : router.replace(...)`. This ensures a single implementation of Pattern C across the codebase. Never write raw `router.canGoBack()` checks in components. Affects: all screens with back navigation.
+
+- **[2026-03-06] Order Detail Routing Architecture (Aggregator):** Aggregators now use three distinct detail views based on order state: (1) `order-detail.tsx` for New orders (Accept/Reject), (2) `active-order-detail.tsx` for Active orders (Navigate/Cancel + Full Address), and (3) `order-history-detail.tsx` for Completed/Cancelled orders (Read-only + Ratings). Routing is handled in `orders.tsx` by checking order status. Affects: `apps/mobile/app/(aggregator)/`.
+
+- **[2026-03-06] "On the Way" Naming Convention:** The status `'en_route'` display label must always be "On the Way" (Sentence Case) across the entire application UI to ensure user-centric consistency. The internal status code remains `'en_route'` for backend compatibility. Affects: `StatusChip.tsx`, `orders.tsx`, `active-order-detail.tsx`.
+
+- **[2026-03-06] Android Package Consolidation for EAS:** Duplicate `android.package` entries in `app.json` (one inside `expo` and one outside) cause build-time contradictions. Always consolidate inside `expo.android.package`. Added explicit foreground image and background color for adaptive icons to satisfy EAS validation. Affects: `apps/mobile/app.json`.
+
 ---
 
 ## 11. Pricing Architecture — 3-Tier Model

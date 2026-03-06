@@ -17,6 +17,7 @@ import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useAuthStore } from '../../../store/authStore';
+import { safeBack } from '../../../utils/navigation';
 
 // Temporary local step indicator component (can be extracted if needed globally, but used just for these 3 screens)
 export function StepIndicator({ step }: { step: number }) {
@@ -44,8 +45,8 @@ export default function AccountTypeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       {/* Back button added per user request */}
-      <NavBar title="Account Type" variant="light" onBack={() => router.back()} />
-      
+      <NavBar title="Account Type" variant="light" onBack={() => safeBack('/(auth)/user-type')} />
+
       <View style={styles.content}>
         <View style={styles.headerArea}>
           <Text variant="heading" style={styles.title}>What describes you best?</Text>

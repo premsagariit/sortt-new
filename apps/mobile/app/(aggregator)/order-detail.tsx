@@ -8,6 +8,8 @@ import { BaseCard } from '../../components/ui/Card';
 import { PrimaryButton, SecondaryButton, IconButton } from '../../components/ui/Button';
 import { Globe, Lock, MapPin, Clock, Hash, NavigationArrow, X } from 'phosphor-react-native';
 import { useOrderStore } from '../../store/orderStore';
+import { useAggregatorStore } from '../../store/aggregatorStore';
+import { safeBack } from '../../utils/navigation';
 
 /**
  * app/(aggregator)/order-detail.tsx
@@ -163,19 +165,18 @@ export default function AggregatorOrderDetailScreen() {
                     style={styles.rejectBtn}
                     textStyle={styles.btnText}
                     onPress={() => {
-                        useOrderStore.getState().rejectOrder(MOCK_ORDER.id);
-                        if (router.canGoBack()) {
-                            router.back();
-                        } else {
-                            router.push('/(aggregator)/home');
-                        }
+                        useAggregatorStore.getState().dismissNewOrder(MOCK_ORDER.id);
+                        safeBack('/(aggregator)/orders');
                     }}
                 />
                 <PrimaryButton
                     label="Accept"
                     style={styles.acceptBtn}
                     textStyle={styles.btnText}
-                    onPress={() => router.push('/(aggregator)/execution/navigate')}
+                    onPress={() => {
+                        useAggregatorStore.getState().acceptOrder(MOCK_ORDER.id);
+                        router.replace('/(aggregator)/orders');
+                    }}
                 />
             </View>
         </View>

@@ -1,6 +1,7 @@
 // Scaffold — backend wired on Day 4 per @PLAN.md
 // No Supabase calls here. All actions are local state only.
 import { create } from 'zustand';
+import type { MaterialCode } from '../components/ui/MaterialChip';
 
 export interface NearbyOrder {
   orderId: string;
@@ -27,6 +28,28 @@ export interface MaterialConfig {
   bgToken: string;
 }
 
+export interface DaySchedule {
+  day: string;
+  isOpen: boolean;
+  start: string;
+  end: string;
+}
+
+// ── Typed incoming order request (New tab) ─────────────────────────
+export interface NewOrderRequest {
+  id: string;
+  locality: string;
+  distanceKm: number;
+  materials: MaterialCode[];
+  estimatedKg: number;
+  postedMinutesAgo: number;
+  estimatedPrice: number;
+  sellerType: string;
+  rating: number;
+  isHighValue?: boolean;
+  window: string;
+}
+
 interface AggregatorStoreState {
   // ── Onboarding State ───────────────────────────────────────────
   fullName: string;
@@ -35,23 +58,26 @@ interface AggregatorStoreState {
   primaryArea: string;
   operatingHours: { from: string; to: string };
   operatingDays: string[];
+  weeklySchedule: DaySchedule[];
   operatingAreas: string[];
   materials: MaterialConfig[];
 
   // ── Runtime State ──────────────────────────────────────────────
   nearbyOrders: NearbyOrder[];
-  activeOrders: string[];  // order IDs
+  newOrders: NewOrderRequest[];       // Incoming requests (New tab)
+  activeOrders: string[];             // Accepted order IDs
+  dismissedOrderIds: string[];        // Dismissed from home feed (no-op dismissals)
   earnings: AggregatorEarnings;
   isOnline: boolean;
   isLoading: boolean;
 
-  // ── Photo Capture State (local only — Day 8 uploads via IStorageProvider) ──
+  // ── Photo Capture State ────────────────────────────────────────
   scalePhotoUri: string | null;
   kycAadhaarUri: string | null;
   kycShopPhotoUri: string | null;
 
   // ── Actions ────────────────────────────────────────────────────
-  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'businessType' | 'primaryArea' | 'operatingHours' | 'operatingDays'>>) => void;
+  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'businessType' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
   setOperatingAreas: (areas: string[]) => void;
   setMaterialSelected: (id: string, selected: boolean) => void;
   setMaterialRate: (id: string, rate: number) => void;
@@ -59,6 +85,22 @@ interface AggregatorStoreState {
   setNearbyOrders: (orders: NearbyOrder[]) => void;
   setOnline: (v: boolean) => void;
   setLoading: (v: boolean) => void;
+
+  /** Home feed: Dismiss (no detail view) — removes from home only */
+  dismissOrder: (orderId: string) => void;
+
+  /** New tab: Reject without accepting — removes from newOrders, NOT added to cancelled */
+  dismissNewOrder: (orderId: string) => void;
+
+  /** New tab: Accept — moves to Active, creates order in orderStore */
+  acceptNewOrder: (orderId: string) => void;
+
+  /** Active tab: Cancel — moves to Cancelled in orderStore */
+  cancelOrder: (orderId: string, reason: string) => void;
+
+  /** Legacy: Used by order-detail.tsx Accept button */
+  acceptOrder: (orderId: string) => void;
+
   setScalePhotoUri: (uri: string | null) => void;
   setKycAadhaarUri: (uri: string | null) => void;
   setKycShopPhotoUri: (uri: string | null) => void;
@@ -74,7 +116,46 @@ const initialMaterials: MaterialConfig[] = [
   { id: 'fabric', name: 'Fabric', selected: false, ratePerKg: 6, avgRateHint: 6, bgToken: 'fabricBg' },
 ];
 
-// Scaffold only — no backend calls until Day 4
+// Seed — guarantees ≥1 card in New tab every rebuild
+const SEED_NEW_ORDERS: NewOrderRequest[] = [
+  {
+    id: 'NEW-001',
+    locality: 'Banjara Hills area',
+    distanceKm: 1.4,
+    materials: ['metal', 'paper'],
+    estimatedKg: 22,
+    postedMinutesAgo: 8,
+    estimatedPrice: 896,
+    sellerType: 'Industry seller',
+    rating: 4.9,
+    isHighValue: true,
+    window: 'Today · 10 AM — 12 PM',
+  },
+  {
+    id: 'NEW-002',
+    locality: 'Jubilee Hills area',
+    distanceKm: 2.1,
+    materials: ['plastic', 'glass'],
+    estimatedKg: 8,
+    postedMinutesAgo: 22,
+    estimatedPrice: 320,
+    sellerType: 'Residential seller',
+    rating: 4.7,
+    isHighValue: false,
+    window: 'Today · 2 PM — 4 PM',
+  },
+];
+
+const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
+  { day: 'Monday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
+  { day: 'Tuesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
+  { day: 'Wednesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
+  { day: 'Thursday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
+  { day: 'Friday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
+  { day: 'Saturday', isOpen: true, start: '10:00 AM', end: '04:00 PM' },
+  { day: 'Sunday', isOpen: false, start: '10:00 AM', end: '02:00 PM' },
+];
+
 export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   fullName: '',
   businessName: '',
@@ -82,11 +163,14 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   primaryArea: '',
   operatingHours: { from: '08:00 AM', to: '07:00 PM' },
   operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  weeklySchedule: WEEKLY_SCHEDULE_DEFAULT,
   operatingAreas: [],
   materials: initialMaterials,
 
   nearbyOrders: [],
+  newOrders: SEED_NEW_ORDERS,
   activeOrders: [],
+  dismissedOrderIds: [],
   earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
   isOnline: false,
   isLoading: false,
@@ -106,15 +190,69 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   setNearbyOrders: (orders) => set({ nearbyOrders: orders }),
   setOnline: (v) => set({ isOnline: v }),
   setLoading: (v) => set({ isLoading: v }),
+
+  dismissOrder: (orderId) => set((state) => ({
+    dismissedOrderIds: [...state.dismissedOrderIds, orderId],
+  })),
+
+  dismissNewOrder: (orderId) => set((state) => ({
+    newOrders: state.newOrders.filter(o => o.id !== orderId),
+  })),
+
+  acceptNewOrder: (orderId) => set((state) => {
+    const order = state.newOrders.find(o => o.id === orderId);
+    if (!order) return {};
+    const { useOrderStore } = require('./orderStore');
+    useOrderStore.getState().addOrder({
+      orderId: order.id,
+      status: 'accepted',
+      materials: order.materials,
+      estimatedAmount: order.estimatedPrice,
+      confirmedAmount: null,
+      pickupLocality: order.locality,
+      pickupAddress: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      aggregatorId: 'user-agg-001',
+      otp: Math.floor(1000 + Math.random() * 9000).toString(),
+    });
+    return {
+      newOrders: state.newOrders.filter(o => o.id !== orderId),
+      activeOrders: [...state.activeOrders, orderId],
+    };
+  }),
+
+  cancelOrder: (orderId, _reason) => set((state) => {
+    const { useOrderStore } = require('./orderStore');
+    useOrderStore.getState().updateOrderStatus(orderId, 'cancelled');
+    return {
+      activeOrders: state.activeOrders.filter(id => id !== orderId),
+    };
+  }),
+
+  acceptOrder: (orderId) => set((state) => {
+    const { useOrderStore } = require('./orderStore');
+    useOrderStore.getState().updateOrderStatus(orderId, 'accepted');
+    return {
+      dismissedOrderIds: [...state.dismissedOrderIds, orderId],
+      activeOrders: [...state.activeOrders, orderId],
+    };
+  }),
+
   setScalePhotoUri: (uri) => set({ scalePhotoUri: uri }),
   setKycAadhaarUri: (uri) => set({ kycAadhaarUri: uri }),
   setKycShopPhotoUri: (uri) => set({ kycShopPhotoUri: uri }),
+
   reset: () => set({
     fullName: '', businessName: '', businessType: null, primaryArea: '',
     operatingHours: { from: '08:00 AM', to: '07:00 PM' },
     operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    weeklySchedule: WEEKLY_SCHEDULE_DEFAULT,
     operatingAreas: [],
     materials: initialMaterials,
-    nearbyOrders: [], activeOrders: [], isOnline: false, isLoading: false,
+    nearbyOrders: [], newOrders: SEED_NEW_ORDERS, activeOrders: [], dismissedOrderIds: [],
+    earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
+    isOnline: false, isLoading: false,
+    scalePhotoUri: null, kycAadhaarUri: null, kycShopPhotoUri: null,
   }),
 }));

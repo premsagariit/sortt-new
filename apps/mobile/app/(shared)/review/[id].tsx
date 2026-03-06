@@ -22,12 +22,14 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Star, Check } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../../constants/tokens';
 import { Text } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { Avatar } from '../../../components/ui/Avatar';
+import { safeBack } from '../../../utils/navigation';
 
 const RATING_LABELS: Record<number, string> = {
   1: 'Poor',
@@ -60,7 +62,11 @@ export default function ReviewScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar variant="light" title="Rate & Review" />
+      <NavBar
+        variant="light"
+        title="Rate & Review"
+        onBack={() => safeBack(`/(shared)/receipt/${id}`)}
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -96,14 +102,11 @@ export default function ReviewScreen() {
                 accessibilityLabel={`Rate ${star} star${star > 1 ? 's' : ''}`}
                 style={styles.starTapArea}
               >
-                <Text
-                  style={[
-                    styles.star,
-                    { color: star <= rating ? colors.amber : colors.border },
-                  ] as any}
-                >
-                  ★
-                </Text>
+                <Star
+                  size={32}
+                  color={star <= rating ? colors.amber : colors.border}
+                  weight={star <= rating ? "fill" : "regular"}
+                />
               </Pressable>
             ))}
           </View>
@@ -138,7 +141,7 @@ export default function ReviewScreen() {
                       isActive ? styles.chipTextActive : styles.chipTextInactive,
                     ] as any}
                   >
-                    {isActive ? `${chip} ✓` : chip}
+                    {chip}{isActive && <Check size={14} color={colors.surface} weight="bold" style={{ marginLeft: 4 }} />}
                   </Text>
                 </Pressable>
               );
@@ -194,7 +197,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 32,
   },
-  
+
   // Section 1
   headerSection: {
     alignItems: 'center',

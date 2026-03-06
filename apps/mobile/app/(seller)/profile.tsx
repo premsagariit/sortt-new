@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, Animated } from 'react-native'
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
+import { MapPin, ClipboardText, CurrencyInr, Gear, Receipt, Bell, Globe, Question, ShieldCheck, Star, CaretRight } from 'phosphor-react-native';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
@@ -39,7 +40,7 @@ const BUSINESS_DATA = {
 };
 
 interface InfoRowProps {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   subtitle?: string;
   rowKey: string;
@@ -54,13 +55,13 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProp
       onPress={onPress || (() => console.log(`Profile row pressed: ${rowKey}`))}
     >
       <View style={styles.menuIconWrap}>
-        <Text style={styles.menuIcon as any}>{icon}</Text>
+        {icon}
       </View>
       <View style={styles.menuTextContent}>
         <Text variant="body" style={styles.menuTitle as any}>{title}</Text>
         {subtitle && <Text variant="caption" color={colors.muted} style={styles.menuSubtitle as any}>{subtitle}</Text>}
       </View>
-      <Text variant="body" color={colors.border}>›</Text>
+      <CaretRight size={18} color={colors.border} weight="bold" />
     </Pressable>
   );
 }
@@ -152,7 +153,7 @@ export default function SellerProfileScreen() {
             <View style={styles.badgeRow}>
               <View style={styles.localityPill}>
                 <Text variant="caption" style={styles.localityText}>
-                  📍 {profileData.location}
+                  <MapPin size={12} color={colors.surface} weight="fill" /> {profileData.location}
                 </Text>
               </View>
             </View>
@@ -220,34 +221,34 @@ export default function SellerProfileScreen() {
 
         <View style={styles.menuContainer}>
           <InfoRow
-            rowKey="listings" icon="📋" title="My Listings" subtitle="Active and past requests"
+            rowKey="listings" icon={<ClipboardText size={22} color={colors.navy} />} title="My Listings" subtitle="Active and past requests"
             onPress={() => router.push({ pathname: '/(seller)/orders', params: { tab: 'All' } })}
           />
           <InfoRow
-            rowKey="earnings" icon="💰" title="Earnings Summary" subtitle="Payouts and history"
+            rowKey="earnings" icon={<CurrencyInr size={22} color={colors.navy} />} title="Earnings Summary" subtitle="Payouts and history"
             onPress={() => router.push('/(seller)/earnings')}
           />
           <InfoRow
-            rowKey="settings" icon="⚙️" title="Account Settings" subtitle="Preferences & privacy" onPress={() => router.push('/(seller)/settings')}
+            rowKey="settings" icon={<Gear size={22} color={colors.navy} />} title="Account Settings" subtitle="Preferences & privacy" onPress={() => router.push('/(seller)/settings')}
           />
           {isBusinessMode && (
             <InfoRow
-              rowKey="gstin" icon="🧾" title="GSTIN Details" subtitle={BUSINESS_DATA.gstin}
+              rowKey="gstin" icon={<Receipt size={22} color={colors.navy} />} title="GSTIN Details" subtitle={BUSINESS_DATA.gstin}
               onPress={() => console.log('GSTIN Details')}
             />
           )}
           <InfoRow
-            rowKey="notifications" icon="🔔" title="Notifications" subtitle="Alerts & updates" onPress={() => router.push('/(shared)/notifications')}
+            rowKey="notifications" icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates" onPress={() => router.push('/(shared)/notifications')}
           />
           <InfoRow
-            rowKey="language" icon="🌐" title="Language" subtitle={profileData.language}
+            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={profileData.language}
             onPress={() => router.push('/(shared)/language')}
           />
           <InfoRow
-            rowKey="help" icon="❓" title="Help & Support" subtitle="FAQs & contact" onPress={() => router.push('/(shared)/help')}
+            rowKey="help" icon={<Question size={22} color={colors.navy} />} title="Help & Support" subtitle="FAQs & contact" onPress={() => router.push('/(shared)/help')}
           />
           <InfoRow
-            rowKey="terms" icon="🛡️" title="Terms & Privacy" subtitle="Legal information" isLast
+            rowKey="terms" icon={<ShieldCheck size={22} color={colors.navy} />} title="Terms & Privacy" subtitle="Legal information" isLast
             onPress={() => router.push('/(shared)/terms-privacy')}
           />
         </View>

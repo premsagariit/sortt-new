@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, Animated } from 'react-native';
+import { View, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, Animated, BackHandler } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, spacing, radius, colorExtended } from '../../../../constants/tokens';
 import { NavBar } from '../../../../components/ui/NavBar';
@@ -14,6 +14,7 @@ import { useOrderStore } from '../../../../store/orderStore';
 import { Text, Numeric } from '../../../../components/ui/Typography';
 import { PrimaryButton } from '../../../../components/ui/Button';
 import { CheckCircle } from 'phosphor-react-native';
+import { safeBack } from '../../../../utils/navigation';
 
 export default function OTPVerificationScreen() {
     const { id, amount } = useLocalSearchParams<{ id: string, amount: string }>();
@@ -41,6 +42,12 @@ export default function OTPVerificationScreen() {
             inputs.current[index + 1]?.focus();
         }
     };
+
+    useEffect(() => {
+        const onBackPress = () => true;
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => subscription.remove();
+    }, []);
 
     useEffect(() => {
         if (isSuccess) {
@@ -126,7 +133,7 @@ export default function OTPVerificationScreen() {
                 <NavBar
                     title="Verify OTP"
                     variant="light"
-                    onBack={() => router.back()}
+                    onBack={() => safeBack(`/(aggregator)/execution/weighing/${id}` as any)}
                 />
 
                 <View style={styles.content}>

@@ -18,10 +18,11 @@ import { Input } from '../../../components/ui/Input';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { colors, radius, spacing, colorExtended } from '../../../constants/tokens';
 import { useAuthStore } from '../../../store/authStore';
+import { safeBack } from '../../../utils/navigation';
 
 export default function SellerSetupScreen() {
   const { setName, setLocality, setCity, name, locality, city, accountType } = useAuthStore();
-  
+
   // Local state for smooth interaction, though we could just use the store directly
   const [localName, setLocalName] = useState(name);
   const [localLocality, setLocalLocality] = useState(locality);
@@ -33,7 +34,7 @@ export default function SellerSetupScreen() {
     setName(localName);
     setLocality(localLocality);
     setCity(localCity);
-    
+
     // Choose next screen based on account type
     if (accountType === 'business') {
       router.replace('/(auth)/seller/business-setup' as any);
@@ -44,13 +45,13 @@ export default function SellerSetupScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar 
-        title="Set Up Profile" 
-        variant="light" 
-        onBack={() => router.replace('/(auth)/seller/account-type' as any)} 
+      <NavBar
+        title="Set Up Profile"
+        variant="light"
+        onBack={() => safeBack('/(auth)/seller/account-type')}
         rightAction={<Text variant="caption" color={colors.muted}>Step 2 of 3</Text>}
       />
-      
+
       <View style={styles.content}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.headerArea}>
@@ -70,7 +71,7 @@ export default function SellerSetupScreen() {
               onChangeText={setLocalName}
               autoCapitalize="words"
             />
-            
+
             <Input
               label="Locality/Area"
               placeholder="e.g. Kondapur"

@@ -14,6 +14,7 @@ Sortt
 │   │   ├── app
 │   │   │   ├── (aggregator) # Scrap dealer specific screens
 │   │   │   │   ├── _layout.tsx # Aggregator tab layout and navigation
+│   │   │   │   ├── active-order-detail.tsx # Post-acceptance view (Navigate/Cancel/Full Address)
 │   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
 │   │   │   │   ├── execution # Order Execution Flow
 │   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
@@ -21,7 +22,9 @@ Sortt
 │   │   │   │   │   ├── weighing.tsx # Material weighing and camera capture
 │   │   │   │   │   └── otp.tsx # Waiting for seller OTP confirmation
 │   │   │   │   ├── home.tsx # Nearby orders feed for dealers
-│   │   │   │   ├── orders.tsx # Ongoing and completed pickup management
+│   │   │   │   ├── order-detail.tsx # Pre-acceptance view (Accept/Reject/Locality)
+│   │   │   │   ├── order-history-detail.tsx # Redesigned history view (Paid/Ratings)
+│   │   │   │   ├── orders.tsx # Ongoing and completed pickup management (4-tab system)
 │   │   │   │   ├── profile.tsx # Dealer public profile and shop details
 │   │   │   │   └── route.tsx # Internal routing logic for aggregator flow
 │   │   │   ├── (auth) # Consolidated authentication flow

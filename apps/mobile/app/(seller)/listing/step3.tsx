@@ -9,20 +9,21 @@ import React, { useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Truck, Storefront } from 'phosphor-react-native';
+import { Truck, Storefront, MapPin, Calendar, ArrowRight } from 'phosphor-react-native';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
-import { Input } from '../../../components/ui/Input';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 import { useAuthStore } from '../../../store/authStore';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { safeBack } from '../../../utils/navigation';
 
 const TIMES = ['8–10 AM', '10–12 PM', '12–2 PM', '2–4 PM', '4–6 PM', 'Evening'];
+const DEFAULT_ADDRESS = 'Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034';
 
 export default function Step3Screen() {
   const {
@@ -30,12 +31,10 @@ export default function Step3Screen() {
     scheduledDate,
     scheduledTime,
     addressLine,
-    notes,
     setPickupType,
     setScheduledDate,
     setScheduledTime,
     setAddressLine,
-    setNotes,
   } = useListingStore();
 
   const locality = useAuthStore((s) => s.locality);
@@ -53,7 +52,7 @@ export default function Step3Screen() {
   // Pre-fill address if empty
   useEffect(() => {
     if (!addressLine && locality) {
-      setAddressLine('Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034'); // From HTML
+      setAddressLine(DEFAULT_ADDRESS);
     }
   }, [locality, addressLine, setAddressLine]);
 
@@ -66,7 +65,7 @@ export default function Step3Screen() {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <NavBar
         title="List Scrap"
-        onBack={() => router.back()}
+        onBack={() => safeBack('/(seller)/listing/step2')}
         rightAction={<Text variant="caption" style={{ color: colors.navy }}>Step 3 of 4</Text>}
       />
 
@@ -88,7 +87,7 @@ export default function Step3Screen() {
               <Text variant="label" style={{ color: pickupType === 'scheduled' ? colors.surface : colors.navy, marginTop: spacing.sm, textAlign: 'center' }}>
                 Pickup from my location
               </Text>
-              <Text variant="caption" style={{ color: pickupType === 'scheduled' ? 'rgba(255,255,255,0.7)' : colors.muted, marginTop: 2, textAlign: 'center' }}>
+              <Text variant="caption" style={{ color: pickupType === 'scheduled' ? colors.whiteAlpha70 : colors.muted, marginTop: 2, textAlign: 'center' }}>
                 Aggregator comes to you · Free
               </Text>
             </Pressable>
@@ -101,7 +100,7 @@ export default function Step3Screen() {
               <Text variant="label" style={{ color: pickupType === 'dropoff' ? colors.surface : colors.navy, marginTop: spacing.sm, textAlign: 'center' }}>
                 Drop-off at aggregator
               </Text>
-              <Text variant="caption" style={{ color: pickupType === 'dropoff' ? 'rgba(255,255,255,0.7)' : colors.muted, marginTop: 2, textAlign: 'center' }}>
+              <Text variant="caption" style={{ color: pickupType === 'dropoff' ? colors.whiteAlpha70 : colors.muted, marginTop: 2, textAlign: 'center' }}>
                 You bring the scrap · Higher rate
               </Text>
             </Pressable>
@@ -113,14 +112,14 @@ export default function Step3Screen() {
               <Text variant="subheading" style={styles.sectionTitle}>Pickup Address</Text>
               <TextInput
                 style={styles.addressArea}
-                value={addressLine || 'Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034'}
+                value={addressLine || DEFAULT_ADDRESS}
                 onChangeText={setAddressLine}
                 placeholder="Enter complete address"
                 multiline
               />
 
               <View style={styles.mapPlaceholder}>
-                <Text style={{ fontSize: 28 }}>📍</Text>
+                <MapPin size={32} color={colors.red} weight="fill" />
                 <Text variant="caption" color={colors.slate} style={styles.mapPinText}>Tap to adjust pin</Text>
               </View>
 
@@ -145,7 +144,7 @@ export default function Step3Screen() {
                     <Text variant="body" color={scheduledDate ? colors.navy : colors.muted}>
                       {scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Select Date'}
                     </Text>
-                    <Text>📅</Text>
+                    <Calendar size={20} color={colors.navy} />
                   </Pressable>
                   {showDatePicker && (
                     <DateTimePicker
@@ -189,7 +188,8 @@ export default function Step3Screen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label="Next →"
+            label="Next"
+            icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             disabled={!canProceed}
             onPress={() => router.push('/(seller)/listing/step4')}
           />

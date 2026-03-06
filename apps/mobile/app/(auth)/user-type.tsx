@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Recycle, Storefront, Info, Check } from 'phosphor-react-native';
+import { Recycle, Storefront, Info, Check, ArrowRight } from 'phosphor-react-native';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { useAuthStore } from '../../store/authStore';
+import { APP_NAME } from '../../constants/app';
 
 export default function UserTypeScreen() {
   const setUserType = useAuthStore((s) => s.setUserType);
@@ -31,7 +32,7 @@ export default function UserTypeScreen() {
       <View style={styles.content}>
         <View style={styles.header}>
           <Text variant="heading" style={styles.title}>I want to…</Text>
-          <Text variant="body" style={styles.subtitle}>Tell us how you'll use Sortt</Text>
+          <Text variant="body" style={styles.subtitle}>Tell us how you'll use {APP_NAME}</Text>
         </View>
 
         <View style={styles.cardsContainer}>
@@ -87,7 +88,8 @@ export default function UserTypeScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={selectedType === 'seller' ? "Continue as Seller →" : "Continue as Dealer →"}
+            label={selectedType === 'seller' ? "Continue as Seller" : "Continue as Dealer"}
+            icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             onPress={handleContinue}
           />
         </View>
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
   },
   typeCardSelected: {
     borderColor: colors.navy,
-    backgroundColor: 'rgba(28,46,74,0.03)',
+    backgroundColor: colors.navyAlpha3,
   },
   iconWrap: {
     width: 48,
@@ -161,7 +163,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   pill: {
-    backgroundColor: 'rgba(28,46,74,0.08)',
+    backgroundColor: colors.navyAlpha8,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 20,

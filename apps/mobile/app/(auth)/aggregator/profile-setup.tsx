@@ -10,6 +10,7 @@ import { ProgressBar } from '../../../components/ui/ProgressBar';
 import { DayToggle } from '../../../components/ui/DayToggle';
 import { colors, spacing } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { safeBack } from '../../../utils/navigation';
 
 /**
  * Aggregator Profile Setup — Step 1 of 3
@@ -29,7 +30,7 @@ export default function AggregatorProfileSetup() {
   };
 
   const handleBack = () => {
-    router.replace('/(auth)/user-type');
+    safeBack('/(auth)/phone');
   };
 
   const toggleDay = (day: string) => {
