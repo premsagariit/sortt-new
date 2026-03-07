@@ -7,18 +7,18 @@
  *
  * ── ARCHITECTURE ─────────────────────────────────────────────────
  * Each animated truck part is its own:
- *   <AnimatedView style={{ transform, opacity }}>
+ *   <Animated.View style={{ transform, opacity }}>
  *     <Svg>  ←  SVG primitives ONLY inside here
  *       <Rect /> <Circle /> etc.
  *     </Svg>
- *   </AnimatedView>
+ *   </Animated.View>
  *
- * NO AnimatedView is EVER placed inside an <Svg> element.
+ * NO Animated.View is EVER placed inside an <Svg> element.
  * react-native-svg only accepts SVG primitives as Svg children.
- * Mounting a View/AnimatedView inside Svg causes the Android
+ * Mounting a View/Animated.View inside Svg causes the Android
  * bridge crash: java.lang.String cannot be cast to java.lang.Boolean
  *
- * Wheel spin is a SEPARATE inner AnimatedView wrapping the wheel Svg.
+ * Wheel spin is a SEPARATE inner Animated.View wrapping the wheel Svg.
  * This separates the fly-in translate (outer) from the spin (inner),
  * preventing transform conflicts on the same animated value.
  *
@@ -83,7 +83,6 @@ import { APP_NAME } from '../constants/app';
 import { Text } from './ui/Typography';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const AnimatedView = Animated.createAnimatedComponent(View);
 
 // Truck group dimensions match HTML SVG viewBox "0 0 180 90"
 const TRUCK_W = 180;
@@ -153,9 +152,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
     // ║  .part-wheels-rear 0.72s                                 ║
     // ╚══════════════════════════════════════════════════════════╝
 
-    // Cab — from LEFT, delay 280ms
+    // Cab — from LEFT, delay 0ms (was 280ms)
     Animated.sequence([
-      Animated.delay(280),
+      Animated.delay(0),
       Animated.parallel([
         Animated.spring(cabX, {
           toValue: 0, damping: 12, stiffness: 180, useNativeDriver: true,
@@ -167,9 +166,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       ]),
     ]).start();
 
-    // Cargo — from RIGHT, delay 400ms
+    // Cargo — from RIGHT, delay 120ms (was 400ms)
     Animated.sequence([
-      Animated.delay(400),
+      Animated.delay(120),
       Animated.parallel([
         Animated.spring(cargoX, {
           toValue: 0, damping: 12, stiffness: 180, useNativeDriver: true,
@@ -181,9 +180,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       ]),
     ]).start();
 
-    // Chassis — from BELOW, delay 560ms
+    // Chassis — from BELOW, delay 280ms (was 560ms)
     Animated.sequence([
-      Animated.delay(560),
+      Animated.delay(280),
       Animated.parallel([
         Animated.spring(chassisY, {
           toValue: 0, damping: 14, stiffness: 200, useNativeDriver: true,
@@ -195,10 +194,10 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       ]),
     ]).start();
 
-    // Front wheel — diagonal BOTTOM-LEFT, delay 650ms
+    // Front wheel — diagonal BOTTOM-LEFT, delay 370ms (was 650ms)
     // HTML: cubic-bezier(0.34,1.56,0.64,1) = overshoot spring
     Animated.sequence([
-      Animated.delay(650),
+      Animated.delay(370),
       Animated.parallel([
         Animated.spring(wFrontX, {
           toValue: 0, damping: 9, stiffness: 220, useNativeDriver: true,
@@ -213,9 +212,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       ]),
     ]).start();
 
-    // Rear wheels — diagonal BOTTOM-RIGHT, delay 720ms
+    // Rear wheels — diagonal BOTTOM-RIGHT, delay 440ms (was 720ms)
     Animated.sequence([
-      Animated.delay(720),
+      Animated.delay(440),
       Animated.parallel([
         Animated.spring(wRearX, {
           toValue: 0, damping: 9, stiffness: 220, useNativeDriver: true,
@@ -236,9 +235,9 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
     // ║  HTML ref: .scrap-item-1 @ 1.22s, -2 @ 1.44s, -3 @1.66s║
     // ╚══════════════════════════════════════════════════════════╝
     const scrapData = [
-      { y: scrap1Y, op: scrap1Op, delay: 1220, damping: 7 },
-      { y: scrap2Y, op: scrap2Op, delay: 1440, damping: 7 },
-      { y: scrap3Y, op: scrap3Op, delay: 1660, damping: 5 }, // fridge heavier = more bounce
+      { y: scrap1Y, op: scrap1Op, delay: 940, damping: 7 }, // was 1220
+      { y: scrap2Y, op: scrap2Op, delay: 1160, damping: 7 }, // was 1440
+      { y: scrap3Y, op: scrap3Op, delay: 1380, damping: 5 }, // fridge heavier, was 1660
     ];
 
     scrapData.forEach(({ y, op, delay, damping }) => {
@@ -295,7 +294,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             useNativeDriver: true,
           })
         ).start();
-      }, 2000)
+      }, 1720) // was 2000
     );
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -316,7 +315,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             useNativeDriver: true,
           }),
         ]).start();
-      }, 2300)
+      }, 2020) // was 2300
     );
 
     // Tagline fades in (t=2750ms), underline draws (t=2850ms)
@@ -333,7 +332,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             useNativeDriver: true,
           }),
         ]).start();
-      }, 2750)
+      }, 2470) // was 2750
     );
 
     timers.push(
@@ -344,7 +343,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           toValue: 1, duration: 300, easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start();
-      }, 2850)
+      }, 2570) // was 2850
     );
 
     // Loading bar (t=3100ms appear, t=3200ms fill over 850ms)
@@ -355,7 +354,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           toValue: 1, duration: 300, easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start();
-      }, 3100)
+      }, 2820) // was 3100
     );
 
     timers.push(
@@ -366,7 +365,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           toValue: 1, duration: 850, easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start();
-      }, 3200)
+      }, 2920) // was 3200
     );
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -383,7 +382,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         }).start(({ finished }) => {
           if (finished) onComplete();
         });
-      }, 4200)
+      }, 3920) // was 4200
     );
 
     // ── Cleanup ────────────────────────────────────────────────
@@ -406,12 +405,12 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
       {/* ════════════════════════════════════════════════════════════
           TRUCK GROUP
           ──────────────────────────────────────────────────────────
-          Plain AnimatedView — NOT Svg.
+          Plain Animated.View — NOT Svg.
           All children (parts, scrap items) are absolutely positioned
           inside the 180×90 bounding box that mirrors the HTML SVG.
           In Phase 3, this entire group translates left and exits.
           ════════════════════════════════════════════════════════════ */}
-      <AnimatedView style={[
+      <Animated.View style={[
         styles.truckGroup,
         { transform: [{ translateX: truckGroupX }] },
       ]}>
@@ -420,7 +419,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             HTML: <g class="part-chassis"> rect x=14 y=59 w=152 h=8
             Local SVG: (14,59) → origin, size 152×9
             #0A1520 — chassis shadow, darker than navy — token exception */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.partChassis,
           {
             opacity: chassisOp,
@@ -434,13 +433,13 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             <Line x1={4} y1={3} x2={148} y2={3}
               stroke="white" strokeWidth={0.8} opacity={0.07} />
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── CARGO BED — slides from RIGHT ──────────────────────
             HTML: <g class="part-cargo"> rect x=54 y=12 w=110 h=52
             Local SVG: (54,12) → origin, size 110×56 (incl bottom rail)
             fill #1A6B63 (teal) per HTML */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.partCargo,
           {
             opacity: cargoOpacity,
@@ -464,14 +463,14 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             <Rect x={0} y={48} width={110} height={4} rx={2}
               fill="#155952" opacity={0.7} />
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── SCRAP ITEM 1 — Newspaper bundle ────────────────────
             HTML: <g class="scrap-item-1"> x=60–83, y=22–57
             Local SVG: (60,22) → origin, size 24×36
             Layered newspaper sheets in amber-brown tones.
             translateY: -420 → 0 (falls from off-screen above)      */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.scrapNewspaper,
           {
             opacity: scrap1Op,
@@ -502,13 +501,13 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
               fill="white" opacity={0.88}
             >NP</SvgText>
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── SCRAP ITEM 2 — Iron rods bundle ────────────────────
             HTML: <g class="scrap-item-2"> x=89–118, y=15–58
             Local SVG: (89,15) → origin, size 28×46
             5 silver-slate vertical rods with amber binding band   */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.scrapRods,
           {
             opacity: scrap2Op,
@@ -538,14 +537,14 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
               fill="white" opacity={0.88}
             >Fe</SvgText>
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── SCRAP ITEM 3 — Old fridge ───────────────────────────
             HTML: <g class="scrap-item-3"> x=122–153, y=12–64
             Local SVG: (122,12) → origin, size 32×54
             Grey appliance with divider, handles, dent, rust.
             Heaviest item — damping 5 gives biggest landing bounce  */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.scrapFridge,
           {
             opacity: scrap3Op,
@@ -575,13 +574,13 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
               fill="white" opacity={0.72}
             >FR</SvgText>
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── CAB — slides from LEFT ──────────────────────────────
             HTML: <g class="part-cab"> rect x=18 y=20 w=36 h=44
             Local SVG: (18,20) → origin, size 40×50
             White cab, dark windscreen, amber headlight, junction shadow */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.partCab,
           {
             opacity: cabOpacity,
@@ -611,16 +610,16 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             <Rect x={34} y={0} width={4} height={44}
               fill="#0A1520" opacity={0.12} />
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* ── FRONT WHEEL — diagonal from BOTTOM-LEFT ────────────
             HTML: <g class="part-wheel-front"> cx=30 cy=70 r=13
             Local SVG: origin at (30-14, 70-14) = (16, 56) in truck group
-            Fly-in: outer AnimatedView handles translate
-            Spin:   inner AnimatedView handles rotate
+            Fly-in: outer Animated.View handles translate
+            Spin:   inner Animated.View handles rotate
             This separation prevents transform array conflicts.
             HTML wheel colors: #0D1620 outer, #1A2B3E ring, #8E9BAA hub */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.wheelFront,
           {
             opacity: wFrontOp,
@@ -628,7 +627,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           },
         ]}>
           {/* Inner spin wrapper — rotates independently from fly-in */}
-          <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
+          <Animated.View style={{ transform: [{ rotate: wheelRotateDeg }] }}>
             <Svg width={28} height={28} viewBox="0 0 28 28">
               {/* #0D1620 outer ring — token exception (near-black) */}
               <Circle cx={14} cy={14} r={13} fill="#0D1620" />
@@ -647,17 +646,17 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
               <Line x1={23} y1={14} x2={27} y2={14}
                 stroke="#5C6B7A" strokeWidth={1.5} opacity={0.55} />
             </Svg>
-          </AnimatedView>
-        </AnimatedView>
+          </Animated.View>
+        </Animated.View>
 
         {/* ── REAR WHEELS — diagonal from BOTTOM-RIGHT ───────────
             HTML: <g class="part-wheels-rear"> 3 wheels, cy=70, cx=92/130/150
             Group origin: left=79 (cx92-r13), top=57 (cy70-r13)
-            Each wheel is an independent AnimatedView for correct
+            Each wheel is an independent Animated.View for correct
             per-wheel rotation (each rotates around its own center).
             All three share the same wheelRotateDeg value.
             Wheel colors: #155952 outer, #1A6B63 inner, #0D4E47 hub */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.wheelRearGroup,
           {
             opacity: wRearOp,
@@ -665,8 +664,8 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           },
         ]}>
           {/* W2: cx=92 → group-local left=0  (92-13-79=0) */}
-          <AnimatedView style={[styles.rearWheel, { left: 0 }]}>
-            <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
+          <Animated.View style={[styles.rearWheel, { left: 0 }]}>
+            <Animated.View style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
                 {/* #155952 token exception */}
                 <Circle cx={14} cy={14} r={13} fill="#155952" />
@@ -682,12 +681,12 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
               </Svg>
-            </AnimatedView>
-          </AnimatedView>
+            </Animated.View>
+          </Animated.View>
 
           {/* W3: cx=130 → group-local left=38  (130-13-79=38) */}
-          <AnimatedView style={[styles.rearWheel, { left: 38 }]}>
-            <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
+          <Animated.View style={[styles.rearWheel, { left: 38 }]}>
+            <Animated.View style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
                 <Circle cx={14} cy={14} r={13} fill="#155952" />
                 <Circle cx={14} cy={14} r={9} fill="#1A6B63" />
@@ -702,12 +701,12 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
               </Svg>
-            </AnimatedView>
-          </AnimatedView>
+            </Animated.View>
+          </Animated.View>
 
           {/* W4: cx=150 → group-local left=58  (150-13-79=58) */}
-          <AnimatedView style={[styles.rearWheel, { left: 58 }]}>
-            <AnimatedView style={{ transform: [{ rotate: wheelRotateDeg }] }}>
+          <Animated.View style={[styles.rearWheel, { left: 58 }]}>
+            <Animated.View style={{ transform: [{ rotate: wheelRotateDeg }] }}>
               <Svg width={28} height={28} viewBox="0 0 28 28">
                 <Circle cx={14} cy={14} r={13} fill="#155952" />
                 <Circle cx={14} cy={14} r={9} fill="#1A6B63" />
@@ -722,16 +721,16 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
                 <Line x1={23} y1={14} x2={27} y2={14}
                   stroke="#1A6B63" strokeWidth={1.5} opacity={0.65} />
               </Svg>
-            </AnimatedView>
-          </AnimatedView>
-        </AnimatedView>
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
 
         {/* ── MOTION LINES — visible only when truck is driving ───
             HTML: <g class="motion-lines"> 4 amber lines left of cab
             Positioned at global x=1–14, y=30–59 → local left=1, top=30
             Opacity: 0 → 1 at t=2000ms. Moves with truckGroup.
             HTML: motion-lines-drive 0.25s ease-out               */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.motionLines,
           { opacity: motionLinesOp },
         ]}>
@@ -749,7 +748,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             <Line x1={1} y1={29} x2={8} y2={29}
               stroke="#B7791F" strokeWidth={1.5} strokeLinecap="round" opacity={0.35} />
           </Svg>
-        </AnimatedView>
+        </Animated.View>
 
         {/* Ground shadow — static, subtle white line at y=85 in 90px group */}
         <Svg style={styles.groundShadow} width={180} height={2} viewBox="0 0 180 2">
@@ -757,7 +756,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
             stroke="white" strokeWidth={1} opacity={0.07} />
         </Svg>
 
-      </AnimatedView>
+      </Animated.View>
       {/* ── END TRUCK GROUP ───────────────────────────────────── */}
 
       {/* ════════════════════════════════════════════════════════════
@@ -768,7 +767,7 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           (underline scaleX, tagline translateY+opacity).
           HTML ref: .wordmark-group, wordmark-rise 0.48s @ 2.3s
           ════════════════════════════════════════════════════════════ */}
-      <AnimatedView style={[
+      <Animated.View style={[
         styles.wordmarkGroup,
         {
           opacity: wordmarkOp,
@@ -784,22 +783,22 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
         {/* Amber underline — scaleX 0→1 at t=2850ms
             HTML: .splash-name::after — 24px wide, 3px tall, amber
             RN scales from center (acceptable for 24px element)     */}
-        <AnimatedView style={[
+        <Animated.View style={[
           styles.underline,
           { transform: [{ scaleX: underlineScale }] },
         ]} />
 
         {/* Tagline — rises and fades at t=2750ms
             HTML: .splash-tagline tagline-fade 0.35s @ 2.75s        */}
-        <AnimatedView style={{
+        <Animated.View style={{
           opacity: taglineOp,
           transform: [{ translateY: taglineY }],
         }}>
           <Text variant="caption" style={styles.tagline}>
             {"INDIA'S SCRAP MARKETPLACE"}
           </Text>
-        </AnimatedView>
-      </AnimatedView>
+        </Animated.View>
+      </Animated.View>
 
       {/* ════════════════════════════════════════════════════════════
           LOADING BAR
@@ -809,12 +808,12 @@ export default function SplashAnimation({ onComplete }: SplashAnimationProps) {
           overflow:hidden on track makes scaleX look like left→right fill.
           HTML ref: .splash-loader, loader-appear + loader-fill
           ════════════════════════════════════════════════════════════ */}
-      <AnimatedView style={[styles.loaderTrack, { opacity: loaderOp }]}>
-        <AnimatedView style={[
+      <Animated.View style={[styles.loaderTrack, { opacity: loaderOp }]}>
+        <Animated.View style={[
           styles.loaderFill,
           { transform: [{ scaleX: loaderScale }] },
         ]} />
-      </AnimatedView>
+      </Animated.View>
 
     </Animated.View>
   );

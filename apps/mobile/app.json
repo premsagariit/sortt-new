@@ -1,12 +1,15 @@
 {
   "expo": {
     "name": "Sortt",
-    "slug": "sortt",
+    "slug": "sortt-mobile",
     "scheme": "sortt",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/images/icon.png",
     "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "cover",
       "backgroundColor": "#1C2E4A"
     },
     "ios": {
@@ -17,8 +20,10 @@
       }
     },
     "android": {
+      "package": "com.sagar.sortt",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#1C2E4A"
       },
       "permissions": [
         "CAMERA",
@@ -41,6 +46,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "90966a13-507b-4386-9e20-4d7e18fdb9da"
+      }
     }
   }
 }

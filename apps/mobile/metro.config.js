@@ -20,7 +20,7 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 const config = getDefaultConfig(projectRoot);
 
 // ── Monorepo: watch the workspace root so Metro can resolve shared packages ──
-config.watchFolders = [workspaceRoot];
+config.watchFolders = [...(config.watchFolders || []), workspaceRoot];
 
 // ── Resolver: look up modules from the workspace root first ──
 config.resolver.nodeModulesPaths = [

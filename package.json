@@ -18,6 +18,13 @@
   "license": "ISC",
   "packageManager": "pnpm@10.30.3",
   "devDependencies": {
-    "@types/node": "^25.3.3"
+    "@types/node": "^25.3.3",
+    "expo": "~54.0.33"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "19.1.0",
+      "react-dom": "19.1.0"
+    }
   }
 }

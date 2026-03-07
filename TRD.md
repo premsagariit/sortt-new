@@ -173,6 +173,7 @@ Client Apps (Mobile / Web)
 - Offline fallback: Expo Push notification sent when recipient is not subscribed (app backgrounded). Express backend publishes to Ably and also dispatches push in the same message-insert handler.
 - Chat history permanently retained per order. Accessible only to the two parties and admin.
 - **Phone number filter:** All messages pass through server-side regex `/(?:\+91|0)?[6-9]\d{9}/g` before Ably broadcast, replacing detected numbers with `[phone number removed]` (V26).
+- **Filter storage rule (V26-DB):** The phone number regex filter is applied BEFORE both DB insert AND Ably broadcast. The value stored in `messages.content` is the already-filtered version. The raw original is never persisted. This ensures admin dispute review reads the same filtered content as users.
 
 ### 3.4 Authentication Flow (Clerk + WhatsApp OTP)
 
@@ -204,6 +205,13 @@ Client Apps (Mobile / Web)
    Express middleware calls Clerk SDK to verify JWT on every protected route
 ```
 
+> ⚠️ **MOBILE AUTH SCREEN NOTE (Fix 9 — Day 8 landmine):** The `(auth)/otp.tsx` screen in the mobile app was scaffolded with Clerk's native OTP flow (`useSignIn()` from `@clerk/clerk-expo`). This is **incorrect** for the WhatsApp OTP architecture. The screen must be **rewritten in Day 8** to:
+> 1. Submit the OTP to `POST /api/auth/verify-otp` (not Clerk's native SDK)
+> 2. Receive the Clerk JWT from the Express response
+> 3. Use Clerk's Expo SDK to set the session token programmatically (not via Clerk's own OTP flow)
+>
+> The Clerk Expo SDK stores the JWT in secure storage — **not** AsyncStorage directly. `// REWRITE REQUIRED` comments must be placed at the top of `(auth)/otp.tsx` by Day 8.
+
 ---
 
 ## 4. Custom Backend — Node.js / Express on Azure App Service
@@ -215,19 +223,33 @@ Client Apps (Mobile / Web)
 | `POST /api/auth/request-otp` | Rate limit only | Generate OTP → store in Redis → call Meta WhatsApp API |
 | `POST /api/auth/verify-otp` | Rate limit only | Verify OTP HMAC from Redis → create Clerk session → return JWT |
 | `POST /api/orders` | Clerk JWT | Create order, geocode, city_code lookup, broadcast push |
+| `GET /api/orders` | Clerk JWT | List orders. Query param: `?role=seller` or `?role=aggregator`. Paginated. |
 | `GET /api/orders/:id` | Clerk JWT | Order detail with two-phase address reveal (V25) |
 | `PATCH /api/orders/:id/status` | Clerk JWT | Status transitions — `completed`/`disputed` blocklisted (V13) |
+| `DELETE /api/orders/:id` | Clerk JWT (seller only) | Soft delete: sets `deleted_at=NOW()`, `status='cancelled'`. Blocked if `status` is `completed` or `disputed` → 400. |
 | `POST /api/orders/:id/accept` | Clerk JWT | First-accept-wins PostgreSQL transaction (replaces Edge Function) |
 | `POST /api/orders/:id/verify-otp` | Clerk JWT | OTP validation + order completion in single transaction (replaces Edge Function) |
 | `POST /api/orders/:id/media` | Clerk JWT | Upload photo, strip EXIF via sharp (V18), trigger OTP on scale photo |
 | `GET /api/orders/:id/media/:mediaId/url` | Clerk JWT | Generate expiring signed URL after ownership check (D1) |
+| `GET /api/orders/:id/invoice` | Clerk JWT (seller only) | Returns signed URL for invoice PDF. Validates `order.seller_id = req.user.id`. |
 | `POST /api/scrap/analyze` | Clerk JWT | Image hash dedup → Gemini Vision → schema-validate → UI hint only (I1) |
 | `GET /api/aggregators/nearby` | Clerk JWT | city_code + material filter query, server-derived (V21 equivalent) |
-| `PATCH /api/aggregators/profile` | Clerk JWT | Explicit field allowlist — `kyc_status` blocklisted (V35) |
+| `GET /api/aggregators/me` | Clerk JWT (aggregator only) | Returns the authenticated aggregator's own profile. |
+| `PATCH /api/aggregators/profile` | Clerk JWT (aggregator only) | Allowlist: `business_name`, `operating_hours JSONB`, `operating_area_text`. Blocklist: `kyc_status`, `city_code`, `user_id`, `clerk_user_id`. Returns 400 if blocked fields present. |
+| `GET /api/aggregators/:id` | Clerk JWT | **Public fields only.** Returns: `business_name`, `avg_rating`, `total_orders`, `materials` handled, `operating_area_text`, `member_since`. Excludes: `phone_hash`, `clerk_user_id`, KYC documents, exact address. |
+| `GET /api/aggregators/earnings` | Clerk JWT (aggregator only) | Query param: `period=today\|week\|month`. Returns: `total_earned NUMERIC`, `orders_completed INT`, `avg_rating NUMERIC`. Computed server-side from completed orders — never client-computed. |
 | `POST /api/aggregators/heartbeat` | Clerk JWT | Update `last_ping_at` (C2) |
-| `POST /api/messages` | Clerk JWT | Phone number regex filter before DB insert and Ably publish (V26) |
+| `GET /api/realtime/token` | Clerk JWT | Issues a short-lived Ably Token Auth token scoped to the authenticated user's permitted channels. `ABLY_API_KEY` is backend-only — mobile never receives the raw key. |
+| `GET /api/notifications` | Clerk JWT | Returns paginated notification rows for the authenticated user, ordered by `created_at DESC`. Query param: `?unread_only=true`. |
+| `PATCH /api/notifications/:id/read` | Clerk JWT (self only) | Sets `read_at = NOW()` on a notification owned by the authenticated user. |
+| `POST /api/messages` | Clerk JWT | Phone number regex filter applied BEFORE DB insert and Ably publish (V26, V26-DB) |
+| `GET /api/messages/:orderId` | Clerk JWT (order party only) | Returns paginated chat history for an order. |
 | `POST /api/ratings` | Clerk JWT | Only callable within 24hrs of completion |
-| `POST /api/disputes` | Clerk JWT | Creates dispute + sets `status='disputed'` atomically |
+| `POST /api/disputes` | Clerk JWT (order party only) | Body: `{ order_id, issue_type, description, order_item_id? }`. Atomically sets `order.status = 'disputed'`. Returns 409 if order already has an open dispute. |
+| `GET /api/disputes/:id` | Clerk JWT (order party or admin) | Returns dispute detail including evidence list. |
+| `POST /api/disputes/:id/evidence` | Clerk JWT (order party only) | Multipart file upload. EXIF stripped via `sharp` before storage. Stored via `IStorageProvider`. |
+| `PATCH /api/sellers/profile` | Clerk JWT (seller only) | Allowlist: `name`, `locality`, `gstin`, `business_name`, `recurring_schedule`. Blocklist: `user_type`, `city_code`, `clerk_user_id`. |
+| `GET /api/sellers/earnings` | Clerk JWT (seller only) | Returns seller transaction history. Query params: `period=today\|week\|month`, `page`, `limit`. Returns paginated list of completed orders with `total_amount`, `material_breakdown`, `completed_at`. |
 | `GET /api/rates` | Public | `current_price_index` view with Cache-Control + ETag (V17) |
 | `GET /api/admin/*` | Clerk JWT + DB role check | Admin operations only — DB-verified `user_type=admin` (V12) |
 
@@ -536,6 +558,41 @@ Monitor Ably connection count in the Ably Dashboard. Free tier provides 200 conc
 | App background → foreground channel re-establishment | < 2 seconds |
 | WebSocket connection budget per active screen | Max 1 channel |
 
+### 6.5 Ably Mobile Key Strategy — Token Auth (Fix 11)
+
+> **Security rule:** `ABLY_API_KEY` is backend-only — it must NEVER appear in the mobile bundle or in any client-side environment variable.
+
+Mobile clients use **Ably Token Auth** exclusively:
+
+1. Mobile calls `GET /api/realtime/token` with a valid Clerk JWT
+2. Express backend generates a short-lived Ably token using `ABLY_API_KEY` (backend-only)
+3. The token is scoped to only the channels the authenticated user is permitted to access
+4. Mobile initialises `Ably.Realtime({ authUrl: '/api/realtime/token', authHeaders: { Authorization: bearerToken } })`
+5. Ably SDK auto-refreshes the token before expiry via the `authUrl`
+
+```typescript
+// GET /api/realtime/token — backend implementation
+import Ably from 'ably/promises';
+
+app.get('/api/realtime/token', clerkJwtMiddleware, async (req, res) => {
+  const rest = new Ably.Rest({ key: process.env.ABLY_API_KEY });
+  const userId = req.user.id;
+
+  const tokenRequest = await rest.auth.createTokenRequest({
+    clientId: userId,
+    capability: {
+      [`order:*:${userId}`]: ['subscribe'],      // Only channels for this user
+      [`order:*:chat:*`]:   ['subscribe', 'publish'],
+    },
+    ttl: 3600 * 1000,  // 1-hour TTL
+  });
+
+  return res.json(tokenRequest);
+});
+```
+
+> ⚠️ **`NEXT_PUBLIC_ABLY_KEY` is DEPRECATED for mobile.** If it appears in any `.env` file for the mobile app, remove it. The web portal (Next.js) may use a restricted read-only Ably key if server-side token auth is not feasible, but this must be reviewed before Day 16.
+
 ---
 
 ## 7. Location Services — Simplified City/Locality Matching
@@ -574,10 +631,16 @@ All geocoding calls (address → city_code + locality) go through the `IMapProvi
 
 ```typescript
 // packages/maps/src/IMapProvider.ts
+// IMPORTANT (Fix 12): IMapProvider is a DATA/GEOCODING abstraction only.
+// It is NOT a React component factory. The map component in the mobile app
+// renders maps independently and consumes geocoding DATA from this interface.
+// Backend packages may safely depend on this interface without importing React.
 export interface IMapProvider {
   geocode(address: string): Promise<{ city_code: string; locality: string; display_address: string }>;
   reverseGeocode(lat: number, lng: number): Promise<string>;
-  renderMap(props: MapRenderProps): React.ReactElement; // Display only — not for matching
+  // NOTE: renderMap() has been REMOVED from this interface.
+  // Map rendering is handled by the mobile app's MapView component, which uses
+  // geocoded coordinates returned by this interface — not React elements.
 }
 ```
 
@@ -595,6 +658,10 @@ export interface IMapProvider {
 All tables in Azure PostgreSQL Flexible Server B1ms (Central India — Pune). `uuid-ossp` for UUID primary keys. `pgcrypto` for phone number encryption. All tables have Row Level Security enabled.
 
 > **RLS + Clerk JWT Pattern:** Since this architecture does not use Supabase Auth, `auth.uid()` is not available. Instead, the Express backend sets `SET LOCAL app.current_user_id = $userId` on each connection before executing queries. RLS policies use `current_app_user_id()` — a custom helper function — to enforce row-level ownership.
+
+### 8.0 Helper Functions (migration 0002 — must be first object created)
+
+> **MIGRATION ORDER CONSTRAINT:** `current_app_user_id()` MUST be created at the very top of `0002_rls_policies.sql` before any `CREATE POLICY` statement. Every single RLS policy depends on this function.
 
 ```sql
 -- Helper function: reads user ID set by Express backend per request
@@ -621,8 +688,11 @@ CREATE TABLE users (
 );
 
 -- Safe view — phone_hash and clerk_user_id are NEVER returned via this view (V24)
+-- Included columns: id, name, phone_last4, user_type, is_active, preferred_language, created_at
+-- Explicitly EXCLUDED: phone_hash, clerk_user_id (PII/auth identifiers)
+-- Target migration: 0002_rls_policies.sql (after users table exists)
 CREATE VIEW users_public AS
-  SELECT id, name, phone_last4, user_type, preferred_language, created_at
+  SELECT id, name, phone_last4, user_type, is_active, preferred_language, created_at
   FROM users;
 
 -- Cities reference table (required before city 2 launch)
@@ -638,12 +708,24 @@ CREATE TABLE cities (
 INSERT INTO cities VALUES ('HYD','Hyderabad','Telangana',DEFAULT,DEFAULT,true,NOW());
 
 -- Seller profiles
+-- recurring_schedule Canonical JSON Shape:
+-- {
+--   "frequency": "weekly" | "biweekly" | "monthly",
+--   "days": ["Mon", "Wed", "Fri"],           -- 3-letter abbreviated days
+--   "preferred_time_start": "09:00",          -- ISO 8601 24h local time
+--   "preferred_time_end": "12:00",
+--   "active": true                             -- false = paused without deletion
+-- }
 CREATE TABLE seller_profiles (
-  user_id         UUID PRIMARY KEY REFERENCES users(id),
-  profile_type    TEXT NOT NULL CHECK (profile_type IN ('individual','business')),
-  locality        TEXT,
-  city_code       TEXT REFERENCES cities(code)
+  user_id              UUID PRIMARY KEY REFERENCES users(id),
+  profile_type         TEXT NOT NULL CHECK (profile_type IN ('individual','business')),
+  business_name        TEXT,                              -- Business Mode only (R1)
+  gstin                TEXT CHECK (char_length(gstin) = 15 OR gstin IS NULL),  -- GST number — optional
+  locality             TEXT,
+  city_code            TEXT REFERENCES cities(code),
+  recurring_schedule   JSONB                             -- Canonical shape defined above
 );
+-- NOTE: preferred_language is on users table. referral_code is POST-MVP — do not add to schema during Days 4-17.
 
 -- Aggregator profiles (no GEOGRAPHY column — city_code used for matching)
 CREATE TABLE aggregator_profiles (
@@ -677,13 +759,16 @@ CREATE TABLE material_types (
 );
 
 -- Aggregator material rates
+-- DEPENDENCY: must exist BEFORE migration 0002_rls_policies.sql (referenced by aggregator_city_orders RLS policy)
 CREATE TABLE aggregator_material_rates (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   aggregator_id   UUID NOT NULL REFERENCES users(id),
   material_code   TEXT NOT NULL REFERENCES material_types(code),
-  rate_per_kg     NUMERIC NOT NULL,
+  rate_per_kg     NUMERIC NOT NULL CHECK (rate_per_kg > 0),
   updated_at      TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (aggregator_id, material_code)
+  UNIQUE (aggregator_id, material_code)
 );
+ALTER TABLE aggregator_material_rates ENABLE ROW LEVEL SECURITY;
 
 -- Orders (no GEOGRAPHY column — city_code + locality used for matching)
 CREATE TABLE orders (
@@ -793,6 +878,7 @@ CREATE TABLE ratings (
 CREATE TABLE disputes (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   order_id        UUID NOT NULL REFERENCES orders(id),
+  order_item_id   UUID REFERENCES order_items(id),   -- Optional: links dispute to specific line item (Fix 5)
   raised_by       UUID NOT NULL REFERENCES users(id),
   issue_type      TEXT NOT NULL CHECK (issue_type IN
                     ('wrong_weight','payment_not_made','no_show','abusive_behaviour','other')),
@@ -857,6 +943,25 @@ CREATE TABLE admin_audit_log (
   metadata      JSONB,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Notifications (persistent notification history for notification screen)
+-- Target migration: 0001_initial_schema.sql
+CREATE TABLE notifications (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID NOT NULL REFERENCES users(id),
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  data       JSONB DEFAULT '{}',   -- non-PII payload: { order_id, event_type }
+  read_at    TIMESTAMPTZ,          -- NULL = unread
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+-- RLS: users can only read/update their own notifications
+CREATE POLICY notifications_self_read ON notifications
+  FOR SELECT USING (current_app_user_id() = user_id);
+CREATE POLICY notifications_self_update ON notifications
+  FOR UPDATE USING (current_app_user_id() = user_id);
+-- Backend inserts notifications as a privileged operation (using SECURITY DEFINER or bypassing RLS via SET LOCAL)
 ```
 
 ### 8.2 Row Level Security Policies
@@ -1014,35 +1119,60 @@ CREATE INDEX idx_status_history_order_id ON order_status_history (order_id, crea
 ```typescript
 // backend/src/scheduler.ts
 import cron from 'node-cron';
+import * as Sentry from '@sentry/node';
+
+// RULE (Fix 14): ALL cron callbacks must be wrapped in try/catch.
+// On failure: capture exception to Sentry with job name + timestamp.
+// Never let a cron failure propagate to the Express process (no unhandled rejections).
 
 // Aggregator online culling — every 5 minutes (C2)
 cron.schedule('*/5 * * * *', async () => {
-  await db.query(
-    `UPDATE aggregator_availability SET is_online = false
-     WHERE last_ping_at < NOW() - INTERVAL '5 minutes' AND is_online = true`
-  );
+  try {
+    await db.query(
+      `UPDATE aggregator_availability SET is_online = false
+       WHERE last_ping_at < NOW() - INTERVAL '5 minutes' AND is_online = true`
+    );
+  } catch (err) {
+    Sentry.captureException(err, { tags: { cron_job: 'aggregator_online_culling', ran_at: new Date().toISOString() } });
+  }
 });
 
 // Aggregator rating stats refresh — every 15 minutes
 cron.schedule('*/15 * * * *', async () => {
-  await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY aggregator_rating_stats');
+  try {
+    await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY aggregator_rating_stats');
+  } catch (err) {
+    Sentry.captureException(err, { tags: { cron_job: 'rating_stats_refresh', ran_at: new Date().toISOString() } });
+  }
 });
 
 // Price index cache refresh — daily at 06:00 IST (00:30 UTC)
 cron.schedule('30 0 * * *', async () => {
-  await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index');
+  try {
+    await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index');
+  } catch (err) {
+    Sentry.captureException(err, { tags: { cron_job: 'price_index_refresh', ran_at: new Date().toISOString() } });
+  }
 });
 
 // OTP log cleanup — nightly at 02:00 UTC (retains 7 days for dispute evidence)
 cron.schedule('0 2 * * *', async () => {
-  await db.query(
-    `DELETE FROM otp_log WHERE expires_at < NOW() - INTERVAL '7 days'`
-  );
+  try {
+    await db.query(
+      `DELETE FROM otp_log WHERE expires_at < NOW() - INTERVAL '7 days'`
+    );
+  } catch (err) {
+    Sentry.captureException(err, { tags: { cron_job: 'otp_log_cleanup', ran_at: new Date().toISOString() } });
+  }
 });
 
 // Message partition pre-creation — 25th of each month at 01:00 UTC
 cron.schedule('0 1 25 * *', async () => {
-  await createNextMonthMessagePartition();
+  try {
+    await createNextMonthMessagePartition();
+  } catch (err) {
+    Sentry.captureException(err, { tags: { cron_job: 'message_partition_creation', ran_at: new Date().toISOString() } });
+  }
 });
 ```
 
@@ -1153,18 +1283,25 @@ These rules apply to every agent in every session:
 
 ### 11.2 Build Sequence & Day Ownership
 
+> ⚠️ **PLAN.md is authoritative on sequencing** (per MEMORY.md document hierarchy). This table is a summary only. Use PLAN.md for the exact task list, verification gates, and estimated times for each day.
+
 | Day | Domain | Primary Technologies |
 |---|---|---|
-| 1 | Foundation + Design System | pnpm monorepo, `tokens.ts`, `app.ts`, UI component library |
-| 2 | Auth UI + All Seller Screens (static) | React Native, Expo Router, Zustand |
-| 3 | Aggregator UI + Web Portal Shell (static) | React Native, Next.js 15, Tailwind |
-| 4 | Database Schema, RLS, Azure PostgreSQL | PostgreSQL, pgcrypto, RLS, migration files |
-| 5 | Backend Foundation + Live Auth | Express, Helmet, Upstash Redis, Clerk JWT, WhatsApp OTP direct |
-| 6 | Core API Routes + DB Integration | Express routes, PostgreSQL, IMapProvider, all flows wired |
-| 7 | Atomic Operations + Realtime + Push | accept-order route, verify-otp route, Ably channels, Expo Push |
-| 8 | AI + Invoice + Provider Abstractions | Gemini Vision, pdf-lib, all 5 `packages/` interfaces |
-| 9 | Web Portal + Admin + Testing | Next.js dashboards, Admin panel, Jest tests, CI/CD |
-| 10 | Security Audit + Monitoring + Launch | All TRD §13 items verified, Sentry, PostHog, EAS build |
+| 1–3 | UI Foundation (all screens, static data) | React Native, Expo Router, Zustand, Next.js 15, Design System |
+| 4 | Database schema (PostgreSQL) — initial tables + extensions | `uuid-ossp`, `pgcrypto`, migrations 0001–0003 |
+| 5 | RLS policies + triggers + indexes + materialized views | PostgreSQL RLS, functions, 0002–0006 migrations |
+| 6 | Express backend foundation + auth wiring (WhatsApp OTP) | Express, Clerk JWT, Upstash Redis, Meta WhatsApp API |
+| 7 | Core API routes — orders, profiles, rates, push dispatch | pg pool, Expo push, auth middleware, node-cron setup |
+| 8 | Atomic operations — first-accept-wins, OTP verify, media | `FOR UPDATE SKIP LOCKED`, Uploadthing, sharp EXIF strip |
+| 9 | Realtime (Ably token auth), chat, notifications | IRealtimeProvider, token auth endpoint, notifications API |
+| 10 | Disputes system, ratings, order lifecycle completion | disputes/evidence routes, 24hr rating window, status machine |
+| 11 | AI scrap analysis (Gemini Vision), invoice PDF generation | `IAnalysisProvider`, Gemini Flash, pdf-lib, GST format |
+| 12 | Mobile auth wiring — `otp.tsx` rewrite (WhatsApp flow) | Clerk Expo SDK, `POST /api/auth/*` integration |
+| 13 | Provider abstraction swap tests (Ola Maps, Soketi) | `IMapProvider`, `IRealtimeProvider`, env-var-driven swaps |
+| 14 | Web portal + Admin panel | Next.js 15, Vercel Edge Middleware, IP allowlist |
+| 15 | Business Mode — sub-users, GST invoices, web portal CRUD | `business_members`, role RLS, `PATCH /api/sellers/profile` |
+| 16 | EAS build, E2E testing, Sentry/PostHog, performance audit | Detox/Playwright, Jest coverage, Azure Monitor review |
+| 17 | Security audit, penetration testing, launch readiness | All V-series + X-series checks, admin audit log review |
 
 ---
 
@@ -1468,6 +1605,25 @@ app.use(helmet()); // Sets HSTS, X-Content-Type-Options, X-Frame-Options, etc.
 
 `kyc_status` is never accepted in any client request body. Express middleware explicitly strips it from all profile update payloads. DB trigger `block_kyc_status_client_update` provides database-layer defence. Only `PATCH /api/admin/aggregators/:id/kyc` can update it, after `user_type=admin` DB verification.
 
+#### V36 — Pre-Acceptance Order Dismiss is Client-Only (Day 3 UI, Fix 15)
+
+The aggregator's feed supports a local "dismiss" gesture to hide an order card from their view. This is a **client-side only action** — no server-side dismiss state is stored in the MVP database. The dismissed order remains accessible to the aggregator via direct `GET /api/orders/:id` if they have the order ID. This is intentional and acceptable: the aggregator has no privileged relationship with the order at this stage. No `dismissed_by` table, column, or endpoint exists or should be added during Days 4–17.
+
+#### V37 — Ably Channel Lifecycle on Terminal Order Status (Fix 16)
+
+When an order reaches a terminal state (`completed` or `cancelled`), the backend must stop publishing to that order's Ably channels after the terminal state is written to the database. Mobile clients must unsubscribe via their screen unmount cleanup path (`useFocusEffect` return). No active channel invalidation is required — Ably's channel inactivity TTL handles cleanup automatically on the server side.
+
+#### V38 — Price Scraper SSRF Hardening (Fix 17)
+
+> **SSRF rule (V19 extension):** The price scraper fetches from a hard-coded URL allowlist defined in source code. It must never fetch from a URL read from the database. `price_index.source_url` is display-only metadata — it must **never** be fetched programmatically by any code path.
+
+Additional requirements:
+- All scraper outbound HTTP requests must pass through an IP validation step before the request is made
+- Block RFC 1918 private IP ranges: `10.x.x.x`, `172.16.x.x–172.31.x.x`, `192.168.x.x`
+- Block loopback: `127.x.x.x` and `::1`
+- If the target URL resolves to a private IP, abort the request and log to Sentry before sending
+- The allowlist is a compile-time constant — not a database table, not an env var
+
 ---
 
 ## 15. Scalability & Vendor Lock-In Analysis
@@ -1580,8 +1736,8 @@ export interface IMapProvider {
 | `CLERK_SECRET_KEY` | **Backend only** | Clerk backend API key — NEVER in client bundle |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Client apps | Clerk publishable key — safe for client use |
 | `DATABASE_URL` | Backend only | Azure PostgreSQL connection string (SSL required) |
-| `ABLY_API_KEY` | Backend only | Ably server API key — NEVER in client bundle |
-| `NEXT_PUBLIC_ABLY_KEY` | Client apps | Ably client-side key (read-only token, scoped) |
+| `ABLY_API_KEY` | **Backend only** | Ably server API key — NEVER in client bundle |
+| ~~`NEXT_PUBLIC_ABLY_KEY`~~ | ~~Client apps~~ | **DEPRECATED for mobile** — mobile uses Ably Token Auth via `GET /api/realtime/token`. Removed from mobile `.env`. Web portal review required before Day 16. |
 | `UPLOADTHING_SECRET` | Backend only | Uploadthing secret key |
 | `UPLOADTHING_APP_ID` | Backend + Client | Uploadthing app identifier |
 | `OTP_HMAC_SECRET` | Backend only | HMAC-SHA256 key for OTP hashing (X3) |
@@ -1598,7 +1754,11 @@ export interface IMapProvider {
 | `MAP_PROVIDER` | Backend + Mobile | `"google"` or `"ola"` |
 | `EXPO_ACCESS_TOKEN` | Backend only | Expo server SDK token for push dispatch |
 | `REALTIME_PROVIDER` | All | `"ably"` (default) — switches `IRealtimeProvider` |
-| `SENTRY_DSN` | All | Sentry error reporting |
+| `SENTRY_DSN` | All | Sentry error reporting DSN (use per-app variants: `SENTRY_DSN_MOBILE`, `SENTRY_DSN_BACKEND`, `SENTRY_DSN_WEB`) |
+| `POSTHOG_API_KEY` | Mobile + Web | PostHog analytics API key |
+| `POSTHOG_HOST` | Mobile + Web | PostHog API host. Default: `https://app.posthog.com` |
+| `ADMIN_IP_ALLOWLIST` | Vercel (web) only | Comma-separated IP allowlist for `/admin/*` routes. Read by Vercel Edge Middleware. |
+| `PHONE_HASH_SECRET` | Backend only | HMAC secret used to hash phone numbers before storing as `phone_hash`. Distinct from `OTP_HMAC_SECRET`. |
 
 **Removed from v3.2:**
 - `SUPABASE_URL` — removed
