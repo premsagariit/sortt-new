@@ -445,49 +445,49 @@
 > **Rule:** `helmet()` is the FIRST middleware registered. Every route except `/health` and auth routes requires JWT.
 
 ### 6.1 Express Scaffold (~45 min)
-- [ ] TypeScript Express server in `backend/src/index.ts`.
-- [ ] `helmet()` applied globally as first middleware (V34).
-- [ ] CORS middleware: reads `ALLOWED_ORIGINS` env var (comma-separated). No wildcard (X1).
-- [ ] `express.json()` body parser: `strict: true`, `limit: '10kb'`.
-- [ ] Global error handler: scrubs `process.env` before `Sentry.captureException()` (D3). Returns generic error message in production — never stack traces.
-- [ ] `GET /health` — `{ status: 'ok', timestamp: ISO_STRING }`. No auth required. This is the UptimeRobot target.
-- [ ] Sentry initialisation at startup (`backend/src/instrument.ts`). Import before all other backend code.
+- [x] TypeScript Express server in `backend/src/index.ts`.
+- [x] `helmet()` applied globally as first middleware (V34).
+- [x] CORS middleware: reads `ALLOWED_ORIGINS` env var (comma-separated). No wildcard (X1).
+- [x] `express.json()` body parser: `strict: true`, `limit: '10kb'`.
+- [x] Global error handler: scrubs `process.env` before `Sentry.captureException()` (D3). Returns generic error message in production — never stack traces.
+- [x] `GET /health` — `{ status: 'ok', timestamp: ISO_STRING }`. No auth required. This is the UptimeRobot target.
+- [x] Sentry initialisation at startup (`backend/src/instrument.ts`). Import before all other backend code.
 
 ### 6.2 Azure App Service Deploy (~30 min)
-- [ ] Deploy Express backend to **Azure App Service** (Central India, free tier):
-  - Runtime: Node.js 20.
+- [x] Deploy Express backend to **Azure App Service** (Central India, free tier):
+  - Runtime: Node.js 24 LTS (Updated from Node 20).
   - Connect GitHub repo → auto-deploy on `main` branch push.
   - Add ALL environment variables from TRD v4.0 Appendix B in Azure Portal → Configuration → Application settings.
   - Confirm `NODE_ENV=production` is set.
-- [ ] Verify: `curl https://<azure-app-url>/health` → `{ status: 'ok' }`.
+- [x] Verify: `curl https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net/health` → `{ status: 'ok' }`.
 
 ### 6.3 Security Middleware (~45 min)
-- [ ] `middleware/auth.ts` — Clerk JWT middleware:
+- [x] `middleware/auth.ts` — Clerk JWT middleware:
   - `ClerkExpressRequireAuth()` from `@clerk/clerk-sdk-node` validates the JWT.
   - After Clerk validation: query `users` table by `clerk_user_id` → attach full internal `req.user` (includes `id`, `user_type`, `is_active`).
   - Return 401 if JWT missing/invalid. Return 401 if user not found or `is_active=false`.
   - Apply to ALL routes EXCEPT: `/health`, `POST /api/auth/request-otp`, `POST /api/auth/verify-otp`, `GET /api/rates`.
-- [ ] `middleware/verifyRole.ts` — `verifyUserRole(userId, requiredRole)`:
+- [x] `middleware/verifyRole.ts` — `verifyUserRole(userId, requiredRole)`:
   - Re-fetches `user_type` and `is_active` from DB. 60-second Upstash Redis cache per userId. **Never reads `user_type` from JWT claim** (V7, V-CLERK-2).
-- [ ] `middleware/sanitize.ts` — applies `sanitize-html` with zero allowed tags to ALL `req.body` string fields (I2). Applied globally after `express.json()`.
+- [x] `middleware/sanitize.ts` — applies `sanitize-html` with zero allowed tags to ALL `req.body` string fields (I2). Applied globally after `express.json()`.
 
 ### 6.4 Upstash Redis Setup (~20 min)
-- [ ] Initialise `@upstash/ratelimit` + `@upstash/redis` clients using env vars `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
-- [ ] `utils/rateLimit.ts` — export pre-configured limiters:
+- [x] Initialise `@upstash/ratelimit` + `@upstash/redis` clients using env vars `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+- [x] `utils/rateLimit.ts` — export pre-configured limiters:
   - `otpRequestLimiter`: 3 requests / phone-hash / 10 min.
   - `otpVerifyLimiter`: 3 attempts / phone-hash / 10 min.
   - `analyzeRateLimiter`: 10 requests / userId / hour.
   - `orderCreateLimiter`: 3 requests / userId / hour.
   - `globalGeminiCounter`: sliding window 1,200 / day (circuit breaker — RA1).
 
-### 🚦 DAY 6 VERIFICATION GATE
-- [ ] **G6.1** — `GET https://<azure-url>/health` returns `{ status: 'ok' }` with HTTP 200.
-- [ ] **G6.2** — `GET /api/orders` without Authorization header → 401.
-- [ ] **G6.3** — `POST /api/orders` with valid Clerk JWT → passes through middleware (even if route returns 404, the middleware passed).
-- [ ] **G6.4** — `sanitize-html`: POST body `{ "note": "<script>alert(1)</script>" }` → stored/logged as empty string, not raw script.
-- [ ] **G6.5** — `helmet` headers: `curl -I https://<azure-url>/health` shows `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`.
-- [ ] **G6.6** — CORS: `OPTIONS` preflight with `Origin: https://evil.com` → no `Access-Control-Allow-Origin` header in response.
-- [ ] **G6.7** — Upstash Redis: `otpRequestLimiter` increments on each request (verify via Upstash dashboard or a direct Redis GET).
+### 🚦 DAY 6 VERIFICATION GATE — [GATE PASSED 2026-03-09]
+- [x] **G6.1** — `GET https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net/health` returns `{ status: 'ok' }` with HTTP 200.
+- [x] **G6.2** — `GET /api/orders` without Authorization header → 401.
+- [x] **G6.3** — `POST /api/orders` with valid Clerk JWT → passes through middleware (even if route returns 404, the middleware passed).
+- [x] **G6.4** — `sanitize-html`: POST body `{ "note": "<script>alert(1)</script>" }` → stored/logged as empty string, not raw script.
+- [x] **G6.5** — `helmet` headers: `curl -I https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net/health` shows `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`.
+- [x] **G6.6** — CORS: `OPTIONS` preflight with `Origin: https://evil.com` → no `Access-Control-Allow-Origin` header in response.
+- [x] **G6.7** — Upstash Redis: `otpRequestLimiter` increments on each request (verify via Upstash dashboard or a direct Redis GET).
 
 ---
 

@@ -719,6 +719,12 @@ Do not delete old entries. Append only.
 
 - **[2026-03-09] Partition RLS Inheritance:** Enabling Row Level Security (`ALTER TABLE parent ENABLE ROW LEVEL SECURITY`) on a partitioned parent table does NOT automatically enable it on existing child partition tables. `rowsecurity=false` will remain on the partitions. You must explicitly run `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every individual partition table. Affects: `migrations/0009_rls.sql`.
 
+- **[2026-03-09] Clerk Middleware Secret Requirement:** `ClerkExpressRequireAuth()` throws a fatal error if `CLERK_SECRET_KEY` is missing from the environment, crashing the server. In phased deployments where secrets are not yet injected, explicitly check for `process.env.CLERK_SECRET_KEY` and gracefully return a 401 to prevent the app from failing to boot. Affects: `backend/src/middleware/auth.ts`.
+
+- **[2026-03-09] Azure App Service Node.js Version Match:** The GitHub Actions workflow `setup-node` version must exactly match the Node LTS version provisioned on the Azure App Service (e.g., `24.x`). Mismatches cause silent deployment or startup failures in Kudu. Affects: `.github/workflows/main_sortt-backend.yml`.
+
+- **[2026-03-09] Azure App Service Real URL:** The Azure App Service real URL is the long internal domain, not the short custom one. Always use the full URL from Azure Portal → Overview → Default domain. The short URL (sortt-backend.azurewebsites.net) does not resolve. Affects: all Day 7+ API calls and ALLOWED_ORIGINS env var.
+
 ---
 
 ## 11. Pricing Architecture — 3-Tier Model
