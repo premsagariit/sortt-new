@@ -29,12 +29,13 @@ jobs:
           pnpm install
           pnpm run build --if-present
           pnpm run test --if-present
+          pnpm deploy --filter backend --prod --force-legacy-deploy deploy_folder
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: deploy_folder
 
   deploy:
     runs-on: ubuntu-latest
