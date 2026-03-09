@@ -1,0 +1,78 @@
+import { Request, Response, NextFunction } from 'express';
+import { ClerkExpressRequireAuth, StrictAuthProp } from '@clerk/clerk-sdk-node';
+import { query } from '../lib/db';
+
+declare global {
+    namespace Express {
+        interface Request extends StrictAuthProp {
+            user?: {
+                id: string;
+                user_type: string;
+                is_active: boolean;
+            };
+        }
+    }
+}
+
+const requireAuthStack = [
+    (req: Request, res: Response, next: NextFunction) => {
+        // If Clerk keys are missing (as they might be on Day 6 per PLAN), return 401 gracefully
+        if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) {
+            return res.status(401).json({ error: 'Unauthorized: Missing Auth Configuration' });
+        }
+        return ClerkExpressRequireAuth()(req, res, next);
+    },
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const clerkUserId = req.auth?.userId;
+            if (!clerkUserId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const result = await query(
+                'SELECT id, user_type, is_active FROM users WHERE clerk_user_id = $1',
+                [clerkUserId]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(401).json({ error: 'User not found in database' });
+            }
+
+            const user = result.rows[0];
+            if (!user.is_active) {
+                return res.status(401).json({ error: 'User account is inactive' });
+            }
+
+            req.user = user;
+            next();
+        } catch (error) {
+            console.error('Auth DB error:', error);
+            res.status(500).json({ error: 'Internal Server Error during authentication' });
+        }
+    }
+];
+
+export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path;
+
+    if (
+        path === '/health' ||
+        path.startsWith('/api/auth/') ||
+        path.startsWith('/api/rates')
+    ) {
+        return next();
+    }
+
+    // Execute middleware stack
+    let idx = 0;
+    const executeNext = (err?: any) => {
+        if (err) return next(err);
+        if (idx >= requireAuthStack.length) {
+            return next();
+        }
+        const middleware = requireAuthStack[idx++];
+        middleware(req, res, executeNext);
+    };
+
+    executeNext();
+};
