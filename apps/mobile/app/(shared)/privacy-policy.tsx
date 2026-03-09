@@ -21,14 +21,14 @@ export default function PrivacyPolicy() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <NavBar 
-        title="Privacy Policy" 
-        variant="light" 
-        onBack={() => safeBack()} 
+      <NavBar
+        title="Privacy Policy"
+        variant="light"
+        onBack={() => safeBack()}
       />
 
-      <ScrollView 
-        style={styles.scroll} 
+      <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
         <Section title="5. Sharing of Your Information">
           We share your information only in the following circumstances:{"\n\n"}
           <Text style={styles.bold}>With Aggregators:</Text> When an Aggregator accepts your order, your full pickup address is revealed to them. Before acceptance, only your locality (neighbourhood name) and anonymised coordinates are visible. Your phone number is never shared — all communication occurs through in-app chat.{"\n\n"}
-          <Text style={styles.bold}>With Service Providers:</Text> We use Supabase (database and storage), Meta WhatsApp Business API (OTP delivery), Google Gemini API (image analysis), Expo (push notifications), Sentry (error monitoring), and PostHog (product analytics). These providers process your data only as necessary to deliver their services and are bound by appropriate data processing agreements.{"\n\n"}
+          <Text style={styles.bold}>With Service Providers:</Text> We use Azure PostgreSQL (database), Uploadthing (storage), Meta WhatsApp Business API (OTP delivery), Google Gemini API (image analysis), Expo (push notifications), Sentry (error monitoring), and PostHog (product analytics). These providers process your data only as necessary to deliver their services and are bound by appropriate data processing agreements.{"\n\n"}
           <Text style={styles.bold}>For Legal Compliance:</Text> We may disclose your information if required to do so by law, court order, or regulatory authority in India.{"\n\n"}
           <Text style={styles.bold}>Business Transfers:</Text> In the event of a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction. We will notify you of any such change via in-app notification.{"\n\n"}
           We do not sell your personal information to advertisers or third parties.

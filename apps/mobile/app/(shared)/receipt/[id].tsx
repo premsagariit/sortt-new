@@ -17,7 +17,7 @@
  *   7. Share Receipt tappable text
  *   8. Back to Home PrimaryButton
  *
- * Mock data only. No Supabase.
+ * Mock data only. No backend calls.
  * ──────────────────────────────────────────────────────────────────
  */
 

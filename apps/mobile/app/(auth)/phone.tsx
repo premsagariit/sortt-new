@@ -13,7 +13,7 @@
  *   - DM Mono for the +91 prefix and the phone number TextInput
  *   - Validation fires only after first submit attempt (hasSubmitted gate)
  *   - PrimaryButton loading prop used — no custom spinner
- *   - No Supabase or backend calls — setTimeout simulation only
+ *   - No backend calls — setTimeout simulation only
  *   - All touch targets ≥ 48dp (WCAG AA)
  *   - phoneNumber persisted to authStore (for OTP screen §2.3)
  *

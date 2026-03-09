@@ -13,7 +13,7 @@
  *   - Linked from (seller)/orders.tsx OrderCard onPress
  *   - Back button: router.back()
  *
- * Mock data only. No Supabase.
+ * Mock data only. No backend calls.
  * ──────────────────────────────────────────────────────────────────
  */
 

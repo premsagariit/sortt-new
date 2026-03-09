@@ -73,7 +73,7 @@ import { router } from 'expo-router';
 
 // ───────────────────────────────────────────────────────────────────
 
-// ── Mock fallbacks (replaced by backend data on Day 5) ──────────────
+// ── Mock fallbacks (replaced by backend data on Day 7) ──────────────
 const MOCK_SELLER_NAME = 'Ravi Kumar';
 const MOCK_SELLER_LOCALITY = 'Kondapur';
 const MOCK_SELLER_CITY = 'Hyderabad';
@@ -85,7 +85,7 @@ export default function SellerHomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  // Read from store with mock fallbacks (Day 5: store populated from Supabase)
+  // Read from store with mock fallbacks (Day 7: store populated from backend)
   const displayName = useAuthStore((s) => s.name) || MOCK_SELLER_NAME;
   const displayLocality = useAuthStore((s) => s.locality) || MOCK_SELLER_LOCALITY;
   const displayCity = useAuthStore((s) => s.city) || MOCK_SELLER_CITY;

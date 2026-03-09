@@ -3,7 +3,7 @@
  * ──────────────────────────────────────────────────────────────────
  * Zustand auth store — Day 2 §2.1 scaffold.
  *
- * Currently stores only local UI state (no Supabase session yet).
+ * Currently stores only local UI state (no backend session yet).
  * Live auth integration happens on Day 5 when the backend is wired.
  *
  * Fields:
@@ -11,7 +11,7 @@
  *                  (without the +91 prefix — stored as 10-digit string)
  *   isLoading    — true while OTP is being sent (simulated in §2.2;
  *                  real network call in §5.4)
- *   session      — null until Supabase session established (Day 5)
+ *   session      — null until Clerk session established (Day 7)
  *
  * Future stores to add alongside this one (PLAN.md §2.1):
  *   orderStore.ts, aggregatorStore.ts, chatStore.ts, uiStore.ts
@@ -20,7 +20,7 @@
 
 import { create } from 'zustand';
 
-// ─── Session type (populated on Day 5 with real Supabase session) ──
+// ─── Session type (populated on Day 7 with real session) ──
 export interface AuthSession {
   userId: string;
   userType: 'seller' | 'aggregator';
@@ -60,8 +60,8 @@ interface AuthState {
   reset: () => void;
   /**
    * Sign out the current user and clear all local auth state.
-   * Day 5: add `await supabase.auth.signOut()` call here before `set(initialState)`
-   * to invalidate the Supabase JWT and prevent token reuse (BSE finding S1).
+   * Day 7: add `await clerk.signOut()` call here before `set(initialState)`
+   * to invalidate the JWT and prevent token reuse (BSE finding S1).
    */
   signOut: () => void;
 }
@@ -73,7 +73,7 @@ const initialState: Pick<AuthState,
   phoneNumber: '',
   isLoading: false,
   session: null,
-  userId: null,       // Set after auth — Day 5 populates from Supabase session
+  userId: null,       // Set after auth — Day 7 populates from Clerk session
   userType: null,     // Set on user-type screen — null until user makes a choice
   accountType: null,
   name: '',
@@ -95,6 +95,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLocality: (locality) => set({ locality }),
   setCity: (city) => set({ city }),
   reset: () => set(initialState),
-  // Day 5: add `await supabase.auth.signOut()` before set() — BSE finding S1
+  // Day 7: add `await clerk.signOut()` before set() — BSE finding S1
   signOut: () => set(initialState),
 }));

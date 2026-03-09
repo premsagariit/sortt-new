@@ -1,5 +1,5 @@
 // Scaffold — backend wired on Day 4 per @PLAN.md
-// No Supabase calls here. All actions are local state only.
+// No backend API calls here. All actions are local state only.
 import { create } from 'zustand';
 import type { MaterialCode } from '../components/ui/MaterialChip';
 

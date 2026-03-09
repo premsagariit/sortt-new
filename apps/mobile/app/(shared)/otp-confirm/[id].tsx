@@ -16,7 +16,7 @@
  * Navigates to receipt/[id] via router.replace() on confirmation,
  * so otp-confirm never remains in back-stack post-completion.
  *
- * Mock data only. No Supabase.
+ * Mock data only. No backend calls.
  * ──────────────────────────────────────────────────────────────────
  */
 
@@ -55,12 +55,12 @@ type ConfirmationMock = {
 
 // G2.8: all values from colors.material.X.fg — zero hardcoded hex
 const MATERIAL_COLORS: Record<string, string> = {
-  paper:   colors.material.paper.fg,   // was '#B45309'
-  metal:   colors.material.metal.fg,   // was '#6B7280'
+  paper: colors.material.paper.fg,   // was '#B45309'
+  metal: colors.material.metal.fg,   // was '#6B7280'
   plastic: colors.material.plastic.fg, // was '#2563A8'
-  ewaste:  colors.material.ewaste.fg,  // was '#1A6B63'
-  fabric:  colors.material.fabric.fg,  // was '#7C3AED'
-  glass:   colors.material.glass.fg,   // was '#0369A1'
+  ewaste: colors.material.ewaste.fg,  // was '#1A6B63'
+  fabric: colors.material.fabric.fg,  // was '#7C3AED'
+  glass: colors.material.glass.fg,   // was '#0369A1'
 };
 
 const MOCK_CONFIRMATION: Record<string, ConfirmationMock> = {
@@ -68,9 +68,9 @@ const MOCK_CONFIRMATION: Record<string, ConfirmationMock> = {
     orderId: 'ORD-2841',
     locality: 'Madhapur, 3rd Phase',
     items: [
-      { material: 'Paper',   materialKey: 'paper',   weightKg: 12.5, ratePerKg: 10 },
-      { material: 'Metal',   materialKey: 'metal',   weightKg: 6.0,  ratePerKg: 28 },
-      { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0,  ratePerKg: 12 },
+      { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
+      { material: 'Metal', materialKey: 'metal', weightKg: 6.0, ratePerKg: 28 },
+      { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0, ratePerKg: 12 },
     ],
     paymentMethod: 'Cash',
   },
@@ -101,7 +101,7 @@ export default function OtpConfirmScreen() {
 
   const totalWeight = confirmation.items.reduce((s, i) => s + i.weightKg, 0);
   const totalAmount = confirmation.items.reduce((s, i) => s + i.weightKg * i.ratePerKg, 0);
-  const otpFilled   = otp.every(d => d !== '');
+  const otpFilled = otp.every(d => d !== '');
 
   function handleOtpChange(value: string, index: number) {
     const digit = value.replace(/\D/g, '').slice(-1);
@@ -262,8 +262,8 @@ export default function OtpConfirmScreen() {
           </Text>
           <View style={styles.otpBoxRow}>
             {otp.map((digit, idx) => {
-              const isFilled  = digit !== '';
-              const isActive  = !isFilled && otp.slice(0, idx).every(d => d !== '');
+              const isFilled = digit !== '';
+              const isActive = !isFilled && otp.slice(0, idx).every(d => d !== '');
               return (
                 <TextInput
                   key={idx}
@@ -271,7 +271,7 @@ export default function OtpConfirmScreen() {
                   style={[
                     styles.otpBox,
                     isFilled && styles.otpBoxFilled,
-                    isActive  && styles.otpBoxActive,
+                    isActive && styles.otpBoxActive,
                   ]}
                   value={digit}
                   onChangeText={(v) => handleOtpChange(v, idx)}
@@ -329,14 +329,14 @@ const styles = StyleSheet.create({
 
   // Arrived banner
   arrivedBanner: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colorExtended.tealLight,
-    borderWidth:    1,
-    borderColor:    colors.teal,   // was '#A7D7D3' — G2.8 fix
-    borderRadius:   radius.card,
-    padding:        spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.teal,   // was '#A7D7D3' — G2.8 fix
+    borderRadius: radius.card,
+    padding: spacing.sm,
   },
   arrivedEmoji: {
     fontSize: 20,
@@ -347,58 +347,58 @@ const styles = StyleSheet.create({
 
   // Scale photo thumbnail — real image wired on Day 6
   scalePhotoCard: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    borderRadius:    radius.card,
-    padding:         spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.sm,
   },
   scalePhotoThumb: {
-    width:           60,
-    height:          60,
+    width: 60,
+    height: 60,
     backgroundColor: colorExtended.surface2,
-    borderRadius:    radius.input,
+    borderRadius: radius.input,
   },
   scalePhotoInfo: {
     gap: 2,
   },
 
   sectionLabel: {
-    fontSize:      12,
+    fontSize: 12,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    fontFamily:    'DMSans-Bold',
+    fontFamily: 'DMSans-Bold',
   },
 
   // Weight table
   weightTable: {
     backgroundColor: colors.surface,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    borderRadius:    radius.card,
-    overflow:        'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    overflow: 'hidden',
   },
   weightRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
-    paddingVertical:   11,
+    paddingVertical: 11,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   weightDot: {
-    width:        9,
-    height:       9,
+    width: 9,
+    height: 9,
     borderRadius: 3,
-    flexShrink:   0,
+    flexShrink: 0,
   },
   weightMat: {
-    flex:          1,
-    fontFamily:    'DMSans-SemiBold',
+    flex: 1,
+    fontFamily: 'DMSans-SemiBold',
   },
   weightKg: {
     fontFamily: 'DMMono-Regular',
@@ -408,54 +408,54 @@ const styles = StyleSheet.create({
   },
   weightTotal: {
     fontFamily: 'DMMono-Regular',
-    minWidth:   36,
-    textAlign:  'right',
+    minWidth: 36,
+    textAlign: 'right',
   },
 
   // Amount bar
   amountBar: {
-    backgroundColor:  colors.navy,
-    borderRadius:     radius.card,
+    backgroundColor: colors.navy,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.md,
-    paddingVertical:   spacing.sm,
-    flexDirection:    'row',
-    justifyContent:   'space-between',
-    alignItems:       'center',
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 
   // OTP card
   otpCard: {
     backgroundColor: colors.surface,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    borderRadius:    radius.card,
-    padding:         spacing.lg,
-    gap:             spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   otpBoxRow: {
-    flexDirection:  'row',
-    gap:            spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.sm,
     justifyContent: 'center',
   },
   otpBox: {
-    width:           46,
-    height:          54,
-    borderRadius:    10,
-    borderWidth:     1.5,
-    borderColor:     colors.border,
+    width: 46,
+    height: 54,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     backgroundColor: colorExtended.surface2,
-    fontSize:        24,
-    fontFamily:      'DMMono-Regular',
-    color:           colors.navy,
-    textAlign:       'center',
+    fontSize: 24,
+    fontFamily: 'DMMono-Regular',
+    color: colors.navy,
+    textAlign: 'center',
   },
   otpBoxActive: {
-    borderColor:     colors.navy,
+    borderColor: colors.navy,
     backgroundColor: colors.surface,
   },
   otpBoxFilled: {
-    borderColor:     colors.teal,
+    borderColor: colors.teal,
     backgroundColor: colorExtended.tealLight,
-    color:           colors.teal,
+    color: colors.teal,
   },
 });

@@ -2,7 +2,7 @@
 
 > **Status:** MVP Build (In Progress)  
 > **Architecture:** pnpm Monorepo  
-> **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Supabase, Gemini AI.
+> **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Azure PostgreSQL, Gemini AI.
 
 ---
 
@@ -16,13 +16,13 @@ Sortt/
 │   └── admin/        # Admin Dashboard (built into web)
 ├── backend/          # Node.js/Express — Central API & Webhooks
 ├── packages/         # Shared Provider Abstractions (@sortt/*)
-│   ├── auth/         # IAuthProvider (Supabase Auth)
+│   ├── auth/         # IAuthProvider (Clerk Auth)
 │   ├── maps/         # IMapProvider (Google/Ola Maps)
-│   ├── realtime/     # IRealtimeProvider (Supabase Realtime)
-│   ├── storage/      # IStorageProvider (Supabase Storage)
+│   ├── realtime/     # IRealtimeProvider (Ably Realtime)
+│   ├── storage/      # IStorageProvider (Uploadthing Storage)
 │   └── analysis/     # IAnalysisProvider (Gemini Vision)
-├── supabase/         # Migrations & Edge Functions
-└── scraper/          # Python Price Scraper Agent
+├── scraper/          # Python Price Scraper Agent
+└── migrations/       # PostgreSQL Migration Scripts
 ```
 
 ---
@@ -77,8 +77,8 @@ pnpm dev:backend
 | **Mobile** | React Native, Expo Router, DM Sans/Mono, Zustand, Phosphor Icons |
 | **Web** | Next.js 15, Tailwind CSS, Radix UI |
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp |
-| **Database** | Supabase (PostgreSQL), PostGIS, RLS |
-| **Auth** | Supabase Auth (Phone OTP via WhatsApp Cloud API) |
+| **Database** | Azure PostgreSQL, PostGIS, RLS |
+| **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
 | **AI** | Gemini Flash Vision (Photo Analysis), Gemini Pro (Price Scraping) |
 
 ---

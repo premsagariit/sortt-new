@@ -24,9 +24,9 @@
  */
 
 // ← CHANGE THESE THREE VALUES TO REBRAND ↓
-export const APP_NAME   = "Sortt";       // User-facing product name — PLACEHOLDER
+export const APP_NAME = "Sortt";       // User-facing product name — PLACEHOLDER
 export const APP_DOMAIN = "sortt.in";    // Production domain         — PLACEHOLDER
-export const APP_SLUG   = "sortt";       // Internal slug / identifiers — PLACEHOLDER
+export const APP_SLUG = "sortt";       // Internal slug / identifiers — PLACEHOLDER
 
 // ─── Derived values (do NOT edit these — they auto-update with the above) ───
 
@@ -44,9 +44,9 @@ export const APP_TAGLINE = "India's Scrap Marketplace"; // edit freely — not d
 export const PUSH_SENDER_NAME = APP_NAME;
 
 /**
- * Storage bucket prefix — prepended to all Supabase Storage bucket names.
+ * Storage bucket prefix — prepended to all Storage bucket names.
  * Keeps bucket names namespaced to the app, enabling multi-tenant or
- * white-label deployments on a single Supabase project.
+ * white-label deployments on a single project.
  * Example: "sortt-scrap-photos", "sortt-invoices"
  */
 export const STORAGE_BUCKET_PREFIX = APP_SLUG;

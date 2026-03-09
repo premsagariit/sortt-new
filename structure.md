@@ -15,6 +15,7 @@ Sortt
 │   │   │   ├── (aggregator) # Scrap dealer specific screens
 │   │   │   │   ├── _layout.tsx # Aggregator tab layout and navigation
 │   │   │   │   ├── active-order-detail.tsx # Post-acceptance view (Navigate/Cancel/Full Address)
+│   │   │   │   ├── price-index.tsx # National market index view
 │   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
 │   │   │   │   ├── execution # Order Execution Flow
 │   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
@@ -37,6 +38,7 @@ Sortt
 │   │   │   │   │   ├── _layout.tsx # Aggregator stack
 │   │   │   │   │   ├── profile-setup.tsx
 │   │   │   │   │   ├── area-setup.tsx
+│   │   │   │   │   ├── kyc.tsx # KYC document upload and verification
 │   │   │   │   │   └── materials-setup.tsx
 │   │   │   │   └── seller # Seller Onboarding Wizard
 │   │   │   │       ├── _layout.tsx # Seller stack
@@ -103,6 +105,8 @@ Sortt
 │   │   ├── constants
 │   │   │   ├── app.ts # Global strings and service URLs
 │   │   │   └── tokens.ts # Design tokens (Colors, Radius, Spacing)
+│   │   ├── hooks # Custom React hooks
+│   │   │   └── usePhotoCapture.ts # Standardized camera and picker hook
 │   │   ├── store # Zustand state containers
 │   │   │   ├── aggregatorStore.ts # Dealer-side order and session state
 │   │   │   ├── authStore.ts # User session, role, and onboarding data
@@ -110,6 +114,8 @@ Sortt
 │   │   │   ├── listingStore.ts # Draft state for the selling wizard
 │   │   │   ├── orderStore.ts # Cross-role order lifecycle state
 │   │   │   └── uiStore.ts # Navigation signals and global overlays
+│   │   ├── utils # Helper functions
+│   │   │   └── navigation.tsx # Safe navigation helpers (safeBack pattern)
 │   │   ├── package.json # NPM dependencies for mobile app
 │   │   ├── .env # Environment variables for mobile app
 │   │   └── tsconfig.json # TypeScript configuration for mobile app
@@ -120,7 +126,15 @@ Sortt
 │   ├── package.json
 │   ├── src
 │   │   ├── index.ts # Gateway entry point
+│   │   ├── instrument.ts # Sentry initialization
+│   │   ├── lib # Core utility libraries
+│   │   │   ├── db.ts # PostgreSQL wrapper client
+│   │   │   └── redis.ts # Upstash Redis and rate limiters
 │   │   ├── middleware # JWT validation and security layers
+│   │   │   ├── auth.ts # Clerk authentication
+│   │   │   ├── sanitize.ts # Input HTML sanitization
+│   │   │   ├── verifyRole.ts # Strict role enforcement
+│   │   │   └── errorHandler.ts # Secure error handling
 │   │   ├── routes # Domain-specific API endpoints
 │   │   └── utils # Helper functions and provider clients
 │   │   ├── .env # Environment variables for backend
@@ -130,7 +144,7 @@ Sortt
 ├── package.json # Root package management
 ├── packages # Shared internal libraries
 │   ├── analysis # Gemini Vision Material Recognition
-│   ├── auth # Multi-provider Clerk/Supabase bridge
+│   ├── auth # Clerk authentication provider logic
 │   ├── maps # Map provider and geocoding abstraction
 │   ├── realtime # Ably Messaging and Presence
 │   ├── storage # Uploadthing file management
@@ -138,6 +152,22 @@ Sortt
 │   └── main.py # Python rate crawler entry
 ├── scripts # CI/CD and repository maintenance tools
 ├── docs # Technical documentation and guides
+├── migrations # PostgreSQL database migrations
+│   ├── 0001_reference_tables.sql
+│   ├── 0002_users.sql
+│   ├── 0003_profiles.sql
+│   ├── 0004_orders.sql
+│   ├── 0005_transactions.sql
+│   ├── 0006_messaging.sql
+│   ├── 0007_security.sql
+│   ├── 0008_prices.sql
+│   ├── 0009_rls.sql
+│   ├── 0010_indexes.sql
+│   ├── 0011_triggers.sql
+│   └── 0012_materialized_views.sql
+├── .github # GitHub specific configurations
+│   └── workflows # GitHub Actions CI/CD pipelines
+│       └── main_sortt-backend.yml
 ├── sortt_aggregator_ui.html # Reference HTML for dealer UI
 ├── sortt_seller_ui.html # Reference HTML for seller UI
 ├── sortt_logo_splash_v2.html # Reference HTML for animation
