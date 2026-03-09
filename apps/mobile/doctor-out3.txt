@@ -1,0 +1,74 @@
+﻿Running 17 checks on your project...
+Γ£ö Check package.json for common issues
+Γ£ö Check Expo config for common issues
+Γ£ö Check if the project meets version requirements for submission to app stores
+Γ£ö Check for lock file
+Γ£ö Check dependencies for packages that should not be installed directly
+Γ£ö Check for app config fields that may not be synced in a non-CNG project
+Γ£ö Check for issues with Metro config
+Γ£ö Check npm/yarn versions
+Γ£ö Check native tooling versions
+Γ£ö Check for common project setup issues
+Γ£ö Check that required peer dependencies are installed
+Γ£ö Check Expo config (app.json/ app.config.js) schema
+Γ£ö Check that packages match versions required by installed Expo SDK
+Γ£û Check that no duplicate dependencies are installed
+Γ£ö Validate packages against React Native Directory package metadata
+Γ£ö Check that native modules do not use incompatible support packages
+Γ£ö Check for legacy global CLI installed locally
+
+16/17 checks passed. 1 checks failed. Possible issues detected:
+
+Γ£û Check that no duplicate dependencies are installed
+Your project contains duplicate native module dependencies, which should be de-duplicated.
+Native builds may only contain one version of any given native module, and having multiple versions of a single Native module installed may lead to unexpected build errors.
+Found duplicates for expo:
+  Γö£ΓöÇ expo@54.0.33 (at: node_modules\expo)
+  ΓööΓöÇ expo@54.0.33 (at: ..\..\node_modules\expo)
+Found duplicates for expo-constants:
+  Γö£ΓöÇ expo-constants@18.0.13 (at: ..\..\node_modules\expo-constants)
+  ΓööΓöÇ expo-constants@18.0.13 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\expo-constants)
+     ΓööΓöÇ linked to a different installation
+Found duplicates for expo-font:
+  Γö£ΓöÇ expo-font@14.0.11 (at: node_modules\expo-font)
+  ΓööΓöÇ expo-font@14.0.11 (at: ..\..\node_modules\expo-font)
+Found duplicates for react:
+  Γö£ΓöÇ react@19.1.0 (at: node_modules\react)
+  ΓööΓöÇ react@19.1.0 (at: ..\..\node_modules\react)
+Found duplicates for react-dom:
+  Γö£ΓöÇ react-dom@19.1.0 (at: ..\..\node_modules\react-dom)
+  ΓööΓöÇ react-dom@19.1.0 (at: ..\..\node_modules\.pnpm\@radix-ui+react-tabs@1.1.13_1cff14eca467ad4d77d3535a493027ab\node_modules\react-dom)
+     ΓööΓöÇ linked to a different installation
+Found duplicates for react-native:
+  Γö£ΓöÇ react-native@0.81.5 (at: node_modules\react-native)
+  ΓööΓöÇ react-native@0.81.5 (at: ..\..\node_modules\react-native)
+Found duplicates for @expo/fingerprint:
+  Γö£ΓöÇ @expo/fingerprint@0.15.4 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\@expo\fingerprint)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ @expo/fingerprint@0.15.4 (at: ..\..\node_modules\@expo\fingerprint)
+Found duplicates for @expo/vector-icons:
+  Γö£ΓöÇ @expo/vector-icons@15.1.1 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\@expo\vector-icons)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ @expo/vector-icons@15.1.1 (at: ..\..\node_modules\@expo\vector-icons)
+Found duplicates for expo-asset:
+  Γö£ΓöÇ expo-asset@12.0.12 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\expo-asset)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ expo-asset@12.0.12 (at: ..\..\node_modules\expo-asset)
+Found duplicates for expo-file-system:
+  Γö£ΓöÇ expo-file-system@19.0.21 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\expo-file-system)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ expo-file-system@19.0.21 (at: ..\..\node_modules\expo-file-system)
+Found duplicates for expo-keep-awake:
+  Γö£ΓöÇ expo-keep-awake@15.0.8 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\expo-keep-awake)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ expo-keep-awake@15.0.8 (at: ..\..\node_modules\expo-keep-awake)
+Found duplicates for expo-modules-core:
+  Γö£ΓöÇ expo-modules-core@3.0.29 (at: ..\..\node_modules\.pnpm\expo@54.0.33_@babel+core@7._565b6db172422c96ef98beeabc19b506\node_modules\expo-modules-core)
+  Γöé  ΓööΓöÇ linked to a different installation
+  ΓööΓöÇ expo-modules-core@3.0.29 (at: ..\..\node_modules\expo-modules-core)
+Advice:
+Your node_modules folder may be corrupted. Multiple copies of the same version exist for: expo, expo-constants, expo-font, react, react-dom, react-native, @expo/fingerprint, @expo/vector-icons, expo-asset, expo-file-system, expo-keep-awake, expo-modules-core.
+- Try deleting your node_modules folders and reinstall your dependencies after.
+- If this error persists, delete your node_modules as well as your lockfile and reinstall.
+Resolve your dependency issues and deduplicate your dependencies. Learn more: https://expo.fyi/resolving-dependency-issues
+

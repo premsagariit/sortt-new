@@ -310,52 +310,52 @@
 > **Rule:** Every migration is idempotent. Test each file individually before running the next.
 
 ### 4.1 Azure PostgreSQL Setup (~45 min)
-- [ ] Create Azure Database for PostgreSQL Flexible Server in Azure Portal:
+- [x] Create Azure Database for PostgreSQL Flexible Server in Azure Portal:
   - Tier: **Burstable B1ms** (free under Azure for Students — 750 hrs/month for 12 months).
   - Region: **Central India (Pune)**.
   - PostgreSQL version: 16.
   - Storage: 32 GB (stays within free tier).
   - Enable SSL — require SSL for all connections.
   - Firewall: add your local IP + Azure App Service outbound IP. No public `0.0.0.0/0` access.
-- [ ] Enable extensions in Azure Portal → Server Parameters → `azure.extensions`: `pgcrypto`, `uuid-ossp`.
+- [x] Enable extensions in Azure Portal → Server Parameters → `azure.extensions`: `pgcrypto`, `uuid-ossp`.
   > **Do NOT enable PostGIS** — city_code matching replaces geospatial queries throughout this app.
-- [ ] Create `current_app_user_id()` helper function (run via `psql`):
+- [x] Create `current_app_user_id()` helper function (run via `psql`):
   ```sql
   CREATE OR REPLACE FUNCTION current_app_user_id()
   RETURNS uuid AS $$
     SELECT NULLIF(current_setting('app.current_user_id', true), '')::uuid;
   $$ LANGUAGE sql STABLE SECURITY DEFINER;
   ```
-- [ ] Test SSL connection from local machine: `psql "host=<azure-host> dbname=<db> user=<user> sslmode=require"` — must connect without error.
+- [x] Test SSL connection from local machine: `psql "host=<azure-host> dbname=<db> user=<user> sslmode=require"` — must connect without error.
 
 ### 4.2 Migrations 0001–0006 (~75 min)
-- [ ] **`migrations/0001_reference_tables.sql`**
+- [x] **`migrations/0001_reference_tables.sql`**
   - `cities` table: `code TEXT PK, name_en TEXT, name_te TEXT, is_active BOOL`.
   - Seed: `INSERT INTO cities VALUES ('HYD', 'Hyderabad', 'హైదరాబాద్', true)`.
   - `material_types` table: `code TEXT PK, label_en TEXT, label_te TEXT, colour_token TEXT, min_weight_kg NUMERIC DEFAULT 1`.
   - Seed all 6 materials: metal, plastic, paper, ewaste, fabric, glass.
-- [ ] **`migrations/0002_users.sql`**
+- [x] **`migrations/0002_users.sql`**
   - `users` table: `id UUID PK DEFAULT uuid_generate_v4(), clerk_user_id TEXT UNIQUE NOT NULL, phone_hash TEXT NOT NULL, user_type TEXT CHECK IN ('seller','aggregator'), is_active BOOL DEFAULT true, preferred_language TEXT DEFAULT 'en', created_at TIMESTAMPTZ DEFAULT NOW(), last_seen TIMESTAMPTZ`.
   - `users_public` VIEW: SELECT `id, name, phone_last4, user_type, preferred_language, created_at` only. **Excludes `phone_hash` AND `clerk_user_id`** (V24, V-CLERK-1).
-- [ ] **`migrations/0003_profiles.sql`**
+- [x] **`migrations/0003_profiles.sql`**
   - `seller_profiles`: `user_id UUID PK FK users(id), account_type TEXT CHECK IN ('individual','business'), gstin TEXT, business_name TEXT, locality TEXT, city_code TEXT FK cities(code)`.
   - `aggregator_profiles`: `user_id UUID PK FK users(id), business_name TEXT, city_code TEXT FK cities(code), operating_area_text TEXT, kyc_status TEXT NOT NULL DEFAULT 'pending' CHECK IN ('pending','verified','rejected'), operating_hours JSONB, member_since TIMESTAMPTZ DEFAULT NOW()`.
   - `aggregator_material_rates`: `(aggregator_id UUID FK, material_code TEXT FK) PK, rate_per_kg NUMERIC NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW()`.
   - `business_members`: `id UUID PK, business_seller_id UUID FK, member_user_id UUID FK, role TEXT CHECK IN ('admin','viewer','operator'), invited_by UUID FK, created_at TIMESTAMPTZ DEFAULT NOW()`.
-- [ ] **`migrations/0004_orders.sql`**
+- [x] **`migrations/0004_orders.sql`**
   - `orders`: all columns per TRD schema. `city_code TEXT FK`, `pickup_locality TEXT` — **no GEOGRAPHY column**.
   - `status TEXT CHECK IN ('created','accepted','en_route','arrived','weighing_in_progress','completed','cancelled','disputed')`.
   - `deleted_at TIMESTAMPTZ` — soft delete column.
   - `order_items`: `(order_id UUID FK, material_code TEXT FK) PK, estimated_weight_kg NUMERIC, confirmed_weight_kg NUMERIC, rate_per_kg NUMERIC`.
   - `order_status_history`: `id UUID PK, order_id UUID FK, old_status TEXT, new_status TEXT, changed_by UUID FK, created_at TIMESTAMPTZ DEFAULT NOW()` — **no client-supplied timestamp** (V30).
   - `order_media`: `id UUID PK, order_id UUID FK, uploader_id UUID FK, media_type TEXT, storage_path TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()`.
-- [ ] **`migrations/0005_transactions.sql`**
+- [x] **`migrations/0005_transactions.sql`**
   - `ratings`: `id UUID PK, order_id UUID FK UNIQUE, rated_by UUID FK, rated_user UUID FK, score INT CHECK 1-5, comment TEXT, created_at TIMESTAMPTZ DEFAULT NOW()`.
   - `invoices`: `id UUID PK, order_id UUID FK UNIQUE, invoice_number TEXT UNIQUE, invoice_data JSONB NOT NULL DEFAULT '{}'`, `pdf_storage_path TEXT, generated_at TIMESTAMPTZ DEFAULT NOW()`.
     > `invoice_data JSONB NOT NULL` is the legal GST record. PDF is a rendering artifact only (TRD §14.4.5).
   - `disputes`: `id UUID PK, order_id UUID FK, raised_by UUID FK, reason TEXT, status TEXT DEFAULT 'open', resolved_at TIMESTAMPTZ, resolution_note TEXT, created_at TIMESTAMPTZ DEFAULT NOW()`.
   - `dispute_evidence`: `id UUID PK, dispute_id UUID FK, submitted_by UUID FK, storage_path TEXT, created_at TIMESTAMPTZ DEFAULT NOW()`.
-- [ ] **`migrations/0006_messaging.sql`**
+- [x] **`migrations/0006_messaging.sql`**
   - `messages` parent table (range-partitioned on `created_at`): `id UUID PK, order_id UUID FK, sender_id UUID FK, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()`.
   - Pre-create 3 monthly partitions: `messages_2026_03`, `messages_2026_04`, `messages_2026_05`.
   - Compound index on each partition: `(order_id, created_at ASC)`.
@@ -363,13 +363,13 @@
   - `device_tokens`: `id UUID PK, user_id UUID FK, token_type TEXT CHECK IN ('expo','fcm','apns'), expo_token TEXT, raw_token TEXT, is_active BOOL DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW()`.
   - `otp_log`: `id UUID PK, phone_hash TEXT, action TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), expires_at TIMESTAMPTZ`.
 
-### 🚦 DAY 4 VERIFICATION GATE
-- [ ] **G4.1** — SSL connection enforced: `psql` without `sslmode=require` → connection rejected.
-- [ ] **G4.2** — `current_app_user_id()` function exists and returns NULL when `app.current_user_id` is not set.
-- [ ] **G4.3** — All 6 migration files run with zero errors on Azure PostgreSQL.
-- [ ] **G4.4** — `users_public` VIEW: `SELECT clerk_user_id FROM users_public` → column not found. `SELECT phone_hash FROM users_public` → column not found.
-- [ ] **G4.5** — Messages partitioning: `INSERT INTO messages (..., created_at = NOW())` routes to the correct month partition.
-- [ ] **G4.6** — All 6 seeded materials present in `material_types`. HYD present in `cities`.
+### 🚦 DAY 4 VERIFICATION GATE — [GATE PASSED 2026-03-08]
+- [x] **G4.1** — SSL connection enforced: `psql` without `sslmode=require` → connection rejected.
+- [x] **G4.2** — `current_app_user_id()` function exists and returns NULL when `app.current_user_id` is not set.
+- [x] **G4.3** — All 6 migration files run with zero errors on Azure PostgreSQL.
+- [x] **G4.4** — `users_public` VIEW: `SELECT clerk_user_id FROM users_public` → column not found. `SELECT phone_hash FROM users_public` → column not found.
+- [x] **G4.5** — Messages partitioning: `INSERT INTO messages (..., created_at = NOW())` routes to the correct month partition.
+- [x] **G4.6** — All 6 seeded materials present in `material_types`. HYD present in `cities`.
 
 ---
 
@@ -379,63 +379,63 @@
 > **Rule:** RLS must be enabled on EVERY table — no exceptions. Verify with a count check.
 
 ### 5.1 Migrations 0007–0012 (~60 min)
-- [ ] **`migrations/0007_security.sql`**
+- [x] **`migrations/0007_security.sql`**
   - `seller_flags`: `id UUID PK, seller_id UUID FK, reason TEXT, flagged_by UUID FK, created_at TIMESTAMPTZ DEFAULT NOW()`.
   - `admin_audit_log`: `id UUID PK, admin_user_id UUID FK, action TEXT, target_table TEXT, target_id UUID, metadata JSONB, created_at TIMESTAMPTZ DEFAULT NOW()`.
   > Backend-only INSERT — no client INSERT path. Admin routes write this directly via service connection.
-- [ ] **`migrations/0008_prices.sql`**
+- [x] **`migrations/0008_prices.sql`**
   - `price_index`: `id UUID PK, city_code TEXT FK, material_code TEXT FK, rate_per_kg NUMERIC NOT NULL, source TEXT, is_manual_override BOOL DEFAULT false, scraped_at TIMESTAMPTZ DEFAULT NOW()`.
-- [ ] **`migrations/0009_rls.sql`** — all RLS policies (see §5.3 below — write policies in this file).
-- [ ] **`migrations/0010_indexes.sql`** — all indexes (see §5.2 below).
-- [ ] **`migrations/0011_triggers.sql`** — kyc_status guard trigger (see §5.4 below).
-- [ ] **`migrations/0012_materialized_views.sql`** — both materialized views (see §5.5 below).
+- [x] **`migrations/0009_rls.sql`** — all RLS policies (see §5.3 below — write policies in this file).
+- [x] **`migrations/0010_indexes.sql`** — all indexes (see §5.2 below).
+- [x] **`migrations/0011_triggers.sql`** — kyc_status guard trigger (see §5.4 below).
+- [x] **`migrations/0012_materialized_views.sql`** — both materialized views (see §5.5 below).
 
 ### 5.2 Indexes (~20 min)
-- [ ] `idx_orders_city_status` on `orders(city_code, status) WHERE status='created' AND deleted_at IS NULL`.
-- [ ] `idx_orders_seller_id` on `orders(seller_id, created_at DESC)`.
-- [ ] `idx_orders_aggregator_id` on `orders(aggregator_id) WHERE aggregator_id IS NOT NULL`.
-- [ ] `idx_device_tokens_user_id` on `device_tokens(user_id) WHERE is_active=true`.
-- [ ] `idx_agg_availability_online` on `aggregator_availability(user_id) WHERE is_online=true`.
-- [ ] `idx_agg_rates_aggregator` on `aggregator_material_rates(aggregator_id)`.
-- [ ] `idx_agg_rates_material` on `aggregator_material_rates(material_code)`.
-- [ ] `idx_status_history_order_id` on `order_status_history(order_id, created_at ASC)`.
-- [ ] `idx_messages_order_created` on each partition: `(order_id, created_at ASC)`.
+- [x] `idx_orders_city_status` on `orders(city_code, status) WHERE status='created' AND deleted_at IS NULL`.
+- [x] `idx_orders_seller_id` on `orders(seller_id, created_at DESC)`.
+- [x] `idx_orders_aggregator_id` on `orders(aggregator_id) WHERE aggregator_id IS NOT NULL`.
+- [x] `idx_device_tokens_user_id` on `device_tokens(user_id) WHERE is_active=true`.
+- [x] `idx_agg_availability_online` on `aggregator_availability(user_id) WHERE is_online=true`.
+- [x] `idx_agg_rates_aggregator` on `aggregator_material_rates(aggregator_id)`.
+- [x] `idx_agg_rates_material` on `aggregator_material_rates(material_code)`.
+- [x] `idx_status_history_order_id` on `order_status_history(order_id, created_at ASC)`.
+- [x] `idx_messages_order_created` on each partition: `(order_id, created_at ASC)`.
 
 ### 5.3 Row Level Security (~40 min)
-- [ ] Enable RLS on EVERY table: `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY` — run a verify query after: `SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=false` → must return 0 rows.
-- [ ] `seller_own_orders_read` — SELECT/UPDATE/DELETE: `USING (current_app_user_id() = seller_id)`.
-- [ ] `seller_own_orders_write` — INSERT: `WITH CHECK (current_app_user_id() = seller_id)` (R2 — must be separate policy).
-- [ ] `aggregator_city_orders` — SELECT only (for feed): `status='created'`, `deleted_at IS NULL`, `city_code` matches aggregator's city_code in `aggregator_profiles`, material rate exists. **No ST_DWithin. No PostGIS.**
-- [ ] `aggregator_accepted_order` — SELECT: `aggregator_id = current_app_user_id()`.
-- [ ] `message_parties` — ALL ops: `current_app_user_id()` must be `sender_id` or the `seller_id`/`aggregator_id` of the linked order.
-- [ ] `device_tokens` — self-only read/write: `user_id = current_app_user_id()`.
-- [ ] `business_members` — admin role: full access; operator: INSERT orders only; viewer: SELECT only (R1).
-- [ ] `ratings` — INSERT: order parties only, `order.status='completed'`; SELECT: both parties.
-- [ ] `order_media` — read: order parties + admin; INSERT: uploader only (verify ownership match).
-- [ ] `admin_audit_log` — SELECT: admin only; INSERT: no client path (backend service connection only).
-- [ ] `aggregator_profiles` — UPDATE: `user_id = current_app_user_id()` AND `kyc_status` column changes blocked (handled by trigger §5.4).
+- [x] Enable RLS on EVERY table: `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY` — run a verify query after: `SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=false` → must return 0 rows.
+- [x] `seller_own_orders_read` — SELECT/UPDATE/DELETE: `USING (current_app_user_id() = seller_id)`.
+- [x] `seller_own_orders_write` — INSERT: `WITH CHECK (current_app_user_id() = seller_id)` (R2 — must be separate policy).
+- [x] `aggregator_city_orders` — SELECT only (for feed): `status='created'`, `deleted_at IS NULL`, `city_code` matches aggregator's city_code in `aggregator_profiles`, material rate exists. **No ST_DWithin. No PostGIS.**
+- [x] `aggregator_accepted_order` — SELECT: `aggregator_id = current_app_user_id()`.
+- [x] `message_parties` — ALL ops: `current_app_user_id()` must be `sender_id` or the `seller_id`/`aggregator_id` of the linked order.
+- [x] `device_tokens` — self-only read/write: `user_id = current_app_user_id()`.
+- [x] `business_members` — admin role: full access; operator: INSERT orders only; viewer: SELECT only (R1).
+- [x] `ratings` — INSERT: order parties only, `order.status='completed'`; SELECT: both parties.
+- [x] `order_media` — read: order parties + admin; INSERT: uploader only (verify ownership match).
+- [x] `admin_audit_log` — SELECT: admin only; INSERT: no client path (backend service connection only).
+- [x] `aggregator_profiles` — UPDATE: `user_id = current_app_user_id()` AND `kyc_status` column changes blocked (handled by trigger §5.4).
 
 ### 5.4 Triggers (~20 min)
-- [ ] `kyc_status_guard()` — on `aggregator_profiles` BEFORE UPDATE: block `kyc_status` change when `current_setting('app.is_admin_context', true) <> 'true'` (V35). Admin routes SET this before executing the update.
-- [ ] `create_next_month_message_partition()` PL/pgSQL function — callable from Express at startup AND by node-cron on 25th of each month.
+- [x] `kyc_status_guard()` — on `aggregator_profiles` BEFORE UPDATE: block `kyc_status` change when `current_setting('app.is_admin_context', true) <> 'true'` (V35). Admin routes SET this before executing the update.
+- [x] `create_next_month_message_partition()` PL/pgSQL function — callable from Express at startup AND by node-cron on 25th of each month.
 
 ### 5.5 Materialized Views (~15 min)
-- [ ] `aggregator_rating_stats` view: `aggregator_id, avg_rating, total_orders, last_updated` — joins `ratings` + `orders`.
-- [ ] `current_price_index` view: `DISTINCT ON (city_code, material_code)` latest rate ordered by `scraped_at DESC`.
+- [x] `aggregator_rating_stats` view: `aggregator_id, avg_rating, total_orders, last_updated` — joins `ratings` + `orders`.
+- [x] `current_price_index` view: `DISTINCT ON (city_code, material_code)` latest rate ordered by `scraped_at DESC`.
   > Both refreshed by node-cron on Express, not pg_cron.
 
 ### 5.6 FOR UPDATE SKIP LOCKED Smoke Test (~15 min)
-- [ ] Open two concurrent `psql` sessions. Both attempt: `SELECT id FROM orders WHERE id=$X AND status='created' FOR UPDATE SKIP LOCKED`. Confirm exactly one session gets the row, the other gets zero rows.
+- [x] Open two concurrent `psql` sessions. Both attempt: `SELECT id FROM orders WHERE id=$X AND status='created' FOR UPDATE SKIP LOCKED`. Confirm exactly one session gets the row, the other gets zero rows.
 
 ### 🚦 DAY 5 VERIFICATION GATE
-- [ ] **G5.1** — All 12 migration files applied with zero errors.
-- [ ] **G5.2** — RLS enabled on EVERY table: `SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=false` → 0 rows.
-- [ ] **G5.3** — `seller_own_orders_write`: SET `app.current_user_id = user_A`, INSERT order with `seller_id = user_B` → RLS rejection.
-- [ ] **G5.4** — `aggregator_city_orders` SELECT: aggregator in HYD sees `status='created'` HYD orders. Aggregator with `is_online=false` → 0 rows (availability check).
-- [ ] **G5.5** — `kyc_status` trigger: UPDATE `kyc_status` without `app.is_admin_context = 'true'` → trigger rejects. With it → succeeds.
-- [ ] **G5.6** — `FOR UPDATE SKIP LOCKED`: concurrent sessions → exactly one wins, one gets 0 rows.
-- [ ] **G5.7** — `users_public` view still excludes `phone_hash` and `clerk_user_id` after all migrations.
-- [ ] **G5.8** — Materialized views refresh without error: `REFRESH MATERIALIZED VIEW aggregator_rating_stats`.
+- [x] **G5.1** — All 12 migration files applied with zero errors.
+- [x] **G5.2** — RLS enabled on EVERY table: `SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=false` → 0 rows.
+- [x] **G5.3** — `seller_own_orders_write`: SET `app.current_user_id = user_A`, INSERT order with `seller_id = user_B` → RLS rejection.
+- [x] **G5.4** — `aggregator_city_orders` SELECT: aggregator in HYD sees `status='created'` HYD orders. Aggregator with `is_online=false` → 0 rows (availability check).
+- [x] **G5.5** — `kyc_status` trigger: UPDATE `kyc_status` without `app.is_admin_context = 'true'` → trigger rejects. With it → succeeds.
+- [x] **G5.6** — `FOR UPDATE SKIP LOCKED`: concurrent sessions → exactly one wins, one gets 0 rows.
+- [x] **G5.7** — `users_public` view still excludes `phone_hash` and `clerk_user_id` after all migrations.
+- [x] **G5.8** — Materialized views refresh without error: `REFRESH MATERIALIZED VIEW aggregator_rating_stats`.
 
 ---
 

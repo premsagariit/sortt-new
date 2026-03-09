@@ -713,6 +713,12 @@ Do not delete old entries. Append only.
 
 - **[2026-03-06] Android Package Consolidation for EAS:** Duplicate `android.package` entries in `app.json` (one inside `expo` and one outside) cause build-time contradictions. Always consolidate inside `expo.android.package`. Added explicit foreground image and background color for adaptive icons to satisfy EAS validation. Affects: `apps/mobile/app.json`.
 
+- **[2026-03-08] Migration Execution Environment:** When raw `psql` is unavailable in the execution environment (e.g., Windows without PostgreSQL tools installed), executing `.sql` migration files via a Node.js script using the `pg` package is the preferred fallback. Ensure connection strings enforce SSL (`sslmode=require`) to match Azure Flexible Server constraints. Always ensure `client.end()` is called to prevent hanging scripts. Affects: Day 4 database setup.
+
+- **[2026-03-09] Multi-Action RLS Syntax Limitations:** Combining `FOR SELECT, UPDATE, DELETE` into a single `CREATE POLICY` can fail with syntax errors in PostgreSQL depending on the clauses provided (e.g., providing `USING` but omitting `WITH CHECK` for `UPDATE`). To ensure robustness, split multi-action policies into atomic `CREATE POLICY ... FOR SELECT`, `FOR UPDATE`, and `FOR DELETE` statements. Affects: `migrations/0009_rls.sql`.
+
+- **[2026-03-09] Partition RLS Inheritance:** Enabling Row Level Security (`ALTER TABLE parent ENABLE ROW LEVEL SECURITY`) on a partitioned parent table does NOT automatically enable it on existing child partition tables. `rowsecurity=false` will remain on the partitions. You must explicitly run `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every individual partition table. Affects: `migrations/0009_rls.sql`.
+
 ---
 
 ## 11. Pricing Architecture — 3-Tier Model

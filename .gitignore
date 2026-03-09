@@ -41,3 +41,7 @@ temp/
 .antigravityrules
 r.txt
 adapters/
+
+# Env file
+backend/.env
+apps/mobile/.env

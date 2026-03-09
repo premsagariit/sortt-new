@@ -111,6 +111,7 @@ Sortt
 │   │   │   ├── orderStore.ts # Cross-role order lifecycle state
 │   │   │   └── uiStore.ts # Navigation signals and global overlays
 │   │   ├── package.json # NPM dependencies for mobile app
+│   │   ├── .env # Environment variables for mobile app
 │   │   └── tsconfig.json # TypeScript configuration for mobile app
 │   └── web # Web dashboard and management (TBI)
 │       ├── package.json
@@ -122,6 +123,8 @@ Sortt
 │   │   ├── middleware # JWT validation and security layers
 │   │   ├── routes # Domain-specific API endpoints
 │   │   └── utils # Helper functions and provider clients
+│   │   ├── .env # Environment variables for backend
+│   │   └── tsconfig.json # TypeScript configuration for backend
 │   └── tsconfig.json
 ├── pnpm-workspace.yaml # Monorepo workspace configuration
 ├── package.json # Root package management
