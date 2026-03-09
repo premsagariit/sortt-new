@@ -11,7 +11,8 @@
     "type-check": "pnpm -r type-check",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "install:all": "pnpm install"
+    "install:all": "pnpm install",
+    "start": "node backend/dist/index.js"
   },
   "keywords": [],
   "author": "",
