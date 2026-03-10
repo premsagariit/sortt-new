@@ -17,7 +17,8 @@ const PHONE_HASH_SECRET = process.env.PHONE_HASH_SECRET || 'fallback_phone_secre
 const OTP_HMAC_SECRET = process.env.OTP_HMAC_SECRET || 'fallback_otp_secret';
 const META_TOKEN = process.env.META_WHATSAPP_TOKEN;
 const META_PHONE_ID = process.env.META_PHONE_NUMBER_ID;
-const META_TEMPLATE = process.env.META_OTP_TEMPLATE_NAME || 'sortt_otp_auth';
+const META_TEMPLATE = process.env.META_OTP_TEMPLATE_NAME || 'Sortt_OTP';
+const META_API_VERSION = process.env.META_API_VERSION || 'v22.0';
 
 // Utility to compute HMAC
 const computeHmac = (data: string, secret: string) => {
@@ -60,18 +61,25 @@ router.post('/request-otp', async (req: Request, res: Response) => {
 
         // Send via Meta WhatsApp API
         if (META_TOKEN && META_PHONE_ID) {
-            await axios.post(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`, {
+            const isHelloWorld = META_TEMPLATE === 'hello_world';
+            const templatePayload: any = {
+                name: META_TEMPLATE,
+                language: { code: 'en_US' }
+            };
+
+            // Only add components if we are not using the generic test template
+            if (!isHelloWorld) {
+                templatePayload.components = [
+                    { type: 'body', parameters: [{ type: 'text', text: otp }] },
+                    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }
+                ];
+            }
+
+            await axios.post(`https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`, {
                 messaging_product: 'whatsapp',
                 to: phone.replace('+', ''),
                 type: 'template',
-                template: {
-                    name: META_TEMPLATE,
-                    language: { code: 'en_US' },
-                    components: [
-                        { type: 'body', parameters: [{ type: 'text', text: otp }] },
-                        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }
-                    ]
-                }
+                template: templatePayload
             }, {
                 headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' }
             });
