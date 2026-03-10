@@ -113,7 +113,12 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 - Phone number + OTP verification. OTP delivered via WhatsApp.
 - Full name, business name (if applicable), operating area (select city + locality zones).
 - Aggregator type: Shop-based or Mobile (tempo/auto).
-- Document upload: Aadhaar photo + shop photo or vehicle photo. (Lightweight KYC — reviewed manually by admin in v1.)
+- Document upload (Lightweight KYC — reviewed manually by admin in v1): Aggregators must upload exactly 4 photos:
+  1. **Aadhaar Card Front** — required for all aggregators.
+  2. **Aadhaar Card Back** — required for all aggregators.
+  3. **Selfie (face photo)** — required for all aggregators.
+  4. **Shop exterior photo** (if `aggregator_type = 'shop'`) **OR Full vehicle photo** (if `aggregator_type = 'mobile'`) — conditional on aggregator type selected during onboarding.
+  The conditional photo slot is determined server-side from `aggregator_profiles.aggregator_type` — never from client input.
 - Material types handled: multi-select (paper, plastic, metal, electronics, glass, fabric).
 - Operating hours and days.
 - Price setting per material type per kg (can be updated anytime from Price Management screen).

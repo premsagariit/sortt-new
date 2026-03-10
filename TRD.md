@@ -731,14 +731,15 @@ CREATE TABLE seller_profiles (
 CREATE TABLE aggregator_profiles (
   user_id              UUID PRIMARY KEY REFERENCES users(id),
   business_name        TEXT,
-  city_code            TEXT REFERENCES cities(code),   -- Aggregator's operating city
-  operating_area_text  TEXT,                           -- Human-readable area description
+  aggregator_type      TEXT NOT NULL DEFAULT 'mobile'
+                         CHECK (aggregator_type IN ('shop','mobile')),  -- Determines conditional KYC photo slot
+  city_code            TEXT REFERENCES cities(code),
+  operating_area_text  TEXT,
   kyc_status           TEXT NOT NULL DEFAULT 'pending'
                          CHECK (kyc_status IN ('pending','verified','rejected')),
   operating_hours      JSONB,
   member_since         TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- Business Mode sub-users (R1)
 CREATE TABLE business_members (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -812,15 +813,23 @@ CREATE TABLE order_status_history (
 );
 
 -- Order media (storage_path is Uploadthing file key)
+-- Order media (storage_path is Uploadthing file key)
+-- order_id is NULL for KYC document rows — KYC is not linked to any order
 CREATE TABLE order_media (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  order_id     UUID NOT NULL REFERENCES orders(id),
+  order_id     UUID REFERENCES orders(id),              -- Nullable: NULL for KYC media types
   media_type   TEXT NOT NULL CHECK (media_type IN
-                 ('scrap_photo','scale_photo','kyc_aadhaar','kyc_shop','invoice')),
+                 ('scrap_photo','scale_photo',
+                  'kyc_aadhaar_front',                  -- Aadhaar card front — all aggregators
+                  'kyc_aadhaar_back',                   -- Aadhaar card back — all aggregators
+                  'kyc_selfie',                         -- Face photo — all aggregators
+                  'kyc_shop',                           -- Shop exterior — aggregator_type='shop' only
+                  'kyc_vehicle',                        -- Vehicle photo — aggregator_type='mobile' only
+                  'invoice')),
   storage_path TEXT NOT NULL,   -- Uploadthing file key — used to generate signed URLs
   uploaded_by  UUID NOT NULL REFERENCES users(id),
   created_at   TIMESTAMPTZ DEFAULT NOW()
-);
+)
 
 -- Device tokens (dual-token strategy)
 CREATE TABLE device_tokens (

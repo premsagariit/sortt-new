@@ -6,6 +6,9 @@ import cors from 'cors';
 import { authMiddleware } from './middleware/auth';
 import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
+import authRouter from './routes/auth';
+import aggregatorsRouter from './routes/aggregators';
+import { startScheduler } from './scheduler';
 
 const app = express();
 
@@ -39,6 +42,11 @@ app.use(sanitizeBody);
 // Test route for G6.4
 app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 
+// Auth router mounted BEFORE global Clerk JWT middleware.
+// /api/auth/* routes are public — request-otp and verify-otp bypass Clerk.
+// The authMiddleware exemption list (path.startsWith('/api/auth/')) already covers these.
+app.use('/api/auth', authRouter); // PUBLIC routes — no Clerk JWT
+
 // 5. Auth Middleware
 app.use(authMiddleware);
 
@@ -49,6 +57,7 @@ app.get('/health', (req, res) => {
 
 // APIs will be mounted here later
 app.get('/api/orders', (req, res) => res.json({ success: true }));
+app.use('/api/aggregators', aggregatorsRouter);
 
 
 // 6. Global error handler MUST be last
@@ -58,4 +67,5 @@ const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  startScheduler();
 });

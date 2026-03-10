@@ -76,3 +76,15 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
 
     executeNext();
 };
+
+export const verifyRole = (requiredRole: string) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        if (req.user.user_type !== requiredRole) {
+            return res.status(403).json({ error: 'Forbidden: Insufficient role' });
+        }
+        next();
+    };
+};

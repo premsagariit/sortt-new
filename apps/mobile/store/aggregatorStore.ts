@@ -54,7 +54,7 @@ interface AggregatorStoreState {
   // ── Onboarding State ───────────────────────────────────────────
   fullName: string;
   businessName: string;
-  businessType: 'shop' | 'mobile' | null;
+  aggregatorType: 'shop' | 'mobile' | null;
   primaryArea: string;
   operatingHours: { from: string; to: string };
   operatingDays: string[];
@@ -73,11 +73,14 @@ interface AggregatorStoreState {
 
   // ── Photo Capture State ────────────────────────────────────────
   scalePhotoUri: string | null;
-  kycAadhaarUri: string | null;
+  kycAadhaarFrontUri: string | null;
+  kycAadhaarBackUri: string | null;
+  kycSelfieUri: string | null;
   kycShopPhotoUri: string | null;
+  kycVehiclePhotoUri: string | null;
 
   // ── Actions ────────────────────────────────────────────────────
-  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'businessType' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
+  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'aggregatorType' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
   setOperatingAreas: (areas: string[]) => void;
   setMaterialSelected: (id: string, selected: boolean) => void;
   setMaterialRate: (id: string, rate: number) => void;
@@ -102,8 +105,11 @@ interface AggregatorStoreState {
   acceptOrder: (orderId: string) => void;
 
   setScalePhotoUri: (uri: string | null) => void;
-  setKycAadhaarUri: (uri: string | null) => void;
+  setKycAadhaarFrontUri: (uri: string | null) => void;
+  setKycAadhaarBackUri: (uri: string | null) => void;
+  setKycSelfieUri: (uri: string | null) => void;
   setKycShopPhotoUri: (uri: string | null) => void;
+  setKycVehiclePhotoUri: (uri: string | null) => void;
   reset: () => void;
 }
 
@@ -159,7 +165,7 @@ const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
 export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   fullName: '',
   businessName: '',
-  businessType: null,
+  aggregatorType: null,
   primaryArea: '',
   operatingHours: { from: '08:00 AM', to: '07:00 PM' },
   operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -175,8 +181,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   isOnline: false,
   isLoading: false,
   scalePhotoUri: null,
-  kycAadhaarUri: null,
+  kycAadhaarFrontUri: null,
+  kycAadhaarBackUri: null,
+  kycSelfieUri: null,
   kycShopPhotoUri: null,
+  kycVehiclePhotoUri: null,
 
   setProfile: (p) => set((state) => ({ ...state, ...p })),
   setOperatingAreas: (areas) => set({ operatingAreas: areas }),
@@ -240,11 +249,14 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   }),
 
   setScalePhotoUri: (uri) => set({ scalePhotoUri: uri }),
-  setKycAadhaarUri: (uri) => set({ kycAadhaarUri: uri }),
+  setKycAadhaarFrontUri: (uri) => set({ kycAadhaarFrontUri: uri }),
+  setKycAadhaarBackUri: (uri) => set({ kycAadhaarBackUri: uri }),
+  setKycSelfieUri: (uri) => set({ kycSelfieUri: uri }),
   setKycShopPhotoUri: (uri) => set({ kycShopPhotoUri: uri }),
+  setKycVehiclePhotoUri: (uri) => set({ kycVehiclePhotoUri: uri }),
 
   reset: () => set({
-    fullName: '', businessName: '', businessType: null, primaryArea: '',
+    fullName: '', businessName: '', aggregatorType: null, primaryArea: '',
     operatingHours: { from: '08:00 AM', to: '07:00 PM' },
     operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     weeklySchedule: WEEKLY_SCHEDULE_DEFAULT,
@@ -253,6 +265,6 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     nearbyOrders: [], newOrders: SEED_NEW_ORDERS, activeOrders: [], dismissedOrderIds: [],
     earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
     isOnline: false, isLoading: false,
-    scalePhotoUri: null, kycAadhaarUri: null, kycShopPhotoUri: null,
+    scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null, kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
   }),
 }));

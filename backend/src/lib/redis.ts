@@ -36,3 +36,30 @@ export const globalGeminiCounter = createLimiter({
     limiter: Ratelimit.fixedWindow(100, '30 d'), // Global usage context
     prefix: '@upstash/ratelimit/gemini_global',
 });
+
+// ----------------------------------------------------
+// Day 7 New Limiters (keyed by phone hash)
+// ----------------------------------------------------
+
+export const otpRequestPhoneLimiter = createLimiter({
+    limiter: Ratelimit.slidingWindow(3, '10 m'), // 3 per 10 mins
+    prefix: '@upstash/ratelimit/otp_request_phone',
+});
+
+export const otpVerifyPhoneLimiter = createLimiter({
+    limiter: Ratelimit.slidingWindow(3, '10 m'), // 3 per 10 mins
+    prefix: '@upstash/ratelimit/otp_verify_phone',
+});
+
+// Helper for Meta conversation counter
+export const incrementMetaConvCount = async (monthKey: string): Promise<number> => {
+    if (!redis) return 0;
+    const key = `meta:conv_count:${monthKey}`;
+    const count = await redis.incr(key);
+    // Set TTL on first increment to cleanup automatically
+    if (count === 1) {
+        await redis.expire(key, 40 * 24 * 60 * 60); // 40 days
+    }
+    return count;
+};
+

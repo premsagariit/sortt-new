@@ -525,11 +525,12 @@
 
 ### 7.3 KYC Upload Routes (~25 min)
 - [ ] `POST /api/aggregators/kyc` — Clerk JWT required, aggregator only:
-  - Accept: `aadhaar_photo` (multipart) + `shop_photo` (multipart).
-  - Strip EXIF via `sharp` (V18). Upload both to Uploadthing via `IStorageProvider.upload()`.
-  - INSERT to `order_media` (type: `kyc_aadhaar`, `kyc_shop`).
-  - Set `kyc_status = 'pending'` (already default — just confirm it's not overrideable here).
-  - Return 200. Notify admin via push (generic copy — D2).
+  - Accept multipart fields: `aadhaar_front`, `aadhaar_back`, `selfie` (required for all); `shop_photo` OR `vehicle_photo` (required — conditional on `aggregator_type` read from DB, never from request body).
+  - Strip EXIF via `sharp` on each file before any other processing (V18).
+  - Upload each stripped file to Uploadthing via `IStorageProvider.upload()`.
+  - INSERT one row per file to `order_media` with `order_id = NULL` and correct `media_type`: `kyc_aadhaar_front`, `kyc_aadhaar_back`, `kyc_selfie`, `kyc_shop` or `kyc_vehicle`.
+  - `kyc_status` must NOT be set here — it stays `'pending'` (V35).
+  - Return 200. Notify admin via push (generic copy only — D2).
 - [ ] `GET /api/aggregators/kyc/status` — returns `{ kyc_status }` for authenticated aggregator. No document URLs in response (signed URLs served separately on admin route only).
 
 ### 🚦 DAY 7 VERIFICATION GATE
@@ -965,7 +966,7 @@
 - [ ] Vercel Edge Middleware `middleware.ts`: IP allowlist for ALL `/admin/*` routes (X4). Reads `ADMIN_IP_ALLOWLIST` env var.
 - [ ] 15-minute inactivity timeout → auto logout.
 - [ ] `app/(admin)/` — admin panel:
-  - **KYC Queue**: table of `kyc_status='pending'` aggregators. View Aadhaar + shop photos via signed URLs. Approve → `PATCH /api/admin/aggregators/:id/kyc` (sets `app.is_admin_context='true'` before `kyc_status` update). Every action logged to `admin_audit_log` (X4).
+  **KYC Queue**: table of `kyc_status='pending'` aggregators. View all submitted KYC documents via signed URLs: Aadhaar front, Aadhaar back, selfie, and the conditional shop or vehicle photo (determined by `aggregator_type`). Signed URLs served by admin route only — never in aggregator-facing responses.
   - **Disputes**: chat history + scale photos + OTP log. 72-hour SLA indicator. Resolve/Dismiss route.
   - **Price Override**: manual rate entry. `is_manual_override=true`. Logged to `admin_audit_log`.
   - **Flagged Aggregators**: avg rating < 3.0 after 10+ completed orders.

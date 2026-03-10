@@ -2,7 +2,7 @@
  * app/(auth)/aggregator/kyc.tsx
  * ──────────────────────────────────────────────────────────────────
  * Aggregator KYC — Step 4/4 of onboarding.
- * Two independent camera cards (Aadhaar + Shop/Vehicle photo).
+ * 4 independent camera cards (Aadhaar Front, Aadhaar Back, Selfie, Shop/Vehicle).
  * URIs stored in aggregatorStore — local only until Day 8 upload.
  * ──────────────────────────────────────────────────────────────────
  */
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, IdentificationCard, Storefront, WarningCircle, CheckCircle, IconWeight } from 'phosphor-react-native';
+import { Camera, IdentificationCard, Storefront, WarningCircle, CheckCircle, IconWeight, User, Truck } from 'phosphor-react-native';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
@@ -26,40 +26,85 @@ import { safeBack } from '../../../utils/navigation';
 
 export default function KycScreen() {
     const {
-        kycAadhaarUri,
+        aggregatorType,
+        kycAadhaarFrontUri,
+        kycAadhaarBackUri,
+        kycSelfieUri,
         kycShopPhotoUri,
-        setKycAadhaarUri,
+        kycVehiclePhotoUri,
+        setKycAadhaarFrontUri,
+        setKycAadhaarBackUri,
+        setKycSelfieUri,
         setKycShopPhotoUri,
+        setKycVehiclePhotoUri,
     } = useAggregatorStore();
 
-    // Two independent hook instances — each manages its own permission + loading state
-    const aadhaar = usePhotoCapture();
-    const shopPhoto = usePhotoCapture();
+    // Independent hook instances — each manages its own permission + loading state
+    const aadhaarFront = usePhotoCapture();
+    const aadhaarBack = usePhotoCapture();
+    const selfie = usePhotoCapture();
+    const fourthPhoto = usePhotoCapture();
 
-    // Sync Aadhaar capture into store
+    // Sync captures into store
     useEffect(() => {
-        if (aadhaar.photoUri) setKycAadhaarUri(aadhaar.photoUri);
-    }, [aadhaar.photoUri, setKycAadhaarUri]);
+        if (aadhaarFront.photoUri) setKycAadhaarFrontUri(aadhaarFront.photoUri);
+    }, [aadhaarFront.photoUri, setKycAadhaarFrontUri]);
 
-    // Sync shop/vehicle capture into store
     useEffect(() => {
-        if (shopPhoto.photoUri) setKycShopPhotoUri(shopPhoto.photoUri);
-    }, [shopPhoto.photoUri, setKycShopPhotoUri]);
+        if (aadhaarBack.photoUri) setKycAadhaarBackUri(aadhaarBack.photoUri);
+    }, [aadhaarBack.photoUri, setKycAadhaarBackUri]);
 
-    const handleRetakeAadhaar = async () => {
-        aadhaar.reset();
-        setKycAadhaarUri(null);
-        await aadhaar.pickPhoto();
+    useEffect(() => {
+        if (selfie.photoUri) setKycSelfieUri(selfie.photoUri);
+    }, [selfie.photoUri, setKycSelfieUri]);
+
+    useEffect(() => {
+        if (fourthPhoto.photoUri) {
+            if (aggregatorType === 'shop') setKycShopPhotoUri(fourthPhoto.photoUri);
+            else setKycVehiclePhotoUri(fourthPhoto.photoUri);
+        }
+    }, [fourthPhoto.photoUri, aggregatorType, setKycShopPhotoUri, setKycVehiclePhotoUri]);
+
+    const handleRetakeAadhaarFront = async () => {
+        aadhaarFront.reset();
+        setKycAadhaarFrontUri(null);
+        await aadhaarFront.pickPhoto();
     };
 
-    const handleRetakeShop = async () => {
-        shopPhoto.reset();
-        setKycShopPhotoUri(null);
-        await shopPhoto.pickPhoto();
+    const handleRetakeAadhaarBack = async () => {
+        aadhaarBack.reset();
+        setKycAadhaarBackUri(null);
+        await aadhaarBack.pickPhoto();
     };
 
-    // Submit enabled only when BOTH URIs are captured — reads from STORE, not local state
-    const canSubmit = kycAadhaarUri !== null && kycShopPhotoUri !== null;
+    const handleRetakeSelfie = async () => {
+        selfie.reset();
+        setKycSelfieUri(null);
+        await selfie.pickPhoto();
+    };
+
+    const handleRetakeFourth = async () => {
+        fourthPhoto.reset();
+        if (aggregatorType === 'shop') setKycShopPhotoUri(null);
+        else setKycVehiclePhotoUri(null);
+        await fourthPhoto.pickPhoto();
+    };
+
+    // Submit enabled only when ALL required URIs are captured
+    const isFourthPhotoDone = aggregatorType === 'shop' ? kycShopPhotoUri !== null : kycVehiclePhotoUri !== null;
+    const canSubmit = kycAadhaarFrontUri !== null && kycAadhaarBackUri !== null && kycSelfieUri !== null && isFourthPhotoDone;
+
+    const handleSubmit = () => {
+        console.log('Form submission API integration planned for Day 8.');
+        router.replace('/(aggregator)/home' as any);
+    };
+
+    const fourthTitle = aggregatorType === 'shop' ? 'Shop Photo' : 'Vehicle Photo';
+    const fourthSubtitle = aggregatorType === 'shop'
+        ? 'Photo of your shop front'
+        : 'Photo of your collection vehicle';
+    const FourthIcon = aggregatorType === 'shop' ? Storefront : Truck;
+    const fourthUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
 
     return (
         <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -81,41 +126,67 @@ export default function KycScreen() {
                 <View style={styles.header}>
                     <Text variant="heading">Upload KYC Documents</Text>
                     <Text variant="caption" color={colors.muted}>
-                        Both photos are required. Documents are verified within 24 hours.
+                        All 4 photos are required. Documents are verified within 24 hours.
                     </Text>
                 </View>
 
-                {/* Card 1 — Aadhaar */}
+                {/* Card 1 — Aadhaar Front */}
                 <PhotoCard
                     title="Aadhaar Card (Front)"
                     subtitle="Clear photo of the front side of your Aadhaar card"
                     Icon={IdentificationCard}
-                    storedUri={kycAadhaarUri}
-                    badge="✓ Aadhaar uploaded"
-                    permissionDenied={aadhaar.permissionDenied}
-                    isLoading={aadhaar.isLoading}
-                    onTap={aadhaar.pickPhoto}
-                    onRetake={handleRetakeAadhaar}
+                    storedUri={kycAadhaarFrontUri}
+                    badge="✓ Front uploaded"
+                    permissionDenied={aadhaarFront.permissionDenied}
+                    isLoading={aadhaarFront.isLoading}
+                    onTap={aadhaarFront.pickPhoto}
+                    onRetake={handleRetakeAadhaarFront}
                 />
 
-                {/* Card 2 — Shop / Vehicle Photo */}
+                {/* Card 2 — Aadhaar Back */}
                 <PhotoCard
-                    title="Shop / Vehicle Photo"
-                    subtitle="Photo of your shop front or collection vehicle"
-                    Icon={Storefront}
-                    storedUri={kycShopPhotoUri}
+                    title="Aadhaar Card (Back)"
+                    subtitle="Clear photo of the back side of your Aadhaar card"
+                    Icon={IdentificationCard}
+                    storedUri={kycAadhaarBackUri}
+                    badge="✓ Back uploaded"
+                    permissionDenied={aadhaarBack.permissionDenied}
+                    isLoading={aadhaarBack.isLoading}
+                    onTap={aadhaarBack.pickPhoto}
+                    onRetake={handleRetakeAadhaarBack}
+                />
+
+                {/* Card 3 — Selfie */}
+                <PhotoCard
+                    title="Your Photo"
+                    subtitle="Clear selfie facing the camera"
+                    Icon={User}
+                    storedUri={kycSelfieUri}
                     badge="✓ Photo uploaded"
-                    permissionDenied={shopPhoto.permissionDenied}
-                    isLoading={shopPhoto.isLoading}
-                    onTap={shopPhoto.pickPhoto}
-                    onRetake={handleRetakeShop}
+                    permissionDenied={selfie.permissionDenied}
+                    isLoading={selfie.isLoading}
+                    onTap={selfie.pickPhoto}
+                    onRetake={handleRetakeSelfie}
+                />
+
+                {/* Card 4 — Shop / Vehicle Photo */}
+                <PhotoCard
+                    title={fourthTitle}
+                    subtitle={fourthSubtitle}
+                    Icon={FourthIcon}
+                    storedUri={fourthUri}
+                    badge="✓ Photo uploaded"
+                    permissionDenied={fourthPhoto.permissionDenied}
+                    isLoading={fourthPhoto.isLoading}
+                    onTap={fourthPhoto.pickPhoto}
+                    onRetake={handleRetakeFourth}
                 />
             </ScrollView>
 
             <View style={styles.footer}>
                 <PrimaryButton
-                    label="Submit & Continue →"
-                    onPress={() => router.replace('/(aggregator)/home' as any)}
+                    label="Submit for Verification"
+                    onPress={handleSubmit}
                     disabled={!canSubmit}
                 />
             </View>

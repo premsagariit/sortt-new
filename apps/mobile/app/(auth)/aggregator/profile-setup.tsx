@@ -18,12 +18,12 @@ import { safeBack } from '../../../utils/navigation';
  */
 export default function AggregatorProfileSetup() {
   const router = useRouter();
-  const { 
-    fullName, businessName, businessType, primaryArea, 
-    operatingHours, operatingDays, setProfile 
+  const {
+    fullName, businessName, aggregatorType, primaryArea,
+    operatingHours, operatingDays, setProfile
   } = useAggregatorStore();
 
-  const isNextDisabled = !fullName || !businessType || !primaryArea;
+  const isNextDisabled = !fullName || !aggregatorType || !primaryArea;
 
   const handleNext = () => {
     router.push('/(auth)/aggregator/area-setup' as any);
@@ -37,21 +37,21 @@ export default function AggregatorProfileSetup() {
     const newDays = operatingDays.includes(day)
       ? operatingDays.filter(d => d !== day)
       : [...operatingDays, day].sort((a, b) => {
-          const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-          return order.indexOf(a) - order.indexOf(b);
-        });
+        const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return order.indexOf(a) - order.indexOf(b);
+      });
     setProfile({ operatingDays: newDays });
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <NavBar 
-        title="Set Up Profile" 
-        variant="light" 
+      <NavBar
+        title="Set Up Profile"
+        variant="light"
         onBack={handleBack}
         rightAction={<Text variant="caption">Step 1 of 3</Text>}
       />
-      
+
       <View style={styles.progressContainer}>
         <ProgressBar progress={0.33} color={colors.red} />
       </View>
@@ -59,7 +59,7 @@ export default function AggregatorProfileSetup() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Full Name</Text>
-          <Input 
+          <Input
             value={fullName}
             onChangeText={(txt) => setProfile({ fullName: txt })}
             placeholder="e.g. Vijay Kumar"
@@ -71,7 +71,7 @@ export default function AggregatorProfileSetup() {
             <Text variant="label" style={styles.label}>Business Name</Text>
             <Text variant="caption" style={styles.optional}>(optional)</Text>
           </View>
-          <Input 
+          <Input
             value={businessName}
             onChangeText={(txt) => setProfile({ businessName: txt })}
             placeholder="e.g. Kumar Scrap Co."
@@ -81,18 +81,18 @@ export default function AggregatorProfileSetup() {
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Business Type</Text>
           <View style={styles.typeRow}>
-            <TouchableOpacity 
-              style={[styles.typeCard, businessType === 'shop' && styles.typeCardSelected]}
-              onPress={() => setProfile({ businessType: 'shop' })}
+            <TouchableOpacity
+              style={[styles.typeCard, aggregatorType === 'shop' && styles.typeCardSelected]}
+              onPress={() => setProfile({ aggregatorType: 'shop' })}
             >
               <Text style={styles.typeIcon}>🏪</Text>
               <Text variant="body" style={styles.typeTitle}>Shop-Based</Text>
               <Text variant="caption" style={styles.typeSub}>Fixed location</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.typeCard, businessType === 'mobile' && styles.typeCardSelected]}
-              onPress={() => setProfile({ businessType: 'mobile' })}
+
+            <TouchableOpacity
+              style={[styles.typeCard, aggregatorType === 'mobile' && styles.typeCardSelected]}
+              onPress={() => setProfile({ aggregatorType: 'mobile' })}
             >
               <Text style={styles.typeIcon}>🏍</Text>
               <Text variant="body" style={styles.typeTitle}>Mobile</Text>
@@ -103,7 +103,7 @@ export default function AggregatorProfileSetup() {
 
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Primary Area</Text>
-          <Input 
+          <Input
             value={primaryArea}
             onChangeText={(txt) => setProfile({ primaryArea: txt })}
             placeholder="e.g. Banjara Hills, Hyderabad"
@@ -113,14 +113,14 @@ export default function AggregatorProfileSetup() {
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Operating Hours</Text>
           <View style={styles.hoursRow}>
-            <Input 
+            <Input
               style={styles.hourInput}
               value={operatingHours.from}
               onChangeText={(txt) => setProfile({ operatingHours: { ...operatingHours, from: txt } })}
               mono
             />
             <Text style={styles.hoursSeparator}>—</Text>
-            <Input 
+            <Input
               style={styles.hourInput}
               value={operatingHours.to}
               onChangeText={(txt) => setProfile({ operatingHours: { ...operatingHours, to: txt } })}
@@ -131,7 +131,7 @@ export default function AggregatorProfileSetup() {
 
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Operating Days</Text>
-          <DayToggle 
+          <DayToggle
             selectedDays={operatingDays}
             onToggle={toggleDay}
           />
@@ -139,8 +139,8 @@ export default function AggregatorProfileSetup() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <PrimaryButton 
-          label="Next →" 
+        <PrimaryButton
+          label="Next →"
           onPress={handleNext}
           disabled={isNextDisabled}
         />
@@ -151,54 +151,54 @@ export default function AggregatorProfileSetup() {
 
 const styles = StyleSheet.create({
   container: {
-    flex:            1,
+    flex: 1,
     backgroundColor: colors.bg,
   },
   progressContainer: {
     paddingHorizontal: spacing.md,
-    backgroundColor:   colors.surface, // NavBar is white, keep PB container white for seamless look or match NavBar variant
+    backgroundColor: colors.surface, // NavBar is white, keep PB container white for seamless look or match NavBar variant
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop:        spacing.xl,
-    paddingBottom:     spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   section: {
     marginBottom: spacing.lg,
   },
   label: {
     marginBottom: spacing.xs,
-    color:        colors.navy,
-    fontWeight:   '600',
+    color: colors.navy,
+    fontWeight: '600',
   },
   labelRow: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           spacing.xs,
-    marginBottom:  spacing.xs,
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
   optional: {
     color: colors.muted,
   },
   typeRow: {
     flexDirection: 'row',
-    gap:           spacing.md,
+    gap: spacing.md,
   },
   typeCard: {
-    flex:            1,
-    padding:         spacing.md,
-    borderRadius:    16,
-    borderWidth:     2,
-    borderColor:     colors.border,
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
     backgroundColor: colors.surface,
-    alignItems:      'center',
-    gap:             6,
+    alignItems: 'center',
+    gap: 6,
   },
   typeCardSelected: {
-    borderColor:     colors.navy,
+    borderColor: colors.navy,
     backgroundColor: 'rgba(28, 46, 74, 0.03)',
   },
   typeIcon: {
@@ -206,28 +206,28 @@ const styles = StyleSheet.create({
   },
   typeTitle: {
     fontWeight: '600',
-    color:      colors.navy,
+    color: colors.navy,
   },
   typeSub: {
     color: colors.muted,
   },
   hoursRow: {
     flexDirection: 'row',
-    gap:           spacing.sm,
-    alignItems:    'center',
+    gap: spacing.sm,
+    alignItems: 'center',
   },
   hourInput: {
     flex: 1,
   },
   hoursSeparator: {
-    color:   colors.muted,
+    color: colors.muted,
     padding: spacing.xs,
   },
   footer: {
-    padding:           spacing.md,
-    paddingBottom:     spacing.lg,
-    borderTopWidth:    1,
-    borderTopColor:    colors.border,
-    backgroundColor:   colors.bg,
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
 });
