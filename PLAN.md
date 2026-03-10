@@ -534,13 +534,13 @@
 - [ ] `GET /api/aggregators/kyc/status` — returns `{ kyc_status }` for authenticated aggregator. No document URLs in response (signed URLs served separately on admin route only).
 
 ### 🚦 DAY 7 VERIFICATION GATE
-- [ ] **G7.1** — Full OTP flow: enter phone → WhatsApp message with 6-digit OTP received → enter OTP → Clerk JWT returned in response.
-- [ ] **G7.2** — OTP one-time use: same OTP used twice → second attempt returns 400 (Redis key deleted after first).
-- [ ] **G7.3** — 4th OTP request in 10 min → 429. Redis counter confirmed incrementing.
-- [ ] **G7.4** — Response DTO: `phone_hash` and `clerk_user_id` absent from `verify-otp` response body.
-- [ ] **G7.5** — node-cron: aggregator culling job fires correctly. Manually set a `last_ping_at` to 6 min ago → after job runs, `is_online=false` in DB.
-- [ ] **G7.6** — `createNextMonthMessagePartition()` called at startup — next month's partition exists in DB.
-- [ ] **G7.7** — KYC upload: JPEG with GPS EXIF → stored file has no GPS data (verify via `sharp().metadata()` in test).
+- [x] **G7.1** — Full OTP flow: enter phone → WhatsApp message with 6-digit OTP received → enter OTP → Clerk JWT returned in response.
+- [x] **G7.2** — OTP one-time use: same OTP used twice → second attempt returns 400 (Redis key deleted after first).
+- [x] **G7.3** — 4th OTP request in 10 min → 429. Redis counter confirmed incrementing.
+- [x] **G7.4** — Response DTO: `phone_hash` and `clerk_user_id` absent from `verify-otp` response body.
+- [x] **G7.5** — node-cron: aggregator culling job fires correctly. Manually set a `last_ping_at` to 6 min ago → after job runs, `is_online=false` in DB.
+- [x] **G7.6** — `createNextMonthMessagePartition()` called at startup — next month's partition exists in DB.
+- [x] **G7.7** — KYC upload: JPEG with GPS EXIF → stored file has no GPS data (verify via `sharp().metadata()` in test).
 
 ---
 
@@ -1115,7 +1115,7 @@
 - [ ] Day 4 — Azure PostgreSQL Setup + Migrations 0001–0006
 - [ ] Day 5 — Migrations 0007–0012 + RLS + Indexes + Triggers
 - [ ] Day 6 — Express Backend Foundation
-- [ ] Day 7 — Auth Routes + Redis OTP + node-cron
+- [x] Day 7 — Auth Routes + Redis OTP + node-cron *(2026-03-10)*
 - [ ] Day 8 — Mobile Auth Wiring + Clerk Integration
 - [ ] Day 9 — Core Order Routes
 - [ ] Day 10 — Media + Aggregator + Supporting Routes

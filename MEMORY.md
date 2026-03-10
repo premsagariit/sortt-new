@@ -725,6 +725,16 @@ Do not delete old entries. Append only.
 
 - **[2026-03-09] Azure App Service Real URL:** The Azure App Service real URL is the long internal domain, not the short custom one. Always use the full URL from Azure Portal → Overview → Default domain. The short URL (sortt-backend.azurewebsites.net) does not resolve. Affects: all Day 7+ API calls and ALLOWED_ORIGINS env var.
 
+- **[2026-03-09, updated 2026-03-10] HMAC-SHA256 for OTP Hashing:** Raw OTPs must never be persisted. Only the HMAC-SHA256 hash (using `OTP_HMAC_SECRET`) should be stored in Redis for verification. The `otp_log` table should store only the `phone_hash` and `expires_at`, with `otp_hmac` made nullable and kept empty to prevent any leakage of verification material in the audit log. Verification is purely Redis-driven via TTL. Affects: `backend/src/routes/auth.ts`.
+
+- **[2026-03-10] Auth Router Mounting Order:** The `authRouter` (containing `/request-otp` and `/verify-otp`) must be mounted in `index.ts` BEFORE the global Clerk `authMiddleware`. This ensures that public OTP routes are accessible without a JWT. Additionally, these routes should be explicitly listed in the middleware exemption list in `middleware/auth.ts` as a secondary guard. Affects: `backend/src/index.ts`, `backend/src/middleware/auth.ts`.
+
+- **[2026-03-10] @sortt/storage Stub for Day 7:** While the project architecture requires `@sortt/storage` for file operations, Day 7 uses a local `IStorageProvider` implementation (Uploadthing wrapper) directly to unblock KYC testing. The shared package `@sortt/storage` remains a stub and will be fully implemented in Day 14. Affects: `backend/src/routes/aggregators.ts`.
+
+- **[2026-03-10] Zustand kycScreen Field Consistency:** The store field for aggregator business type is `aggregatorType` (mapping to `aggregator_type` in DB), not `businessType`. All conditional UI cards in the KYC screen must bind to `aggregatorType`. Affects: `apps/mobile/store/aggregatorStore.ts`, `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
+
+- **[2026-03-10] Selfie Card Labeling:** To reduce user friction, the selfie upload card must be labeled "Your Photo" with the instructional subtext "Clear selfie facing the camera". This is more intuitive for non-technical users than "Selfie". Affects: `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
+
 ---
 
 ## 11. Pricing Architecture — 3-Tier Model
