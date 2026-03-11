@@ -10,6 +10,7 @@ import { ProgressBar } from '../../../components/ui/ProgressBar';
 import { colors, spacing, radius, colorExtended, materialBg } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 /**
  * Aggregator Materials Setup — Step 3 of 3
@@ -20,9 +21,22 @@ export default function AggregatorMaterialsSetup() {
   const { materials, setMaterialSelected, setMaterialRate } = useAggregatorStore();
 
   const selectedCount = materials.filter(m => m.selected).length;
+  const [isLoading, setIsLoading] = React.useState(false);
 
-  const handleFinish = () => {
-    router.replace('/(aggregator)/home' as any);
+  const handleFinish = async () => {
+    const rates = materials
+      .filter(m => m.selected)
+      .map(m => ({ material_code: m.id, rate_per_kg: m.ratePerKg }));
+
+    setIsLoading(true);
+    try {
+      await api.patch('/api/aggregators/rates', { rates });
+      router.push('/(auth)/aggregator/kyc' as any);
+    } catch (e) {
+      console.error('Failed to update rates:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBack = () => {
@@ -92,9 +106,9 @@ export default function AggregatorMaterialsSetup() {
 
       <View style={styles.footer}>
         <PrimaryButton
-          label="Finish Setup →"
+          label="Next →"
           onPress={handleFinish}
-          disabled={selectedCount === 0}
+          disabled={selectedCount === 0 || isLoading}
         />
       </View>
     </SafeAreaView>

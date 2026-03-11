@@ -22,6 +22,82 @@ const upload = multer({
     }
 });
 
+// Creates or updates initial profile
+router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { business_name, city_code } = req.body;
+    
+    try {
+        await query(
+            `INSERT INTO aggregator_profiles (user_id, business_name, city_code)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (user_id) DO UPDATE SET
+                business_name = EXCLUDED.business_name,
+                city_code = EXCLUDED.city_code`,
+            [userId, business_name, city_code]
+        );
+        res.json({ success: true });
+    } catch (e: any) {
+        console.error('Profile POST error:', e);
+        Sentry.captureException(e);
+        res.status(500).json({ error: 'Failed to save profile' });
+    }
+});
+
+// Updates operating area and hours
+router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { operating_area_text, operating_hours } = req.body;
+    
+    try {
+        await query(
+            `UPDATE aggregator_profiles 
+             SET operating_area_text = COALESCE($1, operating_area_text),
+                 operating_hours = COALESCE($2, operating_hours)
+             WHERE user_id = $3`,
+            [operating_area_text, operating_hours ? JSON.stringify(operating_hours) : null, userId]
+        );
+        res.json({ success: true });
+    } catch (e: any) {
+        console.error('Profile PATCH error:', e);
+        Sentry.captureException(e);
+        res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+// Updates materials rates
+router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { rates } = req.body; // Expects [{ material_code: 'paper', rate_per_kg: 15.5 }, ...]
+    
+    try {
+        if (!rates || !Array.isArray(rates)) {
+            return res.status(400).json({ error: 'Rates array is required' });
+        }
+
+        await query('BEGIN');
+        
+        for (const rate of rates) {
+            await query(
+                `INSERT INTO aggregator_material_rates (aggregator_id, material_code, rate_per_kg, updated_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (aggregator_id, material_code) DO UPDATE SET
+                    rate_per_kg = EXCLUDED.rate_per_kg,
+                    updated_at = NOW()`,
+                [userId, rate.material_code, rate.rate_per_kg]
+            );
+        }
+        
+        await query('COMMIT');
+        res.json({ success: true });
+    } catch (e: any) {
+        await query('ROLLBACK');
+        console.error('Rates PATCH error:', e);
+        Sentry.captureException(e);
+        res.status(500).json({ error: 'Failed to update rates' });
+    }
+});
+
 router.post('/kyc', verifyRole('aggregator'), upload.fields([
     { name: 'aadhaar_front', maxCount: 1 },
     { name: 'aadhaar_back', maxCount: 1 },
@@ -29,30 +105,20 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
     { name: 'shop_photo', maxCount: 1 },
     { name: 'vehicle_photo', maxCount: 1 }
 ]), async (req: Request, res: Response) => {
-    // We know req.user exists because verifyRole('aggregator') passed
     const userId = (req as any).user.id;
 
     try {
-        // Find aggregator type
-        const aggRes = await query(`SELECT aggregator_type FROM aggregators WHERE id = $1`, [userId]);
+        // Find aggregator profile to ensure it exists
+        const aggRes = await query(`SELECT kyc_status FROM aggregator_profiles WHERE user_id = $1`, [userId]);
         if (aggRes.rowCount === 0) {
             return res.status(404).json({ error: 'Aggregator profile not found' });
         }
 
-        const aggType = aggRes.rows[0].aggregator_type;
         const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
         // Validate required files
         if (!files['aadhaar_front'] || !files['aadhaar_back'] || !files['selfie']) {
             return res.status(400).json({ error: 'Missing required standard KYC files' });
-        }
-
-        // Validate conditional files
-        if (aggType === 'shop' && !files['shop_photo']) {
-            return res.status(400).json({ error: 'Shop photo required for shop operators' });
-        }
-        if (aggType === 'mobile' && !files['vehicle_photo']) {
-            return res.status(400).json({ error: 'Vehicle photo required for mobile operators' });
         }
 
         const mediaToUpload = [
@@ -61,29 +127,25 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
             { field: 'selfie', dbType: 'selfie', file: files['selfie'][0] },
         ];
 
-        if (aggType === 'shop') {
+        if (files['shop_photo']) {
             mediaToUpload.push({ field: 'shop_photo', dbType: 'shop_photo', file: files['shop_photo'][0] });
-        } else if (aggType === 'mobile') {
+        }
+        if (files['vehicle_photo']) {
             mediaToUpload.push({ field: 'vehicle_photo', dbType: 'vehicle_photo', file: files['vehicle_photo'][0] });
         }
 
         const uploadedKeys: { media_type: string, key: string }[] = [];
 
         for (const item of mediaToUpload) {
-            // Strip EXIF data via sharp (V18)
             const strippedBuffer = await sharp(item.file.buffer).toBuffer();
-
-            // Upload using the IStorageProvider wrapper
             const fileKey = await storageProvider.uploadFile(
                 strippedBuffer,
                 `kyc_${userId}_${item.dbType}_${Date.now()}.jpg`,
-                'image/jpeg' // sharp defaults to jpeg/png without exif if we don't specify, but let's assume valid output
+                'image/jpeg'
             );
-
             uploadedKeys.push({ media_type: item.dbType, key: fileKey });
         }
 
-        // Insert rows into order_media
         const insertPromises = uploadedKeys.map(k => {
             return query(
                 `INSERT INTO order_media (order_id, uploaded_by, media_type, storage_path)
@@ -94,7 +156,9 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
 
         await Promise.all(insertPromises);
 
-        // Optional: Send generic admin push (omitted exact Expo API for brevity, assuming standard push function exists elsewhere)
+        // Update KYC status to pending
+        await query(`UPDATE aggregator_profiles SET kyc_status = 'pending' WHERE user_id = $1`, [userId]);
+
         console.log(`[Admin Push Notification Stub] A new KYC submission requires review for aggregator ${userId}`);
 
         res.json({ success: true, submitted_at: new Date().toISOString() });
@@ -113,7 +177,7 @@ router.get('/kyc/status', verifyRole('aggregator'), async (req: Request, res: Re
     const userId = (req as any).user.id;
 
     try {
-        const result = await query(`SELECT kyc_status FROM aggregators WHERE id = $1`, [userId]);
+        const result = await query(`SELECT kyc_status FROM aggregator_profiles WHERE user_id = $1`, [userId]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Aggregator not found' });
         }

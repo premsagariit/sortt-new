@@ -11,6 +11,7 @@ import { ZoneChip } from '../../../components/ui/ZoneChip';
 import { colors, spacing, radius } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 const POPULAR_ZONES = [
   'Banjara Hills', 'Jubilee Hills', 'Gachibowli',
@@ -26,9 +27,20 @@ export default function AggregatorAreaSetup() {
   const router = useRouter();
   const { operatingAreas, setOperatingAreas } = useAggregatorStore();
   const [search, setSearch] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleNext = () => {
-    router.push('/(auth)/aggregator/materials-setup' as any);
+  const handleNext = async () => {
+    setIsLoading(true);
+    try {
+      await api.patch('/api/aggregators/profile', {
+        operating_area_text: operatingAreas.join(', ')
+      });
+      router.push('/(auth)/aggregator/materials-setup' as any);
+    } catch (e) {
+      console.error('Failed to update area:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBack = () => {
@@ -97,7 +109,7 @@ export default function AggregatorAreaSetup() {
         <PrimaryButton
           label="Next →"
           onPress={handleNext}
-          disabled={operatingAreas.length === 0}
+          disabled={operatingAreas.length === 0 || isLoading}
         />
       </View>
     </SafeAreaView>

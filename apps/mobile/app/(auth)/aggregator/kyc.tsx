@@ -23,6 +23,7 @@ import { useAggregatorStore } from '../../../store/aggregatorStore';
 // Camera logic is ONLY in this hook — never call ImagePicker directly in screens
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 export default function KycScreen() {
     const {
@@ -93,10 +94,51 @@ export default function KycScreen() {
     // Submit enabled only when ALL required URIs are captured
     const isFourthPhotoDone = aggregatorType === 'shop' ? kycShopPhotoUri !== null : kycVehiclePhotoUri !== null;
     const canSubmit = kycAadhaarFrontUri !== null && kycAadhaarBackUri !== null && kycSelfieUri !== null && isFourthPhotoDone;
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-    const handleSubmit = () => {
-        console.log('Form submission API integration planned for Day 8.');
-        router.replace('/(aggregator)/home' as any);
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
+        try {
+            const formData = new FormData();
+            
+            formData.append('aadhaar_front', {
+                uri: kycAadhaarFrontUri,
+                name: 'aadhaar_front.jpg',
+                type: 'image/jpeg',
+            } as any);
+
+            formData.append('aadhaar_back', {
+                uri: kycAadhaarBackUri,
+                name: 'aadhaar_back.jpg',
+                type: 'image/jpeg',
+            } as any);
+
+            formData.append('selfie', {
+                uri: kycSelfieUri,
+                name: 'selfie.jpg',
+                type: 'image/jpeg',
+            } as any);
+
+            const fourthUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
+            const fourthKey = aggregatorType === 'shop' ? 'shop_photo' : 'vehicle_photo';
+            formData.append(fourthKey, {
+                uri: fourthUri,
+                name: `${fourthKey}.jpg`,
+                type: 'image/jpeg',
+            } as any);
+
+            await api.post('/api/aggregators/kyc', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            
+            router.replace('/(aggregator)/home' as any);
+        } catch (error) {
+            console.error('KYC form submission failed:', error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const fourthTitle = aggregatorType === 'shop' ? 'Shop Photo' : 'Vehicle Photo';
@@ -185,9 +227,9 @@ export default function KycScreen() {
 
             <View style={styles.footer}>
                 <PrimaryButton
-                    label="Submit for Verification"
+                    label={isSubmitting ? "Submitting..." : "Submit for Verification"}
                     onPress={handleSubmit}
-                    disabled={!canSubmit}
+                    disabled={!canSubmit || isSubmitting}
                 />
             </View>
         </SafeAreaView>

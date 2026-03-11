@@ -100,7 +100,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
 });
 
 router.post('/verify-otp', async (req: Request, res: Response) => {
-    const { phone, otp } = req.body;
+    const { phone, otp, user_type } = req.body;
 
     if (!phone || !otp) {
         return res.status(400).json({ error: 'Phone and OTP are required' });
@@ -155,14 +155,15 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         }
 
         const phoneLast4 = phone.slice(-4);
+        const requestedUserType = user_type || 'seller';
 
         const upsertResult = await query(
             `INSERT INTO users (clerk_user_id, phone_hash, phone_last4, user_type) 
-             VALUES ($1, $2, $3, 'seller') 
+             VALUES ($1, $2, $3, $4) 
              ON CONFLICT (clerk_user_id) 
              DO UPDATE SET phone_last4 = EXCLUDED.phone_last4
              RETURNING id, user_type, is_active, name`,
-            [clerkUserId, phoneHmac, phoneLast4]
+            [clerkUserId, phoneHmac, phoneLast4, requestedUserType === 'dealer' ? 'aggregator' : requestedUserType]
         );
 
         const userRecord = upsertResult.rows[0];

@@ -65,12 +65,13 @@ export default function PhoneScreen() {
   // ── Local UI state ─────────────────────────────────────────────
   const [phoneDigits, setPhoneDigits] = useState('');
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   // ── Zustand ────────────────────────────────────────────────────
   const isLoading = useAuthStore((s) => s.isLoading);
-  const setIsLoading = useAuthStore((s) => s.setIsLoading);
   const setPhoneNumber = useAuthStore((s) => s.setPhoneNumber);
+  const requestOtp = useAuthStore((s) => s.requestOtp);
 
   // ── Derived validation state ───────────────────────────────────
   const isValid = isValidIndianMobile(phoneDigits);
@@ -84,9 +85,10 @@ export default function PhoneScreen() {
     setPhoneDigits(digits);
   }, []);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     // Gate: mark that submission has been attempted so validation shows
     setHasSubmitted(true);
+    setApiError(null);
 
     if (!isValidIndianMobile(phoneDigits)) {
       // Re-focus input so user can correct the number without extra tap
@@ -96,16 +98,15 @@ export default function PhoneScreen() {
 
     // Persist full E.164 number digits to auth store for OTP screen
     setPhoneNumber(phoneDigits);
-    setIsLoading(true);
 
-    // Simulate 1.5s OTP send latency before navigation
-    setTimeout(() => {
-      setIsLoading(false);
-      // OTP screen (§2.3) does not exist yet — the push will show
-      // an unmatched-route screen. This is expected for §2.2.
+    const result = await requestOtp(phoneDigits);
+
+    if (result.success) {
       router.push('/(auth)/otp' as never);
-    }, OTP_SIMULATE_MS);
-  }, [phoneDigits, router, setIsLoading, setPhoneNumber]);
+    } else {
+      setApiError(result.error || 'Failed to request OTP');
+    }
+  }, [phoneDigits, router, requestOtp, setPhoneNumber]);
 
   // ── Render ─────────────────────────────────────────────────────
   return (
@@ -200,6 +201,15 @@ export default function PhoneScreen() {
                 style={styles.errorText}
               >
                 {ERROR_COPY}
+              </Text>
+            )}
+            {apiError && !showError && (
+              <Text
+                variant="caption"
+                color={colors.red}
+                style={styles.errorText}
+              >
+                {apiError}
               </Text>
             )}
           </View>

@@ -20,6 +20,13 @@
 
 import { create } from 'zustand';
 
+// ── Global Clerk Hooks ────────────────────────────────────────────
+let globalClerkSignOut: (() => Promise<void>) | null = null;
+
+export const setGlobalClerkSignOut = (fn: () => Promise<void>) => {
+  globalClerkSignOut = fn;
+};
+
 // ─── Session type (populated on Day 7 with real session) ──
 export interface AuthSession {
   userId: string;
@@ -49,6 +56,9 @@ interface AuthState {
   setIsLoading: (loading: boolean) => void;
   setSession: (session: AuthSession | null) => void;
 
+  requestOtp: (phone: string) => Promise<{ success: boolean; error?: string }>;
+  verifyOtp: (phone: string, otp: string, userType?: string) => Promise<{ success: boolean; token?: string; error?: string }>;
+
   setUserId: (id: string | null) => void;
   setUserType: (type: 'seller' | 'aggregator' | null) => void;
   setAccountType: (type: 'individual' | 'business' | null) => void;
@@ -60,10 +70,9 @@ interface AuthState {
   reset: () => void;
   /**
    * Sign out the current user and clear all local auth state.
-   * Day 7: add `await clerk.signOut()` call here before `set(initialState)`
-   * to invalidate the JWT and prevent token reuse (BSE finding S1).
+   * Invokes the injected clerk.signOut() to invalidate the JWT.
    */
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 const initialState: Pick<AuthState,
@@ -95,6 +104,60 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLocality: (locality) => set({ locality }),
   setCity: (city) => set({ city }),
   reset: () => set(initialState),
-  // Day 7: add `await clerk.signOut()` before set() — BSE finding S1
-  signOut: () => set(initialState),
+  
+  signOut: async () => {
+    if (globalClerkSignOut) {
+      try {
+        await globalClerkSignOut();
+      } catch (err) {
+        console.error('Clerk root sign out failed:', err);
+      }
+    }
+    set(initialState);
+  },
+
+  requestOtp: async (phone: string) => {
+    set({ isLoading: true });
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+      const response = await fetch(`${apiUrl}/api/auth/request-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `+91${phone}` }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to request OTP");
+      }
+      set({ isLoading: false });
+      return { success: true };
+    } catch (err: any) {
+      set({ isLoading: false });
+      return { success: false, error: err.message };
+    }
+  },
+
+  verifyOtp: async (phone: string, otp: string, userType?: string) => {
+    set({ isLoading: true });
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `+91${phone}`, otp, user_type: userType }),
+      });
+      if (!response.ok) {
+        throw new Error("Invalid OTP");
+      }
+      const data = await response.json();
+      set({
+        userId: data.user?.id || null,
+        userType: data.user?.user_type || null,
+        isLoading: false,
+      });
+      return { success: true, token: data.token }; // Note: Component uses this token for Clerk
+    } catch (err: any) {
+      set({ isLoading: false });
+      return { success: false, error: err.message };
+    }
+  },
 }));

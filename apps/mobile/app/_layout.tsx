@@ -34,6 +34,21 @@ import {
   DMMono_400Regular,
   DMMono_500Medium,
 } from '@expo-google-fonts/dm-mono';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { tokenCache, clerkPublishableKey } from '../lib/clerk';
+import { setApiTokenGetter } from '../lib/api';
+import { setGlobalClerkSignOut } from '../store/authStore';
+
+function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
+  const { getToken, signOut } = useAuth();
+  
+  useEffect(() => {
+    setApiTokenGetter(getToken);
+    setGlobalClerkSignOut(signOut);
+  }, [getToken, signOut]);
+
+  return <>{children}</>;
+}
 
 // ── Prevent the splash screen from auto-hiding before fonts are ready.
 // This must be called before the component tree renders.
@@ -81,5 +96,11 @@ export default function RootLayout() {
 
   // ── Expo Router root stack.
   // Using Stack instead of Slot to preserve memory/state between root segments.
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <ClerkProvider publishableKey={clerkPublishableKey!} tokenCache={tokenCache}>
+      <ApiClientConfigurator>
+        <Stack screenOptions={{ headerShown: false }} />
+      </ApiClientConfigurator>
+    </ClerkProvider>
+  );
 }

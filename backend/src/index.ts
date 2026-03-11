@@ -8,6 +8,7 @@ import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
 import authRouter from './routes/auth';
 import aggregatorsRouter from './routes/aggregators';
+import usersRouter from './routes/users';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -17,7 +18,7 @@ app.use(helmet());
 
 // 2. X1: CORS middleware based on ALLOWED_ORIGINS env var, with no wildcards
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o: string) => o.trim())
   : [];
 
 app.use(cors({
@@ -58,6 +59,7 @@ app.get('/health', (req, res) => {
 // APIs will be mounted here later
 app.get('/api/orders', (req, res) => res.json({ success: true }));
 app.use('/api/aggregators', aggregatorsRouter);
+app.use('/api/users', usersRouter);
 
 
 // 6. Global error handler MUST be last

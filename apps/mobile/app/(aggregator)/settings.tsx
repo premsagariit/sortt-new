@@ -75,7 +75,7 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 
 export default function AggregatorSettingsScreen() {
     const router = useRouter();
-    const { fullName, businessType, primaryArea } = useAggregatorStore();
+    const { fullName, aggregatorType, primaryArea } = useAggregatorStore();
     const phoneNumber = useAuthStore((s) => s.phoneNumber);
 
     // Read from store with mock fallbacks (Day 4: store populated from backend)
@@ -83,7 +83,7 @@ export default function AggregatorSettingsScreen() {
     const displayPhone = phoneNumber
       ? `+91 •••••${phoneNumber.slice(-5)}`
       : MOCK_PHONE_DISPLAY;
-    const displayType = businessType === 'shop' ? 'Shop-Based' : businessType === 'mobile' ? 'Mobile' : MOCK_BUSINESS_TYPE;
+    const displayType = aggregatorType === 'shop' ? 'Shop-Based' : aggregatorType === 'mobile' ? 'Mobile' : MOCK_BUSINESS_TYPE;
     const displayLocality = primaryArea || MOCK_LOCALITY;
 
     // States match the UI requirements

@@ -11,6 +11,7 @@ import { DayToggle } from '../../../components/ui/DayToggle';
 import { colors, spacing } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 /**
  * Aggregator Profile Setup — Step 1 of 3
@@ -24,9 +25,24 @@ export default function AggregatorProfileSetup() {
   } = useAggregatorStore();
 
   const isNextDisabled = !fullName || !aggregatorType || !primaryArea;
+  const [isLoading, setIsLoading] = React.useState(false);
 
-  const handleNext = () => {
-    router.push('/(auth)/aggregator/area-setup' as any);
+  const handleNext = async () => {
+    setIsLoading(true);
+    try {
+      await api.post('/api/aggregators/profile', {
+        business_name: businessName || fullName,
+        city_code: 'HYD', // Hardcoded for MVP
+      });
+      await api.patch('/api/aggregators/profile', {
+        operating_hours: { days: operatingDays, from: operatingHours.from, to: operatingHours.to }
+      });
+      router.push('/(auth)/aggregator/area-setup' as any);
+    } catch (e) {
+      console.error('Failed to create profile:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBack = () => {
@@ -142,7 +158,7 @@ export default function AggregatorProfileSetup() {
         <PrimaryButton
           label="Next →"
           onPress={handleNext}
-          disabled={isNextDisabled}
+          disabled={isNextDisabled || isLoading}
         />
       </View>
     </SafeAreaView>

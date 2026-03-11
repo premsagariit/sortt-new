@@ -34,6 +34,9 @@ import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { useSignIn } from '@clerk/clerk-expo';
+import { registerForPushNotificationsAsync } from '../../lib/push';
+import { api } from '../../lib/api';
 
 const OTP_LENGTH = 6;
 const RESEND_TIMER_INITIAL = 30;
@@ -42,6 +45,7 @@ const SIMULATION_DELAY = 1500;
 export default function OTPScreen() {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
+  const { signIn, setActive } = useSignIn();
 
   // ── State ──────────────────────────────────────────────────────
   const [otp, setOtp] = useState('');
@@ -51,7 +55,7 @@ export default function OTPScreen() {
 
   // ── Zustand ────────────────────────────────────────────────────
   const phoneNumber = useAuthStore((s) => s.phoneNumber);
-  const userType = useAuthStore((s) => s.userType);
+  const verifyOtp = useAuthStore((s) => s.verifyOtp);
 
   // ── Logic ──────────────────────────────────────────────────────
 
@@ -68,7 +72,7 @@ export default function OTPScreen() {
     };
   }, [countdown]);
 
-  // Handle Verification (Simulated)
+  // Handle Verification
   const handleVerify = useCallback(async (codeToMatch?: string) => {
     const code = codeToMatch ?? otp;
     if (code.length < OTP_LENGTH || isVerifying) return;
@@ -77,25 +81,58 @@ export default function OTPScreen() {
     setIsVerifying(true);
     Keyboard.dismiss();
 
-    // Simulate 1.5s verification delay
-    setTimeout(() => {
-      // Testing rule: Any OTP starting with '0' is "incorrect"
-      if (code.startsWith('0')) {
-        setIsVerifying(false);
-        setError('Incorrect code. Please try again.');
-        setOtp('');
-        // Short delay before refocusing to allow error text to be noticed
-        setTimeout(() => inputRef.current?.focus(), 100);
-      } else {
-        // Success: land on appropriate account-type selection or profile setup
-        if (userType === 'aggregator') {
-          router.replace('/(auth)/aggregator/profile-setup' as any);
-        } else {
-          router.replace('/(auth)/seller/account-type' as any);
-        }
+    try {
+      // Get userType from store before calling verifyOtp
+      const userType = useAuthStore.getState().userType;
+      const result = await verifyOtp(phoneNumber, code, userType || undefined);
+      if (!result.success || !result.token) {
+        throw new Error(result.error || 'Invalid OTP');
       }
-    }, SIMULATION_DELAY);
-  }, [otp, isVerifying, router, userType]);
+
+      if (!signIn || !setActive) throw new Error('Clerk not initialized');
+
+      const signInAttempt = await signIn.create({
+        strategy: 'ticket',
+        ticket: result.token,
+      });
+
+      if (signInAttempt.status === 'complete') {
+        await setActive({ session: signInAttempt.createdSessionId });
+        
+        // Register Push Token
+        try {
+          // Fire and forget because push token shouldn't block navigation
+          registerForPushNotificationsAsync().then((tokens: any) => {
+            if (tokens?.expoToken || tokens?.rawToken) {
+              api.post('/api/users/device-token', {
+                token_type: 'expo',
+                expo_token: tokens.expoToken,
+                raw_token: tokens.rawToken,
+              }).catch((e: any) => console.error('Failed to register push token in backend:', e));
+            }
+          });
+        } catch (e) {
+          console.error('Push token registration error:', e);
+        }
+
+        const type = useAuthStore.getState().userType;
+        if (type === 'aggregator') {
+          router.replace('/(aggregator)/home' as any);
+        } else if (type === 'seller') {
+          router.replace('/(seller)/home' as any);
+        } else {
+          router.replace('/(auth)/user-type' as any);
+        }
+      } else {
+        throw new Error('SignIn incomplete');
+      }
+    } catch (err: any) {
+      setError(err?.errors?.[0]?.message || err.message || 'Incorrect code. Please try again.');
+      setOtp('');
+      setTimeout(() => inputRef.current?.focus(), 100);
+      setIsVerifying(false);
+    }
+  }, [otp, isVerifying, router, phoneNumber, signIn, setActive, verifyOtp]);
 
   // Auto-submit when length reaches 6
   useEffect(() => {

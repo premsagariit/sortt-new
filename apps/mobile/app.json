@@ -26,8 +26,12 @@
         "backgroundColor": "#1C2E4A"
       },
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -42,7 +46,8 @@
           "photosPermission": "Sortt needs photo library access to attach images to your listing.",
           "cameraPermission": "Sortt uses the camera to photograph your scrap pile and weighing scale."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
@@ -51,6 +56,12 @@
       "eas": {
         "projectId": "90966a13-507b-4386-9e20-4d7e18fdb9da"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/90966a13-507b-4386-9e20-4d7e18fdb9da"
     }
   }
 }
