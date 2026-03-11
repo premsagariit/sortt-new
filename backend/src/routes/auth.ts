@@ -157,15 +157,23 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         // OTP Verified successfully
         await query(`INSERT INTO otp_log (phone_hash, action, expires_at) VALUES ($1, 'otp_verified', NOW())`, [phoneHmac]);
 
-        // UPSERT User based on phone_hash. Create corresponding Clerk User if doesn't exist
-        // Note: Sortt handles Clerk provisioning server-side for OTP.
+        // UPSERT User based on phone_hash. Create corresponding Clerk User if doesn't exist.
+        // NOTE: Clerk does NOT support Indian phone numbers for phone-based auth.
+        // We use Clerk purely as an identity/session provider.
+        // Users are identified by externalId = phone_hash (HMAC, never raw phone).
         let clerkUserId = null;
-        const existingClerkUsers = await clerkClient.users.getUserList({ phoneNumber: [phone] });
+        const existingClerkUsers = await clerkClient.users.getUserList({ externalId: [phoneHmac] });
         if (existingClerkUsers.data && existingClerkUsers.data.length > 0) {
             clerkUserId = existingClerkUsers.data[0].id;
         } else {
+            // Create a Clerk user with externalId = phone_hash.
+            // No email/phone stored in Clerk — PII stays in our DB only.
             const newClerkUser = await clerkClient.users.createUser({
-                phoneNumber: [phone]
+                externalId: phoneHmac,
+                // Clerk requires at least one identifier — use a private placeholder email.
+                // This email is never used for login or notifications.
+                emailAddress: [`${phoneHmac.slice(0, 16)}@sortt.internal`],
+                skipPasswordRequirement: true,
             });
             clerkUserId = newClerkUser.id;
         }
