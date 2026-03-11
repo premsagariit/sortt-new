@@ -66,7 +66,10 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     // Execute middleware stack
     let idx = 0;
     const executeNext = (err?: any) => {
-        if (err) return next(err);
+        if (err) {
+            console.warn('Authentication rejected by Clerk:', err.message || err);
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
         if (idx >= requireAuthStack.length) {
             return next();
         }
