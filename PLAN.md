@@ -497,7 +497,7 @@
 > **Rule:** HMAC-SHA256 only — never store raw OTP in Redis (X3). Rate limiters applied as the absolute first operation in each route.
 
 ### 7.1 WhatsApp OTP Routes (~75 min)
-- [ ] `POST /api/auth/request-otp` (no JWT required):
+- [x] `POST /api/auth/request-otp` (no JWT required):
   1. `otpRequestLimiter` — applied first, before any other logic.
   2. Validate Indian phone format (`+91XXXXXXXXXX` E.164). Reject malformed → 400.
   3. `crypto.randomInt(100000, 999999)` — generate 6-digit OTP.
@@ -505,7 +505,7 @@
   5. Call Meta WhatsApp Cloud API — `authentication` template category (required for free quota). Payload: `to: phone, template: { name: META_OTP_TEMPLATE_NAME, language: { code: 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }] }`.
   6. Increment Meta conversation counter in Redis. Alert Sentry if counter > 900/month.
   7. INSERT to `otp_log` (for audit). Return HTTP 200 `{ success: true }`. Never return the OTP in the response.
-- [ ] `POST /api/auth/verify-otp` (no JWT required):
+- [x] `POST /api/auth/verify-otp` (no JWT required):
   1. `otpVerifyLimiter` — applied first.
   2. Retrieve HMAC from Redis key. If not found → 400 "OTP expired or already used".
   3. `crypto.timingSafeEqual(storedHmac, HMAC-SHA256(submittedOtp, OTP_HMAC_SECRET))`.
@@ -515,23 +515,23 @@
   7. Return HTTP 200 `{ token: clerk_jwt, user: user_public_dto }`. DTO must NOT include `phone_hash` or `clerk_user_id`.
 
 ### 7.2 node-cron Scheduler (~30 min)
-- [ ] `backend/src/scheduler.ts` — started on Express boot:
+- [x] `backend/src/scheduler.ts` — started on Express boot:
   - **Aggregator culling** — every 5 min: `UPDATE aggregator_availability SET is_online=false WHERE last_ping_at < NOW() - INTERVAL '5 minutes'` (C2).
   - **Rating stats refresh** — every 15 min: `REFRESH MATERIALIZED VIEW CONCURRENTLY aggregator_rating_stats`.
   - **Price cache refresh** — daily 00:30 UTC: `REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index`.
   - **OTP log cleanup** — nightly 02:00 UTC: `DELETE FROM otp_log WHERE expires_at < NOW() - INTERVAL '7 days'`.
   - **Message partition** — 25th of each month 01:00 UTC: call `createNextMonthMessagePartition()`.
-- [ ] `createNextMonthMessagePartition()` also called at Express startup — ensures the next partition always exists before messages arrive.
+- [x] `createNextMonthMessagePartition()` also called at Express startup — ensures the next partition always exists before messages arrive.
 
 ### 7.3 KYC Upload Routes (~25 min)
-- [ ] `POST /api/aggregators/kyc` — Clerk JWT required, aggregator only:
+- [x] `POST /api/aggregators/kyc` — Clerk JWT required, aggregator only:
   - Accept multipart fields: `aadhaar_front`, `aadhaar_back`, `selfie` (required for all); `shop_photo` OR `vehicle_photo` (required — conditional on `aggregator_type` read from DB, never from request body).
   - Strip EXIF via `sharp` on each file before any other processing (V18).
   - Upload each stripped file to Uploadthing via `IStorageProvider.upload()`.
   - INSERT one row per file to `order_media` with `order_id = NULL` and correct `media_type`: `kyc_aadhaar_front`, `kyc_aadhaar_back`, `kyc_selfie`, `kyc_shop` or `kyc_vehicle`.
   - `kyc_status` must NOT be set here — it stays `'pending'` (V35).
   - Return 200. Notify admin via push (generic copy only — D2).
-- [ ] `GET /api/aggregators/kyc/status` — returns `{ kyc_status }` for authenticated aggregator. No document URLs in response (signed URLs served separately on admin route only).
+- [x] `GET /api/aggregators/kyc/status` — returns `{ kyc_status }` for authenticated aggregator. No document URLs in response (signed URLs served separately on admin route only).
 
 ### 🚦 DAY 7 VERIFICATION GATE
 - [x] **G7.1** — Full OTP flow: enter phone → WhatsApp message with 6-digit OTP received → enter OTP → Clerk JWT returned in response.
@@ -544,46 +544,46 @@
 
 ---
 
-## ✅ DAY 8 — Mobile Auth Wiring + Clerk Integration
+## ✅ DAY 8 [GATE PASSED] — Mobile Auth Wiring + Clerk Integration
 > **Goal:** Mobile app auth screens connected to the live backend. Real Clerk session on device. Push tokens registered. Auth routing by user type working.
 > **Time:** ~2 hours
 > **Rule:** No auth logic hardcoded in screens. All calls go through `authStore` → `api.ts`. JWT never stored in AsyncStorage unencrypted — use Clerk's secure token storage.
 
 ### 8.1 Clerk + API Client Setup (~30 min)
-- [ ] `apps/mobile/lib/clerk.ts` — initialise Clerk Expo client with `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`.
-- [ ] `apps/mobile/lib/api.ts` — Axios/fetch wrapper:
+- [x] `apps/mobile/lib/clerk.ts` — initialise Clerk Expo client with `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`.
+- [x] `apps/mobile/lib/api.ts` — Axios/fetch wrapper:
   - Auto-attaches `Authorization: Bearer <token>` from `authStore.clerkToken`.
   - Global 401 interceptor: clears `authStore`, routes to `/(auth)/phone`.
   - Base URL from `EXPO_PUBLIC_API_URL` env var (never hardcoded).
 
 ### 8.2 Wire Auth Screens to Backend (~45 min)
-- [ ] `authStore.requestOtp(phone)` → `POST /api/auth/request-otp`. Handle 429 (show "Too many attempts" error state).
-- [ ] `authStore.verifyOtp(phone, otp)` → `POST /api/auth/verify-otp` → store Clerk JWT in `authStore.clerkToken`. Handle 400 "OTP expired".
-- [ ] `authStore.signOut()` → Clerk `signOut()` + clear entire `authStore` + route to `/(auth)/phone`.
-- [ ] On successful `verifyOtp`: read `user.user_type` from response → route to `/(seller)/home` or `/(aggregator)/home` accordingly.
-- [ ] Remove all mock OTP bypass logic from `otp.tsx`. Real OTP required.
+- [x] `authStore.requestOtp(phone)` → `POST /api/auth/request-otp`. Handle 429 (show "Too many attempts" error state).
+- [x] `authStore.verifyOtp(phone, otp)` → `POST /api/auth/verify-otp` → store Clerk JWT in `authStore.clerkToken`. Handle 400 "OTP expired".
+- [x] `authStore.signOut()` → Clerk `signOut()` + clear entire `authStore` + route to `/(auth)/phone`.
+- [x] On successful `verifyOtp`: read `user.user_type` from response → route to `/(seller)/home` or `/(aggregator)/home` accordingly.
+- [x] Remove all mock OTP bypass logic from `otp.tsx`. Real OTP required.
 
 ### 8.3 Push Token Registration (~25 min)
-- [ ] On successful login, register BOTH tokens:
+- [x] On successful login, register BOTH tokens:
   - `await Notifications.getExpoPushTokenAsync()` → `expo_token`.
   - `await Notifications.getDevicePushTokenAsync()` → `raw_token` (native FCM/APNs).
   - `POST /api/users/device-token` with `{ expo_token, raw_token, token_type }`.
   - Store in `device_tokens` table via backend. Route requires Clerk JWT.
-- [ ] `POST /api/users/device-token` backend route: upsert device token for authenticated user. Deduplicate by `raw_token`.
+- [x] `POST /api/users/device-token` backend route: upsert device token for authenticated user. Deduplicate by `raw_token`.
 
 ### 8.4 Aggregator Onboarding Wiring (~20 min)
-- [ ] Wire aggregator onboarding wizard submit → `POST /api/aggregators/profile` (profile-setup step).
-- [ ] Wire area-setup → `PATCH /api/aggregators/profile` with `operating_area_text` and `city_code`.
-- [ ] Wire materials-setup → `PATCH /api/aggregators/rates` with material rates array.
-- [ ] Wire KYC screen → `POST /api/aggregators/kyc` (photo upload). On success → navigate to `kyc-pending` screen.
+- [x] Wire aggregator onboarding wizard submit → `POST /api/aggregators/profile` (profile-setup step).
+- [x] Wire area-setup → `PATCH /api/aggregators/profile` with `operating_area_text` and `city_code`.
+- [x] Wire materials-setup → `PATCH /api/aggregators/rates` with material rates array.
+- [x] Wire KYC screen → `POST /api/aggregators/kyc` (photo upload). On success → navigate to `kyc-pending` screen.
 
 ### 🚦 DAY 8 VERIFICATION GATE
-- [ ] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
-- [ ] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
-- [ ] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
-- [ ] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
-- [ ] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
-- [ ] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
+- [x] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
+- [x] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
+- [x] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
+- [x] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
+- [x] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
+- [x] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
 
 ---
 

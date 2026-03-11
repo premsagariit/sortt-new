@@ -424,7 +424,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 │   │   │   ├── ui/               # Design system components
 │   │   │   └── domain/           # Feature-specific components
 │   │   ├── lib/
-│   │   │   ├── supabase.ts       # Supabase client (anon key only)
+│   │   │   ├── clerk.ts          # Clerk client configuration
 │   │   │   ├── api.ts            # Custom backend API client
 │   │   │   └── notifications.ts  # Expo push token registration (dual-token)
 │   │   ├── store/                # Zustand state stores
@@ -734,6 +734,8 @@ Do not delete old entries. Append only.
 - **[2026-03-10] Zustand kycScreen Field Consistency:** The store field for aggregator business type is `aggregatorType` (mapping to `aggregator_type` in DB), not `businessType`. All conditional UI cards in the KYC screen must bind to `aggregatorType`. Affects: `apps/mobile/store/aggregatorStore.ts`, `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
 
 - **[2026-03-10] Selfie Card Labeling:** To reduce user friction, the selfie upload card must be labeled "Your Photo" with the instructional subtext "Clear selfie facing the camera". This is more intuitive for non-technical users than "Selfie". Affects: `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
+
+- **[2026-03-11] Clerk Token Lifecycle Constraints:** Do not cache the Clerk token persistently in Zustand's `authStore.clerkToken` across app reloads, as the token is short-lived. Instead, retrieve the session token dynamically using `await clerk.session?.getToken()` on every authenticated API request via a functional getter in the API interceptor, or maintain it synchronously via Clerk's active session state. Only store non-expired data into the `authStore`. Affects: `apps/mobile/lib/api.ts`, `apps/mobile/store/authStore.ts`.
 
 ---
 
