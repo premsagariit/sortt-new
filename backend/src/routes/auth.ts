@@ -173,7 +173,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
                 // Clerk requires at least one identifier — use a private placeholder email.
                 // This email is never used for login or notifications.
                 emailAddress: [`${phoneHmac.slice(0, 16)}@sortt.internal`],
-                skipPasswordRequirement: true,
+                skipPasswordChecks: true,
             });
             clerkUserId = newClerkUser.id;
         }
@@ -209,10 +209,11 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
             }
         });
 
-    } catch (error) {
-        console.error('Verify OTP Error:', error);
+    } catch (error: any) {
+        console.error('Verify OTP Error:', error?.message || error);
+        if (error?.errors?.[0]) console.error('Clerk Error:', error.errors[0].code, error.errors[0].message);
         Sentry.captureException(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ error: error?.errors?.[0]?.message || 'Internal Server Error' });
     }
 });
 

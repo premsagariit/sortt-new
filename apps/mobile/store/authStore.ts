@@ -126,7 +126,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         body: JSON.stringify({ phone: `+91${phone}` }),
       });
       if (!response.ok) {
-        throw new Error("Failed to request OTP");
+        // Parse the actual error from backend (rate limit, invalid phone, etc.)
+        let errorMsg = "Failed to request OTP";
+        try {
+          const errBody = await response.json();
+          errorMsg = errBody?.error || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
       }
       set({ isLoading: false });
       return { success: true };
@@ -146,7 +152,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         body: JSON.stringify({ phone: `+91${phone}`, otp, user_type: userType }),
       });
       if (!response.ok) {
-        throw new Error("Invalid OTP");
+        let errorMsg = "Invalid OTP";
+        try {
+          const errBody = await response.json();
+          errorMsg = errBody?.error || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
       }
       const data = await response.json();
       set({
