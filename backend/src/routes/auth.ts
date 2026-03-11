@@ -59,7 +59,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
             Sentry.captureMessage('Meta WhatsApp quota approaching 1000 free conversations', { level: 'warning' });
         }
 
-        // Send via Meta WhatsApp API
+        // Send via Meta WhatsApp API (non-fatal — OTP is still stored in Redis)
         if (META_TOKEN && META_PHONE_ID) {
             const isHelloWorld = META_TEMPLATE === 'hello_world';
             const templatePayload: any = {
@@ -75,14 +75,29 @@ router.post('/request-otp', async (req: Request, res: Response) => {
                 ];
             }
 
-            await axios.post(`https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`, {
-                messaging_product: 'whatsapp',
-                to: phone.replace('+', ''),
-                type: 'template',
-                template: templatePayload
-            }, {
-                headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' }
-            });
+            try {
+                await axios.post(`https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`, {
+                    messaging_product: 'whatsapp',
+                    to: phone.replace('+', ''),
+                    type: 'template',
+                    template: templatePayload
+                }, {
+                    headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' }
+                });
+                console.log(`[OTP] WhatsApp message sent to ${phone.slice(-4)} (last 4 digits)`);
+            } catch (metaErr: any) {
+                // Non-fatal: log and continue. OTP is already in Redis.
+                // Dev NOTE: Check if phone is whitelisted in Meta test environment.
+                console.warn(`[OTP] WhatsApp send failed (non-fatal):`, metaErr?.response?.data || metaErr?.message);
+                Sentry.captureException(metaErr, { level: 'warning' });
+            }
+        } else {
+            console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp message skipped. OTP is in Redis.');
+        }
+
+        // Log OTP code to console only in non-production for developer testing
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[OTP DEV] Code for ${phone.slice(-4)}: ${otp}`);
         }
 
         // Audit Log (HMAC is not persisted - Security X3)
@@ -92,8 +107,9 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         );
 
         res.json({ success: true });
-    } catch (error) {
-        console.error('Request OTP Error:', error);
+    } catch (error: any) {
+        console.error('[OTP] Request OTP Error:', error?.message || error);
+        if (error?.response?.data) console.error('[OTP] API Error detail:', error.response.data);
         Sentry.captureException(error);
         res.status(500).json({ error: 'Failed to request OTP' });
     }
