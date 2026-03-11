@@ -172,7 +172,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
                 externalId: phoneHmac,
                 // Clerk requires at least one identifier — use a private placeholder email.
                 // This email is never used for login or notifications.
-                emailAddress: [`${phoneHmac.slice(0, 16)}@sortt.internal`],
+                emailAddress: [`${phoneHmac.slice(0, 16)}@sortt.app`],
                 skipPasswordChecks: true,
             });
             clerkUserId = newClerkUser.id;
