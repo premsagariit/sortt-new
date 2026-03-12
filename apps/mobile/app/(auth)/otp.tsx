@@ -117,13 +117,18 @@ export default function OTPScreen() {
           console.error('Push token registration error:', e);
         }
 
-        const type = useAuthStore.getState().userType;
-        if (type === 'aggregator') {
-          router.replace('/(aggregator)/home' as any);
-        } else if (type === 'seller') {
-          router.replace('/(seller)/home' as any);
-        } else {
+        const storeState = useAuthStore.getState();
+        const type = storeState.userType;
+        const name = storeState.name;
+
+        // Empty name = new user who hasn't completed onboarding
+        // Route to user-type selection first regardless of DB default
+        if (!name || name.trim() === '') {
           router.replace('/(auth)/user-type' as any);
+        } else if (type === 'aggregator') {
+          router.replace('/(aggregator)/home' as any);
+        } else {
+          router.replace('/(seller)/home' as any);
         }
       } else {
         throw new Error('SignIn incomplete');

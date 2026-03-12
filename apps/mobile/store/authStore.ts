@@ -104,7 +104,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLocality: (locality) => set({ locality }),
   setCity: (city) => set({ city }),
   reset: () => set(initialState),
-  
+
   signOut: async () => {
     if (globalClerkSignOut) {
       try {
@@ -131,7 +131,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         try {
           const errBody = await response.json();
           errorMsg = errBody?.error || errorMsg;
-        } catch {}
+        } catch { }
         throw new Error(errorMsg);
       }
       set({ isLoading: false });
@@ -156,13 +156,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         try {
           const errBody = await response.json();
           errorMsg = errBody?.error || errorMsg;
-        } catch {}
+        } catch { }
         throw new Error(errorMsg);
       }
       const data = await response.json();
       set({
         userId: data.user?.id || null,
         userType: data.user?.user_type || null,
+        name: data.user?.name || '',
         isLoading: false,
       });
       return { success: true, token: data.token }; // Note: Component uses this token for Clerk
