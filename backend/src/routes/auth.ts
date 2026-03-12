@@ -168,17 +168,12 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         } else {
             // Create a Clerk user with externalId = phone_hash.
             // No real PII stored in Clerk — phone data stays in our PostgreSQL DB.
-            const placeholderEmail = `${phoneHmac.slice(0, 16)}@sortt.app`;
-            const randomPassword = crypto.randomBytes(32).toString('hex');
-            
-            console.log(`[Clerk] Creating user for ${phoneHmac.slice(0, 8)}... with email ${placeholderEmail}`);
-            
+            console.log(`[Clerk] Creating user for ${phoneHmac.slice(0, 8)}...`);
             const newClerkUser = await clerkClient.users.createUser({
                 externalId: phoneHmac,
-                firstName: 'Sortt',
-                lastName: 'User',
-                emailAddress: [placeholderEmail],
-                password: randomPassword,
+                username: `u_${phoneHmac.slice(0, 16)}`,
+                skipPasswordChecks: true,
+                firstName: 'User',
             });
             clerkUserId = newClerkUser.id;
         }
