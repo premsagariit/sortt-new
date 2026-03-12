@@ -34,7 +34,7 @@ import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
-import { useSignIn } from '@clerk/clerk-expo';
+import { useSignIn, useAuth } from '@clerk/clerk-expo';
 import { registerForPushNotificationsAsync } from '../../lib/push';
 import { api } from '../../lib/api';
 
@@ -46,6 +46,7 @@ export default function OTPScreen() {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   const { signIn, setActive } = useSignIn();
+  const { signOut } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────
   const [otp, setOtp] = useState('');
@@ -91,6 +92,7 @@ export default function OTPScreen() {
 
       if (!signIn || !setActive) throw new Error('Clerk not initialized');
 
+      await signOut().catch(() => { }); // clear any stale session — silent no-op if none exists
       const signInAttempt = await signIn.create({
         strategy: 'ticket',
         ticket: result.token,
@@ -98,7 +100,7 @@ export default function OTPScreen() {
 
       if (signInAttempt.status === 'complete') {
         await setActive({ session: signInAttempt.createdSessionId });
-        
+
         // Register Push Token
         try {
           // Fire and forget because push token shouldn't block navigation

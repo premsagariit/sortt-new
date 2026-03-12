@@ -3,21 +3,42 @@
     "target": "ES2019",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "paths": {
-      "@sortt/maps": ["packages/maps/src/index.ts"],
-      "@sortt/realtime": ["packages/realtime/src/index.ts"],
-      "@sortt/auth": ["packages/auth/src/index.ts"],
-      "@sortt/storage": ["packages/storage/src/index.ts"],
-      "@sortt/analysis": ["packages/analysis/src/index.ts"]
+      "@sortt/maps": [
+        "packages/maps/src/index.ts"
+      ],
+      "@sortt/realtime": [
+        "packages/realtime/src/index.ts"
+      ],
+      "@sortt/auth": [
+        "packages/auth/src/index.ts"
+      ],
+      "@sortt/storage": [
+        "packages/storage/src/index.ts"
+      ],
+      "@sortt/analysis": [
+        "packages/analysis/src/index.ts"
+      ]
     }
   },
-  "exclude": ["node_modules", "**/node_modules", "dist", ".next", ".expo"]
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "dist",
+    ".next",
+    ".expo"
+  ],
+  "extends": "expo/tsconfig.base"
 }
