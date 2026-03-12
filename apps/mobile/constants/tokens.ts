@@ -123,6 +123,7 @@ export const materialBg = {
   ewaste: colors.material.ewaste.bg,
   fabric: colors.material.fabric.bg,
   glass: colors.material.glass.bg,
+  custom: colors.material.custom.bg,
 } as const;
 
 // ── Status chip background tokens ──────────────────────────────────────────────

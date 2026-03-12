@@ -578,12 +578,12 @@
 - [x] Wire KYC screen → `POST /api/aggregators/kyc` (photo upload). On success → navigate to `kyc-pending` screen.
 
 ### 🚦 DAY 8 VERIFICATION GATE
-- [x] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
-- [x] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
-- [x] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
-- [x] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
-- [x] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
-- [x] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
+- [] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
+- [] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
+- [] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
+- [] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
+- [] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
+- [] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
 
 ---
 

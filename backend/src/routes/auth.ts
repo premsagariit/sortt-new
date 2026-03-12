@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
-import { clerkClient } from '@clerk/clerk-sdk-node';
+import { clerkClient } from '@clerk/express';
 import { query } from '../lib/db';
 import {
     redis,
@@ -168,13 +168,17 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         } else {
             // Create a Clerk user with externalId = phone_hash.
             // No real PII stored in Clerk — phone data stays in our PostgreSQL DB.
-            // A random password is set but never used; authentication is via sign-in tokens.
+            const placeholderEmail = `${phoneHmac.slice(0, 16)}@sortt.app`;
+            const randomPassword = crypto.randomBytes(32).toString('hex');
+            
+            console.log(`[Clerk] Creating user for ${phoneHmac.slice(0, 8)}... with email ${placeholderEmail}`);
+            
             const newClerkUser = await clerkClient.users.createUser({
                 externalId: phoneHmac,
-                // Clerk requires at least one identifier — use a private placeholder email.
-                emailAddress: [`${phoneHmac.slice(0, 16)}@sortt.app`],
-                // Random password — never used; login is always via Clerk sign-in token.
-                password: crypto.randomBytes(32).toString('hex'),
+                firstName: 'Sortt',
+                lastName: 'User',
+                emailAddress: [placeholderEmail],
+                password: randomPassword,
             });
             clerkUserId = newClerkUser.id;
         }

@@ -25,8 +25,9 @@ export const tokenCache = {
   },
 };
 
-export const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+export const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 if (!clerkPublishableKey) {
-  throw new Error('Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
+  console.warn('⚠️ Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env');
+  console.log('Available env keys:', Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC_')));
 }

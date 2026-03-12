@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { ClerkExpressRequireAuth, StrictAuthProp } from '@clerk/clerk-sdk-node';
+import { requireAuth, AuthObject } from '@clerk/express';
 import { query } from '../lib/db';
 
 declare global {
     namespace Express {
-        interface Request extends StrictAuthProp {
+        interface Request {
+            auth: AuthObject;
             user?: {
                 id: string;
                 user_type: string;
@@ -20,7 +21,7 @@ const requireAuthStack = [
         if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) {
             return res.status(401).json({ error: 'Unauthorized: Missing Auth Configuration' });
         }
-        return ClerkExpressRequireAuth()(req, res, next);
+        return requireAuth()(req, res, next);
     },
     async (req: Request, res: Response, next: NextFunction) => {
         try {
