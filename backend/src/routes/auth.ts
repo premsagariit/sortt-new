@@ -172,8 +172,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
             const newClerkUser = await clerkClient.users.createUser({
                 externalId: phoneHmac,
                 username: `u_${phoneHmac.slice(0, 16)}`,
-                skipPasswordChecks: true,
-                firstName: 'User',
+                password: crypto.randomBytes(32).toString('hex'),
             });
             clerkUserId = newClerkUser.id;
         }
