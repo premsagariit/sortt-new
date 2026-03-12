@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { requireAuth, AuthObject } from '@clerk/express';
+import { requireAuth, getAuth } from '@clerk/express';
 import { query } from '../lib/db';
 
 declare global {
     namespace Express {
         interface Request {
-            auth: AuthObject;
             user?: {
                 id: string;
                 user_type: string;
@@ -25,7 +24,7 @@ const requireAuthStack = [
     },
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const clerkUserId = req.auth?.userId;
+            const { userId: clerkUserId } = getAuth(req);
             if (!clerkUserId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }

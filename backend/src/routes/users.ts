@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { getAuth } from '@clerk/express';
 import { query } from '../lib/db';
 
 const router = Router();
@@ -6,7 +7,7 @@ const router = Router();
 // Endpoint for push token registration
 router.post('/device-token', async (req, res) => {
   const { deviceToken, provider } = req.body;
-  const userId = req.auth?.userId;
+  const { userId } = getAuth(req);
 
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
