@@ -58,16 +58,45 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
 router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     const { operating_area_text, operating_hours } = req.body;
-    console.log('[DIAG] PATCH /api/aggregators/profile', { userId, body: req.body });
+    
+    console.log('[DIAG] PATCH /api/aggregators/profile', { 
+        userId, 
+        operating_area_text,
+        operating_hours: JSON.stringify(operating_hours)
+    });
     
     try {
-        await query(
-            `UPDATE aggregator_profiles 
-             SET operating_area_text = COALESCE($1, operating_area_text),
-                 operating_hours = COALESCE($2, operating_hours)
-             WHERE user_id = $3`,
-            [operating_area_text, operating_hours ? JSON.stringify(operating_hours) : null, userId]
-        );
+        const updateFields: string[] = [];
+        const values: any[] = [];
+        let placeholderIdx = 1;
+
+        if (operating_area_text !== undefined) {
+            updateFields.push(`operating_area_text = $${placeholderIdx++}`);
+            values.push(operating_area_text);
+        }
+
+        if (operating_hours !== undefined) {
+            updateFields.push(`operating_hours = $${placeholderIdx++}`);
+            values.push(JSON.stringify(operating_hours));
+            
+            // Log specific fields if they exist for debugging "missing logs" issue
+            if (operating_hours.days) {
+                console.log(`[DIAG] Saving operating days for ${userId}:`, operating_hours.days);
+            }
+        }
+
+        if (updateFields.length === 0) {
+            return res.json({ success: true, message: 'No fields to update' });
+        }
+
+        values.push(userId);
+        const queryStr = `
+            UPDATE aggregator_profiles 
+            SET ${updateFields.join(', ')}
+            WHERE user_id = $${placeholderIdx}
+        `;
+
+        await query(queryStr, values);
         res.json({ success: true });
     } catch (e: any) {
         console.error('Profile PATCH error:', e);
@@ -129,22 +158,26 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
 
         const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-        // Validate required files
-        if (!files['aadhaar_front'] || !files['aadhaar_back'] || !files['selfie']) {
-            return res.status(400).json({ error: 'Missing required standard KYC files' });
+        const mediaToUpload: { field: string, dbType: string, file: Express.Multer.File }[] = [];
+
+        if (files['aadhaar_front']) {
+            mediaToUpload.push({ field: 'aadhaar_front', dbType: 'kyc_aadhaar_front', file: files['aadhaar_front'][0] });
         }
-
-        const mediaToUpload = [
-            { field: 'aadhaar_front', dbType: 'aadhaar_front', file: files['aadhaar_front'][0] },
-            { field: 'aadhaar_back', dbType: 'aadhaar_back', file: files['aadhaar_back'][0] },
-            { field: 'selfie', dbType: 'selfie', file: files['selfie'][0] },
-        ];
-
+        if (files['aadhaar_back']) {
+            mediaToUpload.push({ field: 'aadhaar_back', dbType: 'kyc_aadhaar_back', file: files['aadhaar_back'][0] });
+        }
+        if (files['selfie']) {
+            mediaToUpload.push({ field: 'selfie', dbType: 'kyc_selfie', file: files['selfie'][0] });
+        }
         if (files['shop_photo']) {
-            mediaToUpload.push({ field: 'shop_photo', dbType: 'shop_photo', file: files['shop_photo'][0] });
+            mediaToUpload.push({ field: 'shop_photo', dbType: 'kyc_shop', file: files['shop_photo'][0] });
         }
         if (files['vehicle_photo']) {
-            mediaToUpload.push({ field: 'vehicle_photo', dbType: 'vehicle_photo', file: files['vehicle_photo'][0] });
+            mediaToUpload.push({ field: 'vehicle_photo', dbType: 'kyc_vehicle', file: files['vehicle_photo'][0] });
+        }
+
+        if (mediaToUpload.length === 0) {
+            return res.status(400).json({ error: 'No files uploaded' });
         }
 
         const uploadedKeys: { media_type: string, key: string }[] = [];
@@ -169,10 +202,8 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
 
         await Promise.all(insertPromises);
 
-        // Update KYC status to pending
+        // Update KYC status ONLY if regular onboarding photos are present (or just mark as pending if any photo uploaded)
         await query(`UPDATE aggregator_profiles SET kyc_status = 'pending' WHERE user_id = $1`, [userId]);
-
-        console.log(`[Admin Push Notification Stub] A new KYC submission requires review for aggregator ${userId}`);
 
         res.json({ success: true, submitted_at: new Date().toISOString() });
 

@@ -5,38 +5,53 @@ import { Platform } from 'react-native';
 
 export interface PushTokenResponse {
   expoToken: string;
-  rawToken: string | null;   // null in Expo Go — native token not available
+  rawToken: string | null; // null in Expo Go — native token not available until EAS build
 }
 
 export async function registerForPushNotificationsAsync(): Promise<PushTokenResponse | null> {
+  // expo-notifications remote push support was removed from Expo Go in SDK 53.
+  // Expo push tokens still work in Expo Go for local notifications,
+  // but getDevicePushTokenAsync (FCM/APNs) requires an EAS dev/prod build.
+  // We return what we can and skip what we can't — never throw.
+
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    } catch {
+      // Non-fatal — channel setup failure does not block token registration
+    }
   }
 
   if (!Device.isDevice) {
-    console.log('Must use physical device for Push Notifications');
+    console.log('[Push] Must use physical device for push notifications');
     return null;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  // ── Permission request ────────────────────────────────────────────
+  let finalStatus: string;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+  } catch {
+    console.log('[Push] Permission request failed — skipping push token registration');
+    return null;
   }
 
   if (finalStatus !== 'granted') {
-    console.log('Push notification permission denied');
+    console.log('[Push] Notification permission denied by user');
     return null;
   }
 
-  // ── Expo Push Token (works in Expo Go + EAS builds) ──────────────
+  // ── Expo Push Token — works in Expo Go + EAS builds ──────────────
   let expoToken = '';
   try {
     const projectId =
@@ -44,23 +59,27 @@ export async function registerForPushNotificationsAsync(): Promise<PushTokenResp
       Constants?.easConfig?.projectId;
 
     if (!projectId) {
-      console.warn('Project ID not found — add eas.projectId to app.json extra block');
+      console.warn('[Push] No EAS projectId in app.json — getExpoPushTokenAsync may fail');
     }
 
     expoToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    console.log('[Push] Expo push token registered');
   } catch (e) {
-    console.error('Failed to get Expo push token:', e);
-    return null;   // Expo token is mandatory — bail if this fails
+    // In Expo Go SDK 53 this may also fail — treat as non-fatal
+    console.warn('[Push] Failed to get Expo push token (Expo Go SDK 53+ limitation):', e);
+    return null;
   }
 
-  // ── Native Token (FCM/APNs — EAS builds only, not Expo Go) ──────
-  // Wrapped in its own try/catch so Expo Go doesn't kill the whole flow.
+  // ── Native Token (FCM/APNs) — EAS builds only ────────────────────
+  // getDevicePushTokenAsync throws in Expo Go SDK 53+.
+  // Separate try/catch — failure here must not affect expoToken registration.
   let rawToken: string | null = null;
   try {
     rawToken = (await Notifications.getDevicePushTokenAsync()).data;
+    console.log('[Push] Native device push token registered');
   } catch {
-    // Expected in Expo Go — native token not available. Silently continue.
-    console.log('Native push token unavailable (expected in Expo Go)');
+    // Expected in Expo Go — silently skip. Works in EAS dev/prod build.
+    console.log('[Push] Native push token unavailable (expected in Expo Go SDK 53+)');
   }
 
   return { expoToken, rawToken };

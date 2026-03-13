@@ -29,9 +29,9 @@ router.post('/device-token', async (req, res) => {
     const userId = userRes.rows[0].id;
 
     await query(
-      `INSERT INTO device_tokens (user_id, device_token, provider)
+      `INSERT INTO device_tokens (user_id, expo_token, token_type)
        VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, device_token) DO UPDATE SET updated_at = NOW()`,
+       ON CONFLICT (user_id, expo_token) DO UPDATE SET last_seen_at = NOW()`,
       [userId, deviceToken, provider]
     );
 

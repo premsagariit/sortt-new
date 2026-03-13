@@ -114,12 +114,12 @@ interface AggregatorStoreState {
 }
 
 const initialMaterials: MaterialConfig[] = [
-  { id: 'metal-iron', name: 'Metal (Iron)', selected: true, ratePerKg: 28, avgRateHint: 28, bgToken: 'metalBg' },
-  { id: 'metal-copper', name: 'Metal (Copper)', selected: true, ratePerKg: 480, avgRateHint: 480, bgToken: 'metalBg' },
+  { id: 'metal', name: 'Metal', selected: true, ratePerKg: 28, avgRateHint: 28, bgToken: 'metalBg' },
   { id: 'paper', name: 'Paper', selected: true, ratePerKg: 12, avgRateHint: 12, bgToken: 'paperBg' },
-  { id: 'plastic-pet', name: 'Plastic (PET)', selected: false, ratePerKg: 8, avgRateHint: 8, bgToken: 'plasticBg' },
+  { id: 'plastic', name: 'Plastic', selected: false, ratePerKg: 8, avgRateHint: 8, bgToken: 'plasticBg' },
   { id: 'ewaste', name: 'E-Waste', selected: false, ratePerKg: 60, avgRateHint: 60, bgToken: 'ewasteBg' },
   { id: 'fabric', name: 'Fabric', selected: false, ratePerKg: 6, avgRateHint: 6, bgToken: 'fabricBg' },
+  { id: 'glass', name: 'Glass', selected: false, ratePerKg: 5, avgRateHint: 5, bgToken: 'glassBg' },
 ];
 
 // Seed — guarantees ≥1 card in New tab every rebuild

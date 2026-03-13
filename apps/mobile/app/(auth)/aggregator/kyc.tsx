@@ -1,9 +1,9 @@
 /**
  * app/(auth)/aggregator/kyc.tsx
  * ──────────────────────────────────────────────────────────────────
- * Aggregator KYC — Step 4/4 of onboarding.
- * 4 independent camera cards (Aadhaar Front, Aadhaar Back, Selfie, Shop/Vehicle).
- * URIs stored in aggregatorStore — local only until Day 8 upload.
+ * Aggregator KYC — Simplified Onboarding.
+ * Requires only Shop/Vehicle photo.
+ * Aadhaar/Selfie move to profile (Day 8+).
  * ──────────────────────────────────────────────────────────────────
  */
 
@@ -14,13 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, IdentificationCard, Storefront, WarningCircle, CheckCircle, IconWeight, User, Truck } from 'phosphor-react-native';
+import { Camera, Storefront, WarningCircle, CheckCircle, IconWeight, Truck } from 'phosphor-react-native';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
-// Camera logic is ONLY in this hook — never call ImagePicker directly in screens
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../utils/navigation';
 import { api } from '../../../lib/api';
@@ -28,104 +27,47 @@ import { api } from '../../../lib/api';
 export default function KycScreen() {
     const {
         aggregatorType,
-        kycAadhaarFrontUri,
-        kycAadhaarBackUri,
-        kycSelfieUri,
         kycShopPhotoUri,
         kycVehiclePhotoUri,
-        setKycAadhaarFrontUri,
-        setKycAadhaarBackUri,
-        setKycSelfieUri,
         setKycShopPhotoUri,
         setKycVehiclePhotoUri,
     } = useAggregatorStore();
 
-    // Independent hook instances — each manages its own permission + loading state
-    const aadhaarFront = usePhotoCapture();
-    const aadhaarBack = usePhotoCapture();
-    const selfie = usePhotoCapture();
-    const fourthPhoto = usePhotoCapture();
+    // Only one photo needed for onboarding now
+    const businessPhoto = usePhotoCapture();
 
     // Sync captures into store
     useEffect(() => {
-        if (aadhaarFront.photoUri) setKycAadhaarFrontUri(aadhaarFront.photoUri);
-    }, [aadhaarFront.photoUri, setKycAadhaarFrontUri]);
-
-    useEffect(() => {
-        if (aadhaarBack.photoUri) setKycAadhaarBackUri(aadhaarBack.photoUri);
-    }, [aadhaarBack.photoUri, setKycAadhaarBackUri]);
-
-    useEffect(() => {
-        if (selfie.photoUri) setKycSelfieUri(selfie.photoUri);
-    }, [selfie.photoUri, setKycSelfieUri]);
-
-    useEffect(() => {
-        if (fourthPhoto.photoUri) {
-            if (aggregatorType === 'shop') setKycShopPhotoUri(fourthPhoto.photoUri);
-            else setKycVehiclePhotoUri(fourthPhoto.photoUri);
+        if (businessPhoto.photoUri) {
+            if (aggregatorType === 'shop') setKycShopPhotoUri(businessPhoto.photoUri);
+            else setKycVehiclePhotoUri(businessPhoto.photoUri);
         }
-    }, [fourthPhoto.photoUri, aggregatorType, setKycShopPhotoUri, setKycVehiclePhotoUri]);
+    }, [businessPhoto.photoUri, aggregatorType, setKycShopPhotoUri, setKycVehiclePhotoUri]);
 
-    const handleRetakeAadhaarFront = async () => {
-        aadhaarFront.reset();
-        setKycAadhaarFrontUri(null);
-        await aadhaarFront.pickPhoto();
-    };
-
-    const handleRetakeAadhaarBack = async () => {
-        aadhaarBack.reset();
-        setKycAadhaarBackUri(null);
-        await aadhaarBack.pickPhoto();
-    };
-
-    const handleRetakeSelfie = async () => {
-        selfie.reset();
-        setKycSelfieUri(null);
-        await selfie.pickPhoto();
-    };
-
-    const handleRetakeFourth = async () => {
-        fourthPhoto.reset();
+    const handleRetake = async () => {
+        businessPhoto.reset();
         if (aggregatorType === 'shop') setKycShopPhotoUri(null);
         else setKycVehiclePhotoUri(null);
-        await fourthPhoto.pickPhoto();
+        await businessPhoto.pickPhoto();
     };
 
-    // Submit enabled only when ALL required URIs are captured
-    const isFourthPhotoDone = aggregatorType === 'shop' ? kycShopPhotoUri !== null : kycVehiclePhotoUri !== null;
-    const canSubmit = kycAadhaarFrontUri !== null && kycAadhaarBackUri !== null && kycSelfieUri !== null && isFourthPhotoDone;
+    const businessUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
+    const canSubmit = businessUri !== null;
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
         try {
             const formData = new FormData();
-            
-            formData.append('aadhaar_front', {
-                uri: kycAadhaarFrontUri,
-                name: 'aadhaar_front.jpg',
-                type: 'image/jpeg',
-            } as any);
-
-            formData.append('aadhaar_back', {
-                uri: kycAadhaarBackUri,
-                name: 'aadhaar_back.jpg',
-                type: 'image/jpeg',
-            } as any);
-
-            formData.append('selfie', {
-                uri: kycSelfieUri,
-                name: 'selfie.jpg',
-                type: 'image/jpeg',
-            } as any);
-
-            const fourthUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
             const fourthKey = aggregatorType === 'shop' ? 'shop_photo' : 'vehicle_photo';
-            formData.append(fourthKey, {
-                uri: fourthUri,
-                name: `${fourthKey}.jpg`,
-                type: 'image/jpeg',
-            } as any);
+            
+            if (businessUri) {
+                formData.append(fourthKey, {
+                    uri: businessUri,
+                    name: `${fourthKey}.jpg`,
+                    type: 'image/jpeg',
+                } as any);
+            }
 
             await api.post('/api/aggregators/kyc', formData, {
                 headers: {
@@ -141,93 +83,58 @@ export default function KycScreen() {
         }
     };
 
-    const fourthTitle = aggregatorType === 'shop' ? 'Shop Photo' : 'Vehicle Photo';
-    const fourthSubtitle = aggregatorType === 'shop'
+    const title = aggregatorType === 'shop' ? 'Shop Photo' : 'Vehicle Photo';
+    const subtitle = aggregatorType === 'shop'
         ? 'Photo of your shop front'
         : 'Photo of your collection vehicle';
-    const FourthIcon = aggregatorType === 'shop' ? Storefront : Truck;
-    const fourthUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
+    const BusinessIcon = aggregatorType === 'shop' ? Storefront : Truck;
 
     return (
         <SafeAreaView style={styles.safe} edges={['bottom']}>
             <NavBar
                 variant="light"
-                title="KYC Documents"
+                title="Business Photo"
                 onBack={() => safeBack('/(auth)/aggregator/materials-setup')}
                 rightAction={
                     <Text variant="caption" style={{ color: colors.muted }}>Step 4 of 4</Text>
                 }
             />
 
-            {/* Step progress bar */}
             <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: '100%' }]} />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
-                    <Text variant="heading">Upload KYC Documents</Text>
+                    <Text variant="heading">Final Step: Photo</Text>
                     <Text variant="caption" color={colors.muted}>
-                        All 4 photos are required. Documents are verified within 24 hours.
+                        Please provide a clear photo of your {aggregatorType === 'shop' ? 'shop' : 'vehicle'}.
                     </Text>
                 </View>
 
-                {/* Card 1 — Aadhaar Front */}
                 <PhotoCard
-                    title="Aadhaar Card (Front)"
-                    subtitle="Clear photo of the front side of your Aadhaar card"
-                    Icon={IdentificationCard}
-                    storedUri={kycAadhaarFrontUri}
-                    badge="✓ Front uploaded"
-                    permissionDenied={aadhaarFront.permissionDenied}
-                    isLoading={aadhaarFront.isLoading}
-                    onTap={aadhaarFront.pickPhoto}
-                    onRetake={handleRetakeAadhaarFront}
-                />
-
-                {/* Card 2 — Aadhaar Back */}
-                <PhotoCard
-                    title="Aadhaar Card (Back)"
-                    subtitle="Clear photo of the back side of your Aadhaar card"
-                    Icon={IdentificationCard}
-                    storedUri={kycAadhaarBackUri}
-                    badge="✓ Back uploaded"
-                    permissionDenied={aadhaarBack.permissionDenied}
-                    isLoading={aadhaarBack.isLoading}
-                    onTap={aadhaarBack.pickPhoto}
-                    onRetake={handleRetakeAadhaarBack}
-                />
-
-                {/* Card 3 — Selfie */}
-                <PhotoCard
-                    title="Your Photo"
-                    subtitle="Clear selfie facing the camera"
-                    Icon={User}
-                    storedUri={kycSelfieUri}
+                    title={title}
+                    subtitle={subtitle}
+                    Icon={BusinessIcon}
+                    storedUri={businessUri}
                     badge="✓ Photo uploaded"
-                    permissionDenied={selfie.permissionDenied}
-                    isLoading={selfie.isLoading}
-                    onTap={selfie.pickPhoto}
-                    onRetake={handleRetakeSelfie}
+                    permissionDenied={businessPhoto.permissionDenied}
+                    isLoading={businessPhoto.isLoading}
+                    onTap={businessPhoto.pickPhoto}
+                    onRetake={handleRetake}
                 />
 
-                {/* Card 4 — Shop / Vehicle Photo */}
-                <PhotoCard
-                    title={fourthTitle}
-                    subtitle={fourthSubtitle}
-                    Icon={FourthIcon}
-                    storedUri={fourthUri}
-                    badge="✓ Photo uploaded"
-                    permissionDenied={fourthPhoto.permissionDenied}
-                    isLoading={fourthPhoto.isLoading}
-                    onTap={fourthPhoto.pickPhoto}
-                    onRetake={handleRetakeFourth}
-                />
+                <View style={styles.infoBox}>
+                    <WarningCircle size={18} color={colors.amber} weight="fill" />
+                    <Text variant="caption" color={colors.navy} style={{ flex: 1 }}>
+                        Aadhaar and Selfie can be uploaded later from your profile to complete full verification.
+                    </Text>
+                </View>
             </ScrollView>
 
             <View style={styles.footer}>
                 <PrimaryButton
-                    label={isSubmitting ? "Submitting..." : "Submit for Verification"}
+                    label={isSubmitting ? "Submitting..." : "Complete Setup"}
                     onPress={handleSubmit}
                     disabled={!canSubmit || isSubmitting}
                 />
@@ -268,7 +175,6 @@ function PhotoCard({
                 )}
             </View>
 
-            {/* Permission denied inline banner */}
             {permissionDenied && (
                 <View style={cardStyles.permissionBanner}>
                     <WarningCircle size={14} color={colors.surface} weight="fill" />
@@ -314,8 +220,6 @@ function PhotoCard({
     );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
     safe: {
         flex: 1,
@@ -336,6 +240,16 @@ const styles = StyleSheet.create({
     },
     header: {
         gap: spacing.xs,
+    },
+    infoBox: {
+        flexDirection: 'row',
+        padding: spacing.md,
+        backgroundColor: colorExtended.surface2,
+        borderRadius: radius.card,
+        gap: spacing.sm,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     footer: {
         padding: spacing.lg,
