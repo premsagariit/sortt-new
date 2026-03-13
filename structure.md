@@ -17,6 +17,8 @@ Sortt
 │   │   │   │   ├── active-order-detail.tsx # Post-acceptance view (Navigate/Cancel/Full Address)
 │   │   │   │   ├── price-index.tsx # National market index view
 │   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
+│   │   │   │   ├── edit-profile.tsx # Aggregator profile editor
+│   │   │   │   ├── settings.tsx # Aggregator preferences and logout
 │   │   │   │   ├── execution # Order Execution Flow
 │   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
 │   │   │   │   │   ├── navigate.tsx # Map guidance to seller
@@ -50,10 +52,8 @@ Sortt
 │   │   │   │   ├── agg-profile.tsx # View dealer details before/after booking
 │   │   │   │   ├── browse.tsx # Material category and rate exploration
 │   │   │   │   ├── earnings.tsx # Seller-side transaction history
-│   │   │   │   ├── edit-profile.tsx # Profile field editor
-│   │   │   │   ├── help.tsx # Support tickets and FAQ access
+│   │   │   │   ├── edit-profile.tsx # Seller profile editor
 │   │   │   │   ├── home.tsx # Seller dashboard: Rates, active orders, CTA
-│   │   │   │   ├── language.tsx # Localization and language toggle
 │   │   │   │   ├── listing # Progressive selling wizard
 │   │   │   │   │   ├── _layout.tsx # Multi-step wizard stack
 │   │   │   │   │   ├── index.tsx # Selling flow entry point
@@ -61,14 +61,10 @@ Sortt
 │   │   │   │   │   ├── step2.tsx # Capture or upload scrap photos
 │   │   │   │   │   ├── step3.tsx # Weight estimation, pricing, and DateTimePicker
 │   │   │   │   │   └── step4.tsx # Final review and post to marketplace
-│   │   │   │   ├── notifications.tsx # Activity feed
 │   │   │   │   ├── orders.tsx # Seller order tracking (Active/Past)
 │   │   │   │   ├── prices.tsx # Detailed material rate list
-│   │   │   │   ├── privacy-policy.tsx # Legal privacy document
 │   │   │   │   ├── profile.tsx # Seller account overview and settings
-│   │   │   │   ├── settings.tsx # App preferences and logout
-│   │   │   │   ├── terms-of-service.tsx # Usage terms and conditions
-│   │   │   │   └── terms-privacy.tsx # Unified legal view shell
+│   │   │   │   └── settings.tsx # Seller preferences and logout
 │   │   │   ├── (shared) # Common screens used across roles
 │   │   │   │   ├── _layout.tsx # Stack wrapper for shared screens
 │   │   │   │   ├── chat
@@ -79,14 +75,19 @@ Sortt
 │   │   │   │   │   └── [id].tsx # Handshake OTP for pickup verification
 │   │   │   │   ├── receipt
 │   │   │   │   │   └── [id].tsx # Immutable digital receipt post-payment
-│   │   │   │   └── review
-│   │   │   │       └── [id].tsx # Post-pickup review
+│   │   │   │   ├── review
+│   │   │   │   │   └── [id].tsx # Post-pickup review
+│   │   │   │   ├── help.tsx # Support tickets and FAQ access
+│   │   │   │   ├── language.tsx # Localization and language toggle
+│   │   │   │   ├── notifications.tsx # Activity feed
+│   │   │   │   ├── privacy-policy.tsx # Legal privacy document
+│   │   │   │   ├── terms-of-service.tsx # Usage terms and conditions
+│   │   │   │   └── terms-privacy.tsx # Unified legal view shell
 │   │   │   ├── _layout.tsx # Root layout/providers
 │   │   │   └── index.tsx # Application index (Splash bridge)
 │   │   ├── app.json # Expo project configuration
 │   │   ├── components
 │   │   │   ├── SplashAnimation.tsx # SVG-driven scrap falling animation
-│   │   │   ├── _1.tsx # Backup/Ref manual of SplashAnimation
 │   │   │   ├── domain # Business-logic heavy components
 │   │   │   └── ui # Atomic design system (Pure presentational)
 │   │   │       ├── Avatar.tsx # User profile image handler
@@ -128,12 +129,12 @@ Sortt
 │   │   ├── index.ts # App entry + helmet + middleware registration
 │   │   ├── instrument.ts # Sentry initialization
 │   │   ├── scheduler.ts # node-cron jobs (culling, refresh views)
-│   │   ├── db.ts # [NEW] Pool connection helper (Day 9)
+│   │   ├── db.ts # Pool connection helper (Day 9)
 │   │   ├── lib # Shared utilities
 │   │   │   ├── db.ts # PostgreSQL wrapper client
 │   │   │   └── redis.ts # Upstash Redis and rate limiters
 │   │   ├── middleware # Auth, sanitization, role verification
-│   │   │   ├── auth.ts # Clerk authentication
+│   │   │   ├── auth.ts # Clerk authentication (direct verifyToken approach)
 │   │   │   ├── sanitize.ts # Input HTML sanitization
 │   │   │   ├── verifyRole.ts # Strict role enforcement
 │   │   │   └── errorHandler.ts # Secure error handling
@@ -142,9 +143,11 @@ Sortt
 │   │   │   ├── aggregators.ts # Dealer search and profiles
 │   │   │   ├── auth.ts # OTP and registration
 │   │   │   └── users.ts # Profile and settings
-│   │   └── utils # Helper functions and provider clients
-├── .env # Environment variables for backend
-├── tsconfig.json # TypeScript configuration for backend
+│   │   └── utils # Helper functions and DTOs
+│   │       ├── orderDto.ts # Response transformation for orders
+│   │       └── orderStateMachine.ts # Status transition rules
+│   ├── .env # Environment variables for backend
+│   └── tsconfig.json # TypeScript configuration for backend
 ├── pnpm-workspace.yaml # Monorepo workspace configuration
 ├── package.json # Root package management
 ├── packages # Shared internal libraries
@@ -169,11 +172,11 @@ Sortt
 │   ├── 0009_rls.sql
 │   ├── 0010_indexes.sql
 │   ├── 0011_triggers.sql
-│   └── 0012_materialized_views.sql
-│   └── 0013_add_aggregator_type.sql
-│   └── 0014_kyc_media_types.sql
-│   └── 0015_otp_log_make_hmac_nullable.sql
-│   └── 0016_standardise_column_names.sql
+│   ├── 0012_materialized_views.sql
+│   ├── 0013_add_aggregator_type.sql
+│   ├── 0014_kyc_media_types.sql
+│   ├── 0015_otp_log_make_hmac_nullable.sql
+│   ├── 0016_standardise_column_names.sql
 │   └── 0017_standardise_trd_columns.sql
-├── sortt_logo_splash_v2.html # Reference HTML for animation
+├── dist_deploy # Deployment artifacts (Azure App Service)
 └── structure.md # This file (Project Structure & Descriptions)
