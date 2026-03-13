@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import './instrument'; // V14/D3: Must be first
 import express from 'express';
 import helmet from 'helmet';
@@ -12,6 +14,12 @@ import usersRouter from './routes/users';
 import { startScheduler } from './scheduler';
 
 const app = express();
+
+console.log('[DIAG] Backend initializing...');
+console.log('[DIAG] env.PORT:', process.env.PORT);
+console.log('[DIAG] env.DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('[DIAG] env.CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? `${process.env.CLERK_SECRET_KEY.slice(0, 8)}...` : 'MISSING');
+console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? `${process.env.CLERK_PUBLISHABLE_KEY.slice(0, 8)}...` : 'MISSING');
 
 // 1. V34: helmet() MUST be the very first middleware
 app.use(helmet());

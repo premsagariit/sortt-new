@@ -119,8 +119,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   requestOtp: async (phone: string) => {
     set({ isLoading: true });
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${apiUrl}/api/auth/request-otp`, {
+      const rawUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+      const apiUrl = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl}/api`;
+      console.log(`[DIAG] requestOtp calling: ${apiUrl}/auth/request-otp`);
+      const response = await fetch(`${apiUrl}/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: `+91${phone}` }),
@@ -145,8 +147,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   verifyOtp: async (phone: string, otp: string, userType?: string) => {
     set({ isLoading: true });
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+      const rawUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+      const apiUrl = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl}/api`;
+      console.log(`[DIAG] verifyOtp calling: ${apiUrl}/auth/verify-otp`);
+      const response = await fetch(`${apiUrl}/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: `+91${phone}`, otp, user_type: userType }),

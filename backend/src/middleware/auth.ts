@@ -16,8 +16,13 @@ declare global {
 
 const requireAuthStack = [
     (req: Request, res: Response, next: NextFunction) => {
-        // If Clerk keys are missing (as they might be on Day 6 per PLAN), return 401 gracefully
         if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) {
+            console.error('[DIAG] Missing Auth Configuration!', {
+                SECRET: !!process.env.CLERK_SECRET_KEY,
+                PUBLISHABLE: !!process.env.CLERK_PUBLISHABLE_KEY,
+                CWD: process.cwd(),
+                ENV_KEYS: Object.keys(process.env).filter(k => k.startsWith('CLERK'))
+            });
             return res.status(401).json({ error: 'Unauthorized: Missing Auth Configuration' });
         }
         return requireAuth()(req, res, next);
@@ -57,6 +62,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
 
     if (
         path === '/health' ||
+        path === '/health/' ||
         path.startsWith('/api/auth/') ||
         path.startsWith('/api/rates')
     ) {
