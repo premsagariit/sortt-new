@@ -83,6 +83,11 @@ pnpm dev:backend
 
 ---
 
+### 🗓 Current Status: Day 9 — Core Order Routes
+Next: Order CRUD, address reveal logic, and geocoding.
+
+---
+
 ## 📜 Documentation Reference
 - `PLAN.md`: 10-day build schedule and verification gates.
 - `MEMORY.md`: Core architectural rules, security constraints, and learned lessons.

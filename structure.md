@@ -125,21 +125,22 @@ Sortt
 ├── backend # Backend service (Azure App Service)
 │   ├── package.json
 │   ├── src
-│   │   ├── index.ts # Gateway entry point
+│   │   ├── index.ts # App entry + helmet + middleware registration
 │   │   ├── instrument.ts # Sentry initialization
-│   │   ├── lib # Core utility libraries
+│   │   ├── scheduler.ts # node-cron jobs (culling, refresh views)
+│   │   ├── db.ts # [NEW] Pool connection helper (Day 9)
+│   │   ├── lib # Shared utilities
 │   │   │   ├── db.ts # PostgreSQL wrapper client
 │   │   │   └── redis.ts # Upstash Redis and rate limiters
-│   │   ├── middleware # JWT validation and security layers
+│   │   ├── middleware # Auth, sanitization, role verification
 │   │   │   ├── auth.ts # Clerk authentication
 │   │   │   ├── sanitize.ts # Input HTML sanitization
 │   │   │   ├── verifyRole.ts # Strict role enforcement
 │   │   │   └── errorHandler.ts # Secure error handling
-│   │   ├── routes # Domain-specific API endpoints
+│   │   ├── routes # Auth, users, orders
 │   │   └── utils # Helper functions and provider clients
-│   │   ├── .env # Environment variables for backend
-│   │   └── tsconfig.json # TypeScript configuration for backend
-│   └── tsconfig.json
+│   ├── .env # Environment variables for backend
+│   └── tsconfig.json # TypeScript configuration for backend
 ├── pnpm-workspace.yaml # Monorepo workspace configuration
 ├── package.json # Root package management
 ├── packages # Shared internal libraries

@@ -27,7 +27,7 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
     const userId = (req as any).user.id;
     const { name, business_name, city_code } = req.body;
     console.log('[DIAG] POST /api/aggregators/profile', { userId, body: req.body });
-    
+
     try {
         await query('BEGIN');
 
@@ -57,28 +57,28 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
 // Updates operating area and hours
 router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { operating_area_text, operating_hours } = req.body;
-    
-    console.log('[DIAG] PATCH /api/aggregators/profile', { 
-        userId, 
-        operating_area_text,
+    const { operating_area, operating_hours } = req.body;
+
+    console.log('[DIAG] PATCH /api/aggregators/profile', {
+        userId,
+        operating_area,
         operating_hours: JSON.stringify(operating_hours)
     });
-    
+
     try {
         const updateFields: string[] = [];
         const values: any[] = [];
         let placeholderIdx = 1;
 
-        if (operating_area_text !== undefined) {
-            updateFields.push(`operating_area_text = $${placeholderIdx++}`);
-            values.push(operating_area_text);
+        if (operating_area !== undefined) {
+            updateFields.push(`operating_area = $${placeholderIdx++}`);
+            values.push(operating_area);
         }
 
         if (operating_hours !== undefined) {
             updateFields.push(`operating_hours = $${placeholderIdx++}`);
             values.push(JSON.stringify(operating_hours));
-            
+
             // Log specific fields if they exist for debugging "missing logs" issue
             if (operating_hours.days) {
                 console.log(`[DIAG] Saving operating days for ${userId}:`, operating_hours.days);
@@ -110,14 +110,14 @@ router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Respo
     const userId = (req as any).user.id;
     const { rates } = req.body; // Expects [{ material_code: 'paper', rate_per_kg: 15.5 }, ...]
     console.log('[DIAG] PATCH /api/aggregators/rates', { userId, ratesCount: rates?.length });
-    
+
     try {
         if (!rates || !Array.isArray(rates)) {
             return res.status(400).json({ error: 'Rates array is required' });
         }
 
         await query('BEGIN');
-        
+
         for (const rate of rates) {
             await query(
                 `INSERT INTO aggregator_material_rates (aggregator_id, material_code, rate_per_kg, updated_at)
@@ -128,7 +128,7 @@ router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Respo
                 [userId, rate.material_code, rate.rate_per_kg]
             );
         }
-        
+
         await query('COMMIT');
         res.json({ success: true });
     } catch (e: any) {

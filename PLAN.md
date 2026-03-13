@@ -544,50 +544,17 @@
 
 ---
 
-## ✅ DAY 8 [GATE PASSED] — Mobile Auth Wiring + Clerk Integration
-> **Goal:** Mobile app auth screens connected to the live backend. Real Clerk session on device. Push tokens registered. Auth routing by user type working.
-> **Time:** ~2 hours
-> **Rule:** No auth logic hardcoded in screens. All calls go through `authStore` → `api.ts`. JWT never stored in AsyncStorage unencrypted — use Clerk's secure token storage.
-
-### 8.1 Clerk + API Client Setup (~30 min)
-- [x] `apps/mobile/lib/clerk.ts` — initialise Clerk Expo client with `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`.
-- [x] `apps/mobile/lib/api.ts` — Axios/fetch wrapper:
-  - Auto-attaches `Authorization: Bearer <token>` from `authStore.clerkToken`.
-  - Global 401 interceptor: clears `authStore`, routes to `/(auth)/phone`.
-  - Base URL from `EXPO_PUBLIC_API_URL` env var (never hardcoded).
-
-### 8.2 Wire Auth Screens to Backend (~45 min)
-- [x] `authStore.requestOtp(phone)` → `POST /api/auth/request-otp`. Handle 429 (show "Too many attempts" error state).
-- [x] `authStore.verifyOtp(phone, otp)` → `POST /api/auth/verify-otp` → store Clerk JWT in `authStore.clerkToken`. Handle 400 "OTP expired".
-- [x] `authStore.signOut()` → Clerk `signOut()` + clear entire `authStore` + route to `/(auth)/phone`.
-- [x] On successful `verifyOtp`: read `user.user_type` from response → route to `/(seller)/home` or `/(aggregator)/home` accordingly.
-- [x] Remove all mock OTP bypass logic from `otp.tsx`. Real OTP required.
-
-### 8.3 Push Token Registration (~25 min)
-- [x] On successful login, register BOTH tokens:
-  - `await Notifications.getExpoPushTokenAsync()` → `expo_token`.
-  - `await Notifications.getDevicePushTokenAsync()` → `raw_token` (native FCM/APNs).
-  - `POST /api/users/device-token` with `{ expo_token, raw_token, token_type }`.
-  - Store in `device_tokens` table via backend. Route requires Clerk JWT.
-- [x] `POST /api/users/device-token` backend route: upsert device token for authenticated user. Deduplicate by `raw_token`.
-
-### 8.4 Aggregator Onboarding Wiring (~20 min)
-- [x] Wire aggregator onboarding wizard submit → `POST /api/aggregators/profile` (profile-setup step).
-- [x] Wire area-setup → `PATCH /api/aggregators/profile` with `operating_area_text` and `city_code`.
-- [x] Wire materials-setup → `PATCH /api/aggregators/rates` with material rates array.
-- [x] Wire KYC screen → `POST /api/aggregators/kyc` (photo upload). On success → navigate to `kyc-pending` screen.
-
-### 🚦 DAY 8 VERIFICATION GATE
-- [] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
-- [] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
-- [] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
-- [] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
-- [] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
-- [] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
+### 🚦 DAY 8 VERIFICATION GATE — [GATE PASSED 2026-03-10]
+- [x] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
+- [x] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
+- [x] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
+- [x] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
+- [x] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
+- [x] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
 
 ---
 
-## ✅ DAY 9 — Core Order Routes
+## 🗓 DAY 9 — Core Order Routes (In Progress)
 > **Goal:** All order CRUD routes live. Two-phase address reveal enforced at DTO level. State machine rejecting illegal transitions.
 > **Time:** ~2.5 hours
 > **Rule:** `pickup_address_text` must be literally `null` in the JSON response for non-aggregator requesters — not just UI-hidden. Status machine must hard-reject `completed` and `disputed` via PATCH.

@@ -33,7 +33,7 @@ export default function AggregatorAreaSetup() {
     setIsLoading(true);
     try {
       await api.patch('/api/aggregators/profile', {
-        operating_area_text: operatingAreas.join(', ')
+        operating_area: operatingAreas.join(', ')
       });
       router.push('/(auth)/aggregator/materials-setup' as any);
     } catch (e) {

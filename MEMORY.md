@@ -40,9 +40,10 @@ This is a **sequential, single-thread, 10-day build**. One domain at a time. One
 
 ```
 Days 1–3  → UI first (static, no backend calls)
-Day 4     → Database schema, RLS, migrations
-Day 5     → Backend foundation + auth (live)
-Day 6     → Core API routes + DB integration
+- [x] **Day 7: Auth Routes + Redis + Scheduler** (2026-03-09)
+- [x] **Day 8: Mobile Auth Wiring + Clerk Integration** (2026-03-10)
+- [ ] **Day 9: Core Order Routes** (Current)
+ + DB integration
 Day 7     → Edge Functions + Realtime + Push
 Day 8     → AI + Invoice + Provider abstractions
 Day 9     → Web Portal + Admin + Testing
@@ -736,6 +737,8 @@ Do not delete old entries. Append only.
 - **[2026-03-10] Selfie Card Labeling:** To reduce user friction, the selfie upload card must be labeled "Your Photo" with the instructional subtext "Clear selfie facing the camera". This is more intuitive for non-technical users than "Selfie". Affects: `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
 
 - **[2026-03-11] Clerk Token Lifecycle Constraints:** Do not cache the Clerk token persistently in Zustand's `authStore.clerkToken` across app reloads, as the token is short-lived. Instead, retrieve the session token dynamically using `await clerk.session?.getToken()` on every authenticated API request via a functional getter in the API interceptor, or maintain it synchronously via Clerk's active session state. Only store non-expired data into the `authStore`. Affects: `apps/mobile/lib/api.ts`, `apps/mobile/store/authStore.ts`.
+
+- **[2026-03-13] Column Name Standardization:** Migrations 0016 + 0017 standardised column names across 8 tables. Key renames: operating_area_text→operating_area, display_name→name, pickup_address_text→pickup_address, colour_token→color_token, member_since→created_at (aggregator_profiles), review_text→review, rated_by→rater_id, rated_user→ratee_id, otp_log.action→otp_hmac, admin_audit_log.admin_user_id→actor_id, target_table→target_entity.
 
 ---
 
