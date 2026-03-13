@@ -54,14 +54,23 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
     }
 });
 
-// Updates operating area and hours
+// Updates operating area, hours, and business_name (V35: kyc_status/city_code/user_id are blocklisted)
 router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { operating_area, operating_hours } = req.body;
+
+    // V35 — blocklist: any of these in body → immediate 400
+    const BLOCKED_FIELDS = ['kyc_status', 'city_code', 'user_id'];
+    const blockedPresent = BLOCKED_FIELDS.filter(f => f in req.body);
+    if (blockedPresent.length > 0) {
+        return res.status(400).json({ error: 'invalid_fields', fields: blockedPresent });
+    }
+
+    const { operating_area, operating_hours, business_name } = req.body;
 
     console.log('[DIAG] PATCH /api/aggregators/profile', {
         userId,
         operating_area,
+        business_name,
         operating_hours: JSON.stringify(operating_hours)
     });
 
@@ -79,10 +88,14 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
             updateFields.push(`operating_hours = $${placeholderIdx++}`);
             values.push(JSON.stringify(operating_hours));
 
-            // Log specific fields if they exist for debugging "missing logs" issue
             if (operating_hours.days) {
                 console.log(`[DIAG] Saving operating days for ${userId}:`, operating_hours.days);
             }
+        }
+
+        if (business_name !== undefined) {
+            updateFields.push(`business_name = $${placeholderIdx++}`);
+            values.push(business_name);
         }
 
         if (updateFields.length === 0) {
@@ -102,6 +115,24 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         console.error('Profile PATCH error:', e);
         Sentry.captureException(e);
         res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+// Heartbeat — upserts aggregator online status (called every ~2 min from mobile foreground)
+router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    try {
+        await query(`
+            INSERT INTO aggregator_availability (user_id, is_online, last_ping_at)
+            VALUES ($1, true, NOW())
+            ON CONFLICT (user_id) DO UPDATE
+                SET is_online = true, last_ping_at = NOW()
+        `, [userId]);
+        return res.json({ success: true });
+    } catch (e: any) {
+        console.error('Heartbeat error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Failed to update heartbeat' });
     }
 });
 

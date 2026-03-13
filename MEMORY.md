@@ -744,6 +744,13 @@ Do not delete old entries. Append only.
 - **[2026-03-13] verify-otp response shape:** The `verify-otp` endpoint returns `{ token: { jwt: "..." } }` not `{ token: "..." }`. Access the JWT as `response.token.jwt`. Affects: Mobile auth flow.
 - **[2026-03-13] otp_log.otp_hmac contents:** The `otp_log.otp_hmac` column stores status strings like `otp_sent`, `otp_verified`, `otp_failed` rather than the actual HMAC hash. Affects: `otp_log` auditing.
 - **[2026-03-13] POST /api/orders response shape:** The response for order creation is wrapped as `{ order: {...} }` rather than a flat object. Affects: Order creation DTO mapping.
+- **[2026-03-13] order_media_media_type_check constraint:** Allows: scrap_photo, scale_photo, kyc_aadhaar_front, kyc_aadhaar_back, kyc_selfie, kyc_shop, kyc_vehicle, invoice. before_photo and after_photo do not exist in the DB. Route validation must match exactly. Affects: POST /api/orders/:id/media.
+- **[2026-03-13] disputes_issue_type_check constraint:** Allows: wrong_weight, payment_not_made, no_show, abusive_behaviour, other. weight_mismatch is not valid. Affects: POST /api/disputes.
+- **[2026-03-13] Route mounting order:** GET /api/orders/feed must be registered before GET /api/orders/:id to prevent parameter collisions. Affects: backend/src/routes/orders/index.ts.
+- **[2026-03-13] order_status_history schema drift:** The status column is new_status (not status). Affects: POST /api/disputes.
+- **[2026-03-13] Uploadthing dev fallback:** Uploadthing signed URL API fails locally if UPLOADTHING_TOKEN is not a real production token. Code currently falls back to a non-expiring local relative path. G10.2 expiry enforcement will only work in production. Revisit Day 14. Affects: GET /api/orders/:id/media/:mediaId/url.
+- **[2026-03-13] aggregator_availability schema drift:** Has no city_code column. Always join via aggregator_profiles to filter by city. Affects: GET /api/orders/feed.
+- **[2026-03-13] aggregator_material_rates schema drift:** Uses aggregator_id (not user_id) as the FK column. Affects: DB queries.
 
 ---
 

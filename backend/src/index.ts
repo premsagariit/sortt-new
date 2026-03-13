@@ -12,6 +12,10 @@ import authRouter from './routes/auth';
 import aggregatorsRouter from './routes/aggregators';
 import usersRouter from './routes/users';
 import ordersRouter from './routes/orders';
+import ratesRouter from './routes/rates';
+import messagesRouter from './routes/messages';
+import ratingsRouter from './routes/ratings';
+import disputesRouter from './routes/disputes';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -65,10 +69,14 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// APIs will be mounted here later
+// APIs
 app.use('/api/orders', ordersRouter);
 app.use('/api/aggregators', aggregatorsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/rates', ratesRouter);         // public — already exempted in authMiddleware
+app.use('/api/messages', messagesRouter);   // /api/messages?order_id=... (NOT nested under orders)
+app.use('/api/ratings', ratingsRouter);
+app.use('/api/disputes', disputesRouter);
 
 
 // 6. Global error handler MUST be last

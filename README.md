@@ -80,15 +80,15 @@ pnpm dev:backend
 |---|---|
 | **Mobile** | React Native, Expo Router, DM Sans/Mono, Zustand, Phosphor Icons |
 | **Web** | Next.js 15, Tailwind CSS, Radix UI |
-| **Backend** | Node.js, Express, Upstash (Redis), Sharp |
+| **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
 | **Database** | Azure PostgreSQL, PostGIS, RLS |
 | **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
 | **AI** | Gemini Flash Vision (Photo Analysis), Gemini Pro (Price Scraping) |
 
 ---
 
-### 🗓 Current Status: Day 9 — Core Order Routes (Complete)
-✅ Order CRUD, address reveal logic, auth refactor, and geocoding implemented.
+### 🗓 Current Status: Day 10 — Media + Aggregator + Supporting Routes (Complete)
+✅ Order CRUD, address reveal logic, auth refactor, geocoding, media upload, server-derived filtering, caching, and atomic status transitions implemented. All 10-day API MVP goals achieved.
 
 ---
 

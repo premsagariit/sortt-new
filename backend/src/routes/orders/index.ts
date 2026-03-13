@@ -1,13 +1,33 @@
 import { Router } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import crypto from 'crypto';
 import { query, withUser } from '../../lib/db';
 import { DbOrder, buildOrderDto } from '../../utils/orderDto';
 import { ALLOWED_TRANSITIONS, IMMUTABLE_STATUSES } from '../../utils/orderStateMachine';
 import { mapProvider } from '../../providers/maps';
-import { orderCreateLimiter } from '../../lib/redis';
+import { orderCreateLimiter, redis } from '../../lib/redis';
 import { verifyUserRole } from '../../middleware/verifyRole';
+import { storageProvider } from '../../lib/storage';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import axios from 'axios';
+import { UTApi } from 'uploadthing/server';
+
+// Multer for media uploads (5MB, images only)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/heic'];
+    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
+  }
+});
+
+// Uploadthing API client for signed URLs (D1)
+const utapi = process.env.UPLOADTHING_TOKEN && !process.env.UPLOADTHING_TOKEN.startsWith('sk_live_xxxx')
+  ? new UTApi({ token: process.env.UPLOADTHING_TOKEN })
+  : null;
 
 const router = Router();
 
@@ -193,6 +213,227 @@ router.get('/', async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// --- NEW Day 10 routes (registered BEFORE /:id to avoid param collision) ---
+
+// 3a. GET /api/orders/feed — aggregator-only, all filters server-derived (V21)
+router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Fetch city_code from DB (V21 — never trust client-supplied)
+    const profRes = await query(
+      'SELECT city_code FROM aggregator_profiles WHERE user_id = $1',
+      [userId]
+    );
+    if (!profRes.rows[0]) {
+      return res.status(403).json({ error: 'Aggregator profile not found' });
+    }
+    const { city_code } = profRes.rows[0];
+
+    const { cursor } = req.query;
+    const limit = 20;
+
+    // Feed: 'created' orders in aggregator's city where aggregator has ≥1 matching rate
+    // G10.7: orders with NO matching rate for this aggregator are excluded
+    const params: any[] = [userId, city_code];
+    let cursorClause = '';
+    if (cursor) {
+      cursorClause = `AND o.created_at < $${params.length + 1}`;
+      params.push(cursor);
+    }
+    params.push(limit + 1);
+
+    const result = await query(`
+            SELECT DISTINCT o.*
+            FROM orders o
+            JOIN order_items oi ON oi.order_id = o.id
+            JOIN aggregator_material_rates r
+                ON r.aggregator_id = $1
+               AND r.material_code = oi.material_code
+            WHERE o.status = 'created'
+              AND o.deleted_at IS NULL
+              AND o.city_code = $2
+              ${cursorClause}
+            ORDER BY o.created_at DESC
+            LIMIT $${params.length}
+        `, params);
+
+    const rows = result.rows;
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+
+    // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
+    return res.json({
+      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId)),
+      nextCursor: rows.length > 0 ? rows[rows.length - 1].created_at : null,
+      hasMore
+    });
+  } catch (e: any) {
+    console.error('GET /api/orders/feed error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3b. POST /api/orders/:id/media — V18: EXIF strip BEFORE any other processing
+router.post('/:id/media', upload.single('file'), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { id: orderId } = req.params;
+    const { media_type } = req.body;
+
+    // const ALLOWED_MEDIA_TYPES = ['scale_photo', 'before_photo', 'after_photo'];
+    const ALLOWED_MEDIA_TYPES = ['scale_photo', 'scrap_photo'];
+    if (!media_type || !ALLOWED_MEDIA_TYPES.includes(media_type)) {
+      return res.status(400).json({ error: `media_type must be one of: ${ALLOWED_MEDIA_TYPES.join(', ')}` });
+    }
+
+    // Verify requester is a party to the order
+    const orderRes = await query(
+      'SELECT seller_id, aggregator_id FROM orders WHERE id = $1 AND deleted_at IS NULL',
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const order = orderRes.rows[0];
+    const isParty = order.seller_id === userId || order.aggregator_id === userId;
+    if (!isParty) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // V18: EXIF strip is the FIRST operation on the file buffer — before upload, before anything
+    const strippedBuffer = await sharp(req.file.buffer)
+      .jpeg({ quality: 90 }) // normalise to JPEG, strips all metadata
+      .toBuffer();
+
+    // Upload stripped buffer to storage
+    const filename = `order_${orderId}_${media_type}_${Date.now()}.jpg`;
+    const storageKey = await storageProvider.uploadFile(strippedBuffer, filename, 'image/jpeg');
+
+    // INSERT into order_media
+    const mediaRes = await query(
+      `INSERT INTO order_media (order_id, media_type, storage_path, uploaded_by)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, created_at`,
+      [orderId, media_type, storageKey, userId]
+    );
+    const mediaId = mediaRes.rows[0].id;
+
+    // scale_photo: generate OTP + attempt WhatsApp send (non-fatal)
+    if (media_type === 'scale_photo') {
+      setImmediate(async () => {
+        try {
+          const otp = crypto.randomInt(100000, 999999).toString();
+          const hmacSecret = process.env.OTP_HMAC_SECRET!;
+          const hmac = crypto.createHmac('sha256', hmacSecret).update(otp).digest('hex');
+
+          if (redis) {
+            await redis.set(`otp:order:${orderId}`, hmac, { ex: 600 });
+          }
+
+          // Fetch seller phone for WhatsApp send
+          const sellerRes = await query(
+            'SELECT phone_hash FROM users WHERE id = $1',
+            [order.seller_id]
+          );
+
+          // WhatsApp OTP send (non-fatal — token may be expired in dev)
+          const metaToken = process.env.META_WHATSAPP_TOKEN;
+          const phoneId = process.env.META_PHONE_NUMBER_ID;
+          if (metaToken && phoneId && sellerRes.rows[0]) {
+            await axios.post(
+              `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+              {
+                messaging_product: 'whatsapp',
+                to: sellerRes.rows[0].phone_hash, // phone in production
+                type: 'template',
+                template: {
+                  name: process.env.META_OTP_TEMPLATE_NAME || 'order_otp',
+                  language: { code: 'en' },
+                  components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }]
+                }
+              },
+              { headers: { Authorization: `Bearer ${metaToken}` } }
+            ).catch((e: any) => {
+              console.warn('[OTP DEV] WhatsApp send failed (non-fatal):', e.message);
+            });
+          } else {
+            console.log('[OTP DEV] Skipping WhatsApp — token/phoneId missing or expired');
+          }
+        } catch (otpErr) {
+          console.error('[OTP] scale_photo OTP flow error (non-fatal):', otpErr);
+        }
+      });
+    }
+
+    return res.status(201).json({ mediaId, mediaType: media_type });
+  } catch (e: any) {
+    if (e.message === 'Invalid file type') {
+      return res.status(400).json({ error: e.message });
+    }
+    console.error('POST /api/orders/:id/media error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3c. GET /api/orders/:id/media/:mediaId/url — D1: signed URL, 5-min expiry only
+router.get('/:id/media/:mediaId/url', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { id: orderId, mediaId } = req.params;
+
+    // Verify ownership
+    const orderRes = await query(
+      'SELECT seller_id, aggregator_id FROM orders WHERE id = $1',
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+    const order = orderRes.rows[0];
+    const isParty = order.seller_id === userId || order.aggregator_id === userId;
+    if (!isParty) return res.status(403).json({ error: 'Forbidden' });
+
+    // Fetch media record
+    const mediaRes = await query(
+      'SELECT storage_path FROM order_media WHERE id = $1 AND order_id = $2',
+      [mediaId, orderId]
+    );
+    if (mediaRes.rows.length === 0) return res.status(404).json({ error: 'Media not found' });
+    const storageKey = mediaRes.rows[0].storage_path;
+
+    // D1: 5-minute signed URL — never return permanent URLs
+    const expiresAt = new Date(Date.now() + 300_000).toISOString();
+    let url: string;
+
+    if (utapi && !storageKey.startsWith('/uploads/')) {
+      // Uploadthing signed URL
+      const result = await utapi.getSignedURL(storageKey, { expiresIn: 300 });
+      url = typeof result === 'string' ? result : (result as any).url;
+    } else {
+      // Local dev: serve relative path (no real expiry in dev mode)
+      url = `${process.env.API_BASE_URL || 'http://localhost:8080'}${storageKey}`;
+    }
+
+    return res.json({ url, expiresAt });
+  } catch (e: any) {
+    console.error('GET /api/orders/:id/media/:mediaId/url error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- End Day 10 routes ---
 
 // 3. GET /api/orders/:id
 router.get('/:id', async (req, res) => {

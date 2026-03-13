@@ -142,6 +142,10 @@ Sortt
 │   │   │   ├── orders/ # CRUD flows for listings
 │   │   │   ├── aggregators.ts # Dealer search and profiles
 │   │   │   ├── auth.ts # OTP and registration
+│   │   │   ├── disputes.ts # Dispute resolution and atomic status updates
+│   │   │   ├── messages.ts # In-app chat and phone number filtering
+│   │   │   ├── rates.ts # Public market rates with caching
+│   │   │   ├── ratings.ts # Post-trade review system
 │   │   │   └── users.ts # Profile and settings
 │   │   └── utils # Helper functions and DTOs
 │   │       ├── orderDto.ts # Response transformation for orders
