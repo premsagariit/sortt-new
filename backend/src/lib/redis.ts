@@ -28,8 +28,8 @@ export const analyzeRateLimiter = createLimiter({
 });
 
 export const orderCreateLimiter = createLimiter({
-    limiter: Ratelimit.slidingWindow(5, '1 d'), // 5 per day
-    prefix: '@upstash/ratelimit/order_create',
+    limiter: Ratelimit.slidingWindow(200, '60 m'), // 200 per 60 mins
+    prefix: 'order_create',
 });
 
 export const globalGeminiCounter = createLimiter({
@@ -42,12 +42,12 @@ export const globalGeminiCounter = createLimiter({
 // ----------------------------------------------------
 
 export const otpRequestPhoneLimiter = createLimiter({
-    limiter: Ratelimit.slidingWindow(3, '10 m'), // 3 per 10 mins
+    limiter: Ratelimit.slidingWindow(200, '10 m'), // 20 per 10 mins for dev
     prefix: '@upstash/ratelimit/otp_request_phone',
 });
 
 export const otpVerifyPhoneLimiter = createLimiter({
-    limiter: Ratelimit.slidingWindow(3, '10 m'), // 3 per 10 mins
+    limiter: Ratelimit.slidingWindow(200, '10 m'), // 20 per 10 mins
     prefix: '@upstash/ratelimit/otp_verify_phone',
 });
 

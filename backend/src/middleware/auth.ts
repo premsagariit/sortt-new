@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { requireAuth, getAuth } from '@clerk/express';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { query } from '../lib/db';
 
 declare global {
@@ -9,50 +9,68 @@ declare global {
                 id: string;
                 user_type: string;
                 is_active: boolean;
+                name: string;
+                locality: string;
+                city_code: string;
             };
         }
     }
 }
 
+// Initialize Clerk Client if needed for other operations, 
+// though verifyToken just needs the secret key.
+const clerkClient = createClerkClient({
+    secretKey: process.env.CLERK_SECRET_KEY!
+});
+
 const requireAuthStack = [
-    (req: Request, res: Response, next: NextFunction) => {
-        if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) {
-            console.error('[DIAG] Missing Auth Configuration!', {
-                SECRET: !!process.env.CLERK_SECRET_KEY,
-                PUBLISHABLE: !!process.env.CLERK_PUBLISHABLE_KEY,
-                CWD: process.cwd(),
-                ENV_KEYS: Object.keys(process.env).filter(k => k.startsWith('CLERK'))
-            });
-            return res.status(401).json({ error: 'Unauthorized: Missing Auth Configuration' });
-        }
-        return requireAuth()(req, res, next);
-    },
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { userId: clerkUserId } = getAuth(req);
-            if (!clerkUserId) {
-                return res.status(401).json({ error: 'Unauthorized' });
+            const authHeader = req.headers.authorization;
+            if (!authHeader?.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Unauthorized: No token' });
+            }
+
+            const token = authHeader.substring(7);
+
+            let clerkUserId: string;
+            try {
+                const payload = await verifyToken(token, {
+                    secretKey: process.env.CLERK_SECRET_KEY!,
+                    authorizedParties: []
+                });
+                clerkUserId = payload.sub;
+            } catch (e: any) {
+                console.warn('[Auth] Token invalid:', e?.message);
+                return res.status(401).json({ error: 'Unauthorized: Invalid token' });
             }
 
             const result = await query(
-                'SELECT id, user_type, is_active FROM users WHERE clerk_user_id = $1',
+                `SELECT u.id, u.user_type, u.is_active, u.name,
+                        COALESCE(s.locality, a.operating_area) as locality,
+                        COALESCE(s.city_code, a.city_code) as city_code
+                 FROM users u
+                 LEFT JOIN seller_profiles s ON u.id = s.user_id AND u.user_type = 'seller'
+                 LEFT JOIN aggregator_profiles a ON u.id = a.user_id AND u.user_type = 'aggregator'
+                 WHERE u.clerk_user_id = $1`,
                 [clerkUserId]
             );
 
             if (result.rows.length === 0) {
-                return res.status(401).json({ error: 'User not found in database' });
+                console.warn('[Auth] User not found in DB for clerkId:', clerkUserId);
+                return res.status(401).json({ error: 'Unauthorized: User not found' });
             }
 
             const user = result.rows[0];
             if (!user.is_active) {
-                return res.status(401).json({ error: 'User account is inactive' });
+                return res.status(401).json({ error: 'Unauthorized: Account inactive' });
             }
 
             req.user = user;
             next();
-        } catch (error) {
-            console.error('Auth DB error:', error);
-            res.status(500).json({ error: 'Internal Server Error during authentication' });
+        } catch (error: any) {
+            console.error('[Auth] Unexpected error:', error?.message);
+            return res.status(500).json({ error: 'Internal Server Error' });
         }
     }
 ];
@@ -73,7 +91,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     let idx = 0;
     const executeNext = (err?: any) => {
         if (err) {
-            console.warn('Authentication rejected by Clerk:', err.message || err);
+            console.warn('Authentication rejected:', err.message || err);
             return res.status(401).json({ error: 'Unauthorized' });
         }
         if (idx >= requireAuthStack.length) {

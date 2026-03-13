@@ -11,6 +11,7 @@ import { errorHandler } from './middleware/errorHandler';
 import authRouter from './routes/auth';
 import aggregatorsRouter from './routes/aggregators';
 import usersRouter from './routes/users';
+import ordersRouter from './routes/orders';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -65,7 +66,7 @@ app.get('/health', (req, res) => {
 });
 
 // APIs will be mounted here later
-app.get('/api/orders', (req, res) => res.json({ success: true }));
+app.use('/api/orders', ordersRouter);
 app.use('/api/aggregators', aggregatorsRouter);
 app.use('/api/users', usersRouter);
 

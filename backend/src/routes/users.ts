@@ -94,4 +94,66 @@ router.post('/profile', async (req, res) => {
   }
 });
 
+// Endpoint for fetching current user details
+router.get('/me', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Try users_public view, fallback to users if view doesn't exist (handled by DB error)
+    // To be safe against missing users_public, we'll try it, and if it fails, query users directly.
+    // Actually, Day 9 context says users_public should be used.
+    let dbRes;
+    try {
+      dbRes = await query(
+        `SELECT u.id, u.user_type, u.is_active, u.name, u.created_at,
+                s.profile_type as seller_profile_type, s.business_name as seller_business_name,
+                s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
+                a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
+                a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status
+         FROM users_public u
+         LEFT JOIN seller_profiles s ON u.id = s.user_id AND u.user_type = 'seller'
+         LEFT JOIN aggregator_profiles a ON u.id = a.user_id AND u.user_type = 'aggregator'
+         WHERE u.id = $1`,
+        [userId]
+      );
+    } catch (viewError: any) {
+      if (viewError.code === '42P01') { // undefined_table
+        dbRes = await query(
+          `SELECT u.id, u.user_type, u.is_active, u.name, u.created_at,
+                  s.profile_type as seller_profile_type, s.business_name as seller_business_name,
+                  s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
+                  a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
+                  a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status
+           FROM users u
+           LEFT JOIN seller_profiles s ON u.id = s.user_id AND u.user_type = 'seller'
+           LEFT JOIN aggregator_profiles a ON u.id = a.user_id AND u.user_type = 'aggregator'
+           WHERE u.id = $1`,
+          [userId]
+        );
+      } else {
+        throw viewError;
+      }
+    }
+
+    if (dbRes.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userObj = { ...dbRes.rows[0] };
+    
+    // Explicitly strip sensitive fields just in case 'users' table fallback was used
+    delete userObj.phone_hash;
+    delete userObj.clerk_user_id;
+
+    res.json(userObj);
+  } catch (error: any) {
+    console.error('GET /api/users/me error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

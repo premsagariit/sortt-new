@@ -235,8 +235,8 @@ Client Apps (Mobile / Web)
 | `POST /api/scrap/analyze` | Clerk JWT | Image hash dedup → Gemini Vision → schema-validate → UI hint only (I1) |
 | `GET /api/aggregators/nearby` | Clerk JWT | city_code + material filter query, server-derived (V21 equivalent) |
 | `GET /api/aggregators/me` | Clerk JWT (aggregator only) | Returns the authenticated aggregator's own profile. |
-| `PATCH /api/aggregators/profile` | Clerk JWT (aggregator only) | Allowlist: `business_name`, `operating_hours JSONB`, `operating_area_text`. Blocklist: `kyc_status`, `city_code`, `user_id`, `clerk_user_id`. Returns 400 if blocked fields present. |
-| `GET /api/aggregators/:id` | Clerk JWT | **Public fields only.** Returns: `business_name`, `avg_rating`, `total_orders`, `materials` handled, `operating_area_text`, `member_since`. Excludes: `phone_hash`, `clerk_user_id`, KYC documents, exact address. |
+| `PATCH /api/aggregators/profile` | Clerk JWT (aggregator only) | Allowlist: `business_name`, `operating_hours JSONB`, `operating_area`. Blocklist: `kyc_status`, `city_code`, `user_id`, `clerk_user_id`. Returns 400 if blocked fields present. |
+| `GET /api/aggregators/:id` | Clerk JWT | **Public fields only.** Returns: `business_name`, `avg_rating`, `total_orders`, `materials` handled, `operating_area`, `member_since`. Excludes: `phone_hash`, `clerk_user_id`, KYC documents, exact address. |
 | `GET /api/aggregators/earnings` | Clerk JWT (aggregator only) | Query param: `period=today\|week\|month`. Returns: `total_earned NUMERIC`, `orders_completed INT`, `avg_rating NUMERIC`. Computed server-side from completed orders — never client-computed. |
 | `POST /api/aggregators/heartbeat` | Clerk JWT | Update `last_ping_at` (C2) |
 | `GET /api/realtime/token` | Clerk JWT | Issues a short-lived Ably Token Auth token scoped to the authenticated user's permitted channels. `ABLY_API_KEY` is backend-only — mobile never receives the raw key. |
@@ -607,7 +607,7 @@ app.get('/api/realtime/token', clerkJwtMiddleware, async (req, res) => {
 
 const { rows } = await db.query(
   `SELECT o.*, 
-     CASE WHEN o.aggregator_id IS NOT NULL THEN null ELSE o.pickup_address_text END as full_address
+     CASE WHEN o.aggregator_id IS NOT NULL THEN null ELSE o.pickup_address END as full_address
    FROM orders o
    JOIN order_items oi ON oi.order_id = o.id
    JOIN aggregator_material_rates amr 
@@ -698,7 +698,7 @@ CREATE VIEW users_public AS
 -- Cities reference table (required before city 2 launch)
 CREATE TABLE cities (
   code             TEXT PRIMARY KEY,
-  display_name     TEXT NOT NULL,
+  name     TEXT NOT NULL,
   state            TEXT,
   timezone         TEXT DEFAULT 'Asia/Kolkata',
   default_language TEXT DEFAULT 'en',
@@ -734,11 +734,11 @@ CREATE TABLE aggregator_profiles (
   aggregator_type      TEXT NOT NULL DEFAULT 'mobile'
                          CHECK (aggregator_type IN ('shop','mobile')),  -- Determines conditional KYC photo slot
   city_code            TEXT REFERENCES cities(code),
-  operating_area_text  TEXT,
+  operating_area       TEXT,
   kyc_status           TEXT NOT NULL DEFAULT 'pending'
                          CHECK (kyc_status IN ('pending','verified','rejected')),
   operating_hours      JSONB,
-  member_since         TIMESTAMPTZ DEFAULT NOW()
+  created_at           TIMESTAMPTZ DEFAULT NOW()
 );
 -- Business Mode sub-users (R1)
 CREATE TABLE business_members (
@@ -755,7 +755,7 @@ CREATE TABLE material_types (
   code            TEXT PRIMARY KEY,
   label_en        TEXT NOT NULL,
   label_te        TEXT,
-  colour_token    TEXT,
+  color_token     TEXT,
   min_weight_kg   NUMERIC NOT NULL DEFAULT 1
 );
 
@@ -780,7 +780,7 @@ CREATE TABLE orders (
   status                  TEXT NOT NULL DEFAULT 'created'
                             CHECK (status IN ('created','accepted','en_route','arrived',
                                               'weighing_in_progress','completed','cancelled','disputed')),
-  pickup_address_text     TEXT,           -- Full address — revealed post-acceptance only (V25)
+  pickup_address          TEXT,           -- Full address — revealed post-acceptance only (V25)
   pickup_locality         TEXT NOT NULL,  -- Neighbourhood name — always visible
   preferred_pickup_window JSONB,
   seller_note             TEXT CHECK (char_length(seller_note) <= 500),
@@ -879,7 +879,7 @@ CREATE TABLE ratings (
   rater_id   UUID NOT NULL REFERENCES users(id),
   ratee_id   UUID NOT NULL REFERENCES users(id),
   score      INT NOT NULL CHECK (score BETWEEN 1 AND 5),
-  review_text TEXT CHECK (char_length(review_text) <= 500),
+  review     TEXT CHECK (char_length(review) <= 500),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

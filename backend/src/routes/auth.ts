@@ -95,16 +95,20 @@ router.post('/request-otp', async (req: Request, res: Response) => {
             console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp message skipped. OTP is in Redis.');
         }
 
-        // Log OTP code to console only in non-production for developer testing
+
+        // Log OTP code to terminal for developer testing (Security: restricted to non-production)
         if (process.env.NODE_ENV !== 'production') {
-            console.log(`[OTP DEV] Code for ${phone.slice(-4)}: ${otp}`);
+            console.log(`[OTP DEV] Testing Code for ${phone.slice(-4)}: ${otp}`);
         }
+        const expiresAt = new Date(Date.now() + 600 * 1000); // 10 min, matches Redis TTL
 
         // Audit Log (HMAC is not persisted - Security X3)
         await query(
-            `INSERT INTO otp_log (phone_hash, action, expires_at) VALUES ($1, 'otp_sent', NOW() + INTERVAL '10 minutes')`,
-            [phoneHmac]
+            `INSERT INTO otp_log (phone_hash, otp_hmac, expires_at)
+            VALUES ($1, $2, $3)`,
+            [phoneHmac, 'otp_sent', expiresAt]
         );
+
 
         res.json({ success: true });
     } catch (error: any) {
@@ -139,7 +143,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         const storedHmac = await redis.get<string>(`otp:phone:${phoneHmac}`);
         if (!storedHmac) {
             // Log failure
-            await query(`INSERT INTO otp_log (phone_hash, action, expires_at) VALUES ($1, 'otp_failed', NOW())`, [phoneHmac]);
+            await query(`INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, 'otp_failed', NOW())`, [phoneHmac]);
             return res.status(400).json({ error: 'OTP expired or not found' });
         }
 
@@ -150,13 +154,12 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         await redis.del(`otp:phone:${phoneHmac}`);
 
         if (!isValid) {
-            await query(`INSERT INTO otp_log (phone_hash, action, expires_at) VALUES ($1, 'otp_failed', NOW())`, [phoneHmac]);
+            await query(`INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, 'otp_failed', NOW())`, [phoneHmac]);
             return res.status(400).json({ error: 'Invalid or expired OTP' });
         }
 
         // OTP Verified successfully
-        await query(`INSERT INTO otp_log (phone_hash, action, expires_at) VALUES ($1, 'otp_verified', NOW())`, [phoneHmac]);
-
+        await query(`INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, 'otp_verified', NOW())`, [phoneHmac]);
         // UPSERT User based on phone_hash. Create corresponding Clerk User if doesn't exist.
         // NOTE: Clerk does NOT support Indian phone numbers for phone-based auth.
         // We use Clerk purely as an identity/session provider.
@@ -192,14 +195,17 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         const userRecord = upsertResult.rows[0];
 
         // Generate SignIn Token for Frontend
-        const signInToken = await clerkClient.signInTokens.createSignInToken({
+        const sessionResponse = await clerkClient.sessions.createSession({
             userId: clerkUserId,
-            expiresInSeconds: 60 * 5, // 5 minutes validity
         });
+
+        const sessionToken = await clerkClient.sessions.getToken(
+            sessionResponse.id
+        );
 
         // Return token and safe user DTO (excluding phone_hash and clerk_user_id)
         res.json({
-            token: signInToken.token,
+            token: sessionToken,
             user: {
                 id: userRecord.id,
                 user_type: userRecord.user_type,

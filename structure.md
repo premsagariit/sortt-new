@@ -166,10 +166,10 @@ Sortt
 │   ├── 0010_indexes.sql
 │   ├── 0011_triggers.sql
 │   └── 0012_materialized_views.sql
-├── .github # GitHub specific configurations
-│   └── workflows # GitHub Actions CI/CD pipelines
-│       └── main_sortt-backend.yml
-├── sortt_aggregator_ui.html # Reference HTML for dealer UI
-├── sortt_seller_ui.html # Reference HTML for seller UI
+│   └── 0013_add_aggregator_type.sql
+│   └── 0014_kyc_media_types.sql
+│   └── 0015_otp_log_make_hmac_nullable.sql
+│   └── 0016_standardise_column_names.sql
+│   └── 0017_standardise_trd_columns.sql
 ├── sortt_logo_splash_v2.html # Reference HTML for animation
 └── structure.md # This file (Project Structure & Descriptions)
