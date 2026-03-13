@@ -138,9 +138,13 @@ Sortt
 │   │   │   ├── verifyRole.ts # Strict role enforcement
 │   │   │   └── errorHandler.ts # Secure error handling
 │   │   ├── routes # Auth, users, orders
+│   │   │   ├── orders/ # CRUD flows for listings
+│   │   │   ├── aggregators.ts # Dealer search and profiles
+│   │   │   ├── auth.ts # OTP and registration
+│   │   │   └── users.ts # Profile and settings
 │   │   └── utils # Helper functions and provider clients
-│   ├── .env # Environment variables for backend
-│   └── tsconfig.json # TypeScript configuration for backend
+├── .env # Environment variables for backend
+├── tsconfig.json # TypeScript configuration for backend
 ├── pnpm-workspace.yaml # Monorepo workspace configuration
 ├── package.json # Root package management
 ├── packages # Shared internal libraries

@@ -49,7 +49,11 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 - `backend/.env`
 - `scraper/.env`
 
-*Refer to the Variables section in `MEMORY.md` for the full list of required keys.*
+- `CLERK_SECRET_KEY`: Backend auth verification.
+- `GOOGLE_MAPS_API_KEY`: Geocoding and map services.
+- `EXPO_ACCESS_TOKEN`: EAS deployments and updates.
+- `DATABASE_URL`: Azure PostgreSQL connection string.
+- `REDIS_URL`: Upstash Redis for rate limiting.
 
 ### 4. Running Locally
 
@@ -83,8 +87,8 @@ pnpm dev:backend
 
 ---
 
-### 🗓 Current Status: Day 9 — Core Order Routes
-Next: Order CRUD, address reveal logic, and geocoding.
+### 🗓 Current Status: Day 9 — Core Order Routes (Complete)
+✅ Order CRUD, address reveal logic, auth refactor, and geocoding implemented.
 
 ---
 

@@ -554,20 +554,21 @@
 
 ---
 
-## 🗓 DAY 9 — Core Order Routes (In Progress)
+## ✅ DAY 9 — Core Order Routes
+### [GATE PASSED — 2026-03-13]
 > **Goal:** All order CRUD routes live. Two-phase address reveal enforced at DTO level. State machine rejecting illegal transitions.
 > **Time:** ~2.5 hours
 > **Rule:** `pickup_address_text` must be literally `null` in the JSON response for non-aggregator requesters — not just UI-hidden. Status machine must hard-reject `completed` and `disputed` via PATCH.
 
 ### 9.1 DB Connection Helper (~20 min)
-- [ ] `backend/src/db.ts` — PostgreSQL connection pool via `pg`:
+- [x] `backend/src/db.ts` — PostgreSQL connection pool via `pg`:
   - `connectionString: process.env.DATABASE_URL`.
   - `ssl: { rejectUnauthorized: true }`.
   - `max: 10` connections (B1ms limit).
-- [ ] `withUser(userId, fn)` helper: wraps query in `SET LOCAL app.current_user_id = $1` → executes `fn(client)` → releases in `finally`. Used on every DB call in protected routes.
+- [x] `withUser(userId, fn)` helper: wraps query in `SET LOCAL app.current_user_id = $1` → executes `fn(client)` → releases in `finally`. Used on every DB call in protected routes.
 
 ### 9.2 Order Routes (~90 min)
-- [ ] `POST /api/orders` — Clerk JWT, seller only:
+- [x] `POST /api/orders` — Clerk JWT, seller only:
   - Accept: `material_codes[]`, `estimated_weights{}`, `pickup_address_text`, `pickup_preference`, `seller_note`.
   - **Blocklist from body**: `kyc_status`, `aggregator_id`, `status`, `city_code` (V35, V13, V21 equivalent).
   - Geocode `pickup_address_text` via `IMapProvider.geocode()` → derive `city_code` + `pickup_locality`. Server-derived, never client-supplied.
@@ -576,35 +577,35 @@
   - Apply `orderCreateLimiter` (3/seller/hour).
   - Trigger push to nearby online aggregators with matching materials + same city_code.
   - Return created order (with `pickup_address_text` visible to the creator).
-- [ ] `GET /api/orders/:id` — two-phase address reveal (V25):
+- [x] `GET /api/orders/:id` — two-phase address reveal (V25):
   - If `req.user.id === order.aggregator_id` → return `pickup_address_text` (full address).
   - Else → `pickup_address_text: null` in response DTO. Enforced here in the DTO builder, not just in the UI.
-- [ ] `GET /api/orders` — seller's own orders (JWT filtered):
+- [x] `GET /api/orders` — seller's own orders (JWT filtered):
   - Returns all orders where `seller_id = req.user.id`. Paginated (limit 20, cursor-based).
   - Includes `order_items` and latest `order_status_history` entry.
-- [ ] `PATCH /api/orders/:id/status` — state machine:
+- [x] `PATCH /api/orders/:id/status` — state machine:
   - Hard-reject: `new_status IN ['completed', 'disputed']` → 400 immediately (V13).
   - Validate allowed transition. INSERT `order_status_history` with actor ID (R3).
   - Publish Ably event on status change (placeholder — Ably wired fully on Day 13).
-- [ ] `DELETE /api/orders/:id` — soft delete:
+- [x] `DELETE /api/orders/:id` — soft delete:
   - Verify `seller_id = req.user.id`. Set `deleted_at = NOW()`, `status = 'cancelled'`.
   - INSERT `order_status_history` with `changed_by = req.user.id`.
   - Cannot delete if `status IN ['completed', 'disputed']` → 400.
 
 ### 9.3 Seller Onboarding Wiring (~20 min)
-- [ ] Wire seller profile setup → `POST /api/users/profile` with `account_type`, `name`, `locality`, `city_code`.
-- [ ] Wire business setup → `PATCH /api/users/profile` with `gstin`, `business_name`.
-- [ ] `GET /api/users/me` — returns `users_public` row. DTO must not include `phone_hash` or `clerk_user_id` (V24, V-CLERK-1).
+- [x] Wire seller profile setup → `POST /api/users/profile` with `account_type`, `name`, `locality`, `city_code`.
+- [x] Wire business setup → `PATCH /api/users/profile` with `gstin`, `business_name`.
+- [x] `GET /api/users/me` — returns `users_public` row. DTO must not include `phone_hash` or `clerk_user_id` (V24, V-CLERK-1).
 
-### 🚦 DAY 9 VERIFICATION GATE
-- [ ] **G9.1** — Seller creates listing → order in DB with correct `seller_id`, `city_code='HYD'`, `status='created'`.
-- [ ] **G9.2** — `GET /api/orders/:id` as non-aggregator: `pickup_address_text` is literally `null` in raw JSON (inspect response body, not UI rendering).
-- [ ] **G9.3** — `PATCH /api/orders/:id/status` with `{ status: 'completed' }` → 400 (V13 — immutable status).
-- [ ] **G9.4** — `PATCH /api/orders/:id/status` with `{ status: 'disputed' }` → 400 (V13).
-- [ ] **G9.5** — `POST /api/orders` with `{ status: 'accepted' }` in body → body field ignored, order created with `status='created'`.
-- [ ] **G9.6** — `order_status_history`: every status transition has `changed_by` populated — not NULL.
-- [ ] **G9.7** — `DELETE /api/orders/:id` by a different seller → 403 (RLS rejection).
-- [ ] **G9.8** — `GET /api/users/me` response: `phone_hash` and `clerk_user_id` absent from JSON body.
+### 🚦 DAY 9 VERIFICATION GATE — [GATE PASSED — 2026-03-13]
+- [x] **G9.1** — Seller creates listing → order in DB with correct `seller_id`, `city_code='HYD'`, `status='created'`.
+- [x] **G9.2** — `GET /api/orders/:id` as non-aggregator: `pickup_address_text` is literally `null` in raw JSON (inspect response body, not UI rendering).
+- [x] **G9.3** — `PATCH /api/orders/:id/status` with `{ status: 'completed' }` → 400 (V13 — immutable status).
+- [x] **G9.4** — `PATCH /api/orders/:id/status` with `{ status: 'disputed' }` → 400 (V13).
+- [x] **G9.5** — `POST /api/orders` with `{ status: 'accepted' }` in body → body field ignored, order created with `status='created'`.
+- [x] **G9.6** — `order_status_history`: every status transition has `changed_by` populated — not NULL.
+- [x] **G9.7** — `DELETE /api/orders/:id` by a different seller → 403 (RLS rejection).
+- [x] **G9.8** — `GET /api/users/me` response: `phone_hash` and `clerk_user_id` absent from JSON body.
 
 ---
 

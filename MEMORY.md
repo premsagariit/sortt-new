@@ -738,7 +738,12 @@ Do not delete old entries. Append only.
 
 - **[2026-03-11] Clerk Token Lifecycle Constraints:** Do not cache the Clerk token persistently in Zustand's `authStore.clerkToken` across app reloads, as the token is short-lived. Instead, retrieve the session token dynamically using `await clerk.session?.getToken()` on every authenticated API request via a functional getter in the API interceptor, or maintain it synchronously via Clerk's active session state. Only store non-expired data into the `authStore`. Affects: `apps/mobile/lib/api.ts`, `apps/mobile/store/authStore.ts`.
 
-- **[2026-03-13] Column Name Standardization:** Migrations 0016 + 0017 standardised column names across 8 tables. Key renames: operating_area_text→operating_area, display_name→name, pickup_address_text→pickup_address, colour_token→color_token, member_since→created_at (aggregator_profiles), review_text→review, rated_by→rater_id, rated_user→ratee_id, otp_log.action→otp_hmac, admin_audit_log.admin_user_id→actor_id, target_table→target_entity.
+- **[2026-03-13] aggregator_profiles has no locality column:** Use `operating_area` instead for aggregator profiles. Affects: `aggregator_profiles` schema and queries.
+- **[2026-03-13] preferred_pickup_window is JSONB:** Always wrap `pickup_preference` as `JSON.stringify({ type: value })` before INSERT into `preferred_pickup_window`. Affects: `orders` INSERT logic.
+- **[2026-03-13] Clerk Auth Middleware redirection:** `clerkMiddleware()` and `requireAuth()` from `@clerk/express` can redirect on invalid tokens. Use `createClerkClient().verifyToken()` directly for API backends to ensure 401 responses. Affects: `backend/src/middleware/auth.ts`.
+- **[2026-03-13] verify-otp response shape:** The `verify-otp` endpoint returns `{ token: { jwt: "..." } }` not `{ token: "..." }`. Access the JWT as `response.token.jwt`. Affects: Mobile auth flow.
+- **[2026-03-13] otp_log.otp_hmac contents:** The `otp_log.otp_hmac` column stores status strings like `otp_sent`, `otp_verified`, `otp_failed` rather than the actual HMAC hash. Affects: `otp_log` auditing.
+- **[2026-03-13] POST /api/orders response shape:** The response for order creation is wrapped as `{ order: {...} }` rather than a flat object. Affects: Order creation DTO mapping.
 
 ---
 
