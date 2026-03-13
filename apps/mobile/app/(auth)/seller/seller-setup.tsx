@@ -19,6 +19,7 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { colors, radius, spacing, colorExtended } from '../../../constants/tokens';
 import { useAuthStore } from '../../../store/authStore';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 export default function SellerSetupScreen() {
   const { setName, setLocality, setCity, name, locality, city, accountType } = useAuthStore();
@@ -28,18 +29,35 @@ export default function SellerSetupScreen() {
   const [localLocality, setLocalLocality] = useState(locality);
   const [localCity, setLocalCity] = useState(city || 'Hyderabad'); // Defaulting to Hyderabad based on UI mocks
 
+  const [isLoading, setIsLoading] = useState(false);
   const isValid = localName.trim().length > 0 && localLocality.trim().length > 0 && localCity.trim().length > 0;
 
-  const handleContinue = () => {
-    setName(localName);
-    setLocality(localLocality);
-    setCity(localCity);
+  const handleContinue = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Update backend profile
+      await api.post('/api/users/profile', {
+        name: localName,
+        profile_type: accountType, // individual or business
+        locality: localLocality,
+        city_code: 'HYD', // Primary pilot city
+      });
 
-    // Choose next screen based on account type
-    if (accountType === 'business') {
-      router.replace('/(auth)/seller/business-setup' as any);
-    } else {
-      router.replace('/(seller)/home' as any);
+      // 2. Update local store
+      setName(localName);
+      setLocality(localLocality);
+      setCity(localCity);
+
+      // 3. Choose next screen based on account type
+      if (accountType === 'business') {
+        router.replace('/(auth)/seller/business-setup' as any);
+      } else {
+        router.replace('/(seller)/home' as any);
+      }
+    } catch (e) {
+      console.error('Failed to update seller profile:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 

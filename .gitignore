@@ -45,3 +45,5 @@ adapters/
 # Env file
 backend/.env
 apps/mobile/.env
+
+sql.md

@@ -21,22 +21,38 @@ import { StepIndicator } from './account-type';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useAuthStore } from '../../../store/authStore';
 import { safeBack } from '../../../utils/navigation';
+import { api } from '../../../lib/api';
 
 const INDUSTRIES = ['Manufacturing', 'Retail', 'Corporate', 'Warehouse'] as const;
 
 export default function BusinessSetupScreen() {
-  const userType = useAuthStore((s) => s.userType);
+  const { userType, locality, city } = useAuthStore();
   const [businessName, setBusinessName] = useState('');
   const [gstin, setGstin] = useState('');
   const [address, setAddress] = useState('');
   const [industry, setIndustry] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Validation: GSTIN must be exactly 15 characters
   const isValid = gstin.trim().length === 15;
 
-  const handleComplete = () => {
-    // Business flow finishes here
-    router.replace('/(seller)/home' as any);
+  const handleComplete = async () => {
+    setIsLoading(true);
+    try {
+      await api.post('/api/users/profile', {
+        profile_type: 'business',
+        business_name: businessName,
+        gstin: gstin,
+        locality: address || locality, // Update with specific business address if provided
+        city_code: 'HYD',
+      });
+      // Business flow finishes here
+      router.replace('/(seller)/home' as any);
+    } catch (e) {
+      console.error('Failed to update business profile:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

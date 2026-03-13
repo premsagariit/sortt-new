@@ -31,6 +31,7 @@ export default function AggregatorProfileSetup() {
     setIsLoading(true);
     try {
       await api.post('/api/aggregators/profile', {
+        name: fullName,
         business_name: businessName || fullName,
         city_code: 'HYD', // Hardcoded for MVP
       });

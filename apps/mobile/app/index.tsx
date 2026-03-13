@@ -24,30 +24,41 @@ export default function IndexScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
   const userType = useAuthStore((s) => s.userType);
+  const name = useAuthStore((s) => s.name);
 
   // Track whether the splash animation has finished
   const [splashDone, setSplashDone] = useState(false);
 
   // Route once BOTH splash is done AND Clerk has loaded.
-  // useEffect re-runs whenever either condition changes —
-  // no stale closure / setTimeout recursion needed.
   useEffect(() => {
     if (!splashDone || !isLoaded) return;
 
     if (isSignedIn) {
-      if (userType === 'aggregator') {
-        router.replace('/(aggregator)/home' as any);
-      } else if (userType === 'seller') {
-        router.replace('/(seller)/home' as any);
+      // If name is set, user is fully onboarded — go to home
+      if (name && name.trim() !== '') {
+        if (userType === 'aggregator') {
+          router.replace('/(aggregator)/home' as any);
+        } else if (userType === 'seller') {
+          router.replace('/(seller)/home' as any);
+        } else {
+          // Fallback
+          router.replace('/(auth)/user-type' as any);
+        }
       } else {
-        // Signed in with Clerk but no user_type yet — incomplete onboarding
-        router.replace('/(auth)/user-type' as any);
+        // Signed in but no name — go to setup flow based on type
+        if (userType === 'aggregator') {
+          router.replace('/(auth)/aggregator/profile-setup' as any);
+        } else if (userType === 'seller') {
+          router.replace('/(auth)/seller/account-type' as any);
+        } else {
+          router.replace('/(auth)/user-type' as any);
+        }
       }
     } else {
       // Not signed in — go to phone entry
       router.replace('/(auth)/phone' as any);
     }
-  }, [splashDone, isLoaded, isSignedIn, userType, router]);
+  }, [splashDone, isLoaded, isSignedIn, userType, name, router]);
 
   return (
     <View style={styles.container}>

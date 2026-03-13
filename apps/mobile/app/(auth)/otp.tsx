@@ -107,9 +107,8 @@ export default function OTPScreen() {
           registerForPushNotificationsAsync().then((tokens: any) => {
             if (tokens?.expoToken || tokens?.rawToken) {
               api.post('/api/users/device-token', {
-                token_type: 'expo',
-                expo_token: tokens.expoToken,
-                raw_token: tokens.rawToken,
+                deviceToken: tokens.expoToken || tokens.rawToken,
+                provider: 'expo',
               }).catch((e: any) => console.error('Failed to register push token in backend:', e));
             }
           });
@@ -121,14 +120,23 @@ export default function OTPScreen() {
         const type = storeState.userType;
         const name = storeState.name;
 
-        // Empty name = new user who hasn't completed onboarding
-        // Route to user-type selection first regardless of DB default
-        if (!name || name.trim() === '') {
-          router.replace('/(auth)/user-type' as any);
-        } else if (type === 'aggregator') {
-          router.replace('/(aggregator)/home' as any);
+        // If name is set, user is fully onboarded — go to home
+        if (name && name.trim() !== '') {
+          if (type === 'aggregator') {
+            router.replace('/(aggregator)/home' as any);
+          } else {
+            router.replace('/(seller)/home' as any);
+          }
         } else {
-          router.replace('/(seller)/home' as any);
+          // New user or incomplete profile — route to setup based on type selected at user-type screen
+          if (type === 'aggregator') {
+            router.replace('/(auth)/aggregator/profile-setup' as any);
+          } else if (type === 'seller') {
+            router.replace('/(auth)/seller/account-type' as any);
+          } else {
+            // Fallback if type is missing (should not happen in normal flow)
+            router.replace('/(auth)/user-type' as any);
+          }
         }
       } else {
         throw new Error('SignIn incomplete');

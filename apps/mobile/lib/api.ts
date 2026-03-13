@@ -54,9 +54,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    const { config, response } = error;
+    const method = config?.method?.toUpperCase();
+    const path = config?.url;
+    const status = response?.status;
+    const errorBody = response?.data;
+
+    console.error('[API ERROR]', method, path, status, errorBody);
+
     // Automatically log user out if token is definitively invalid
-    if (error.response?.status === 401) {
-        // Just fail silently for now, the UI should handle triggering signout or token refresh
+    if (status === 401) {
         console.warn('API returned 401 Unauthorized');
     }
     return Promise.reject(error);

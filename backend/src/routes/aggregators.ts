@@ -25,9 +25,16 @@ const upload = multer({
 // Creates or updates initial profile
 router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { business_name, city_code } = req.body;
+    const { name, business_name, city_code } = req.body;
+    console.log('[DIAG] POST /api/aggregators/profile', { userId, body: req.body });
     
     try {
+        await query('BEGIN');
+
+        if (name) {
+            await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+        }
+
         await query(
             `INSERT INTO aggregator_profiles (user_id, business_name, city_code)
              VALUES ($1, $2, $3)
@@ -36,8 +43,11 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
                 city_code = EXCLUDED.city_code`,
             [userId, business_name, city_code]
         );
+
+        await query('COMMIT');
         res.json({ success: true });
     } catch (e: any) {
+        await query('ROLLBACK');
         console.error('Profile POST error:', e);
         Sentry.captureException(e);
         res.status(500).json({ error: 'Failed to save profile' });
@@ -48,6 +58,7 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
 router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     const { operating_area_text, operating_hours } = req.body;
+    console.log('[DIAG] PATCH /api/aggregators/profile', { userId, body: req.body });
     
     try {
         await query(
@@ -69,6 +80,7 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     const { rates } = req.body; // Expects [{ material_code: 'paper', rate_per_kg: 15.5 }, ...]
+    console.log('[DIAG] PATCH /api/aggregators/rates', { userId, ratesCount: rates?.length });
     
     try {
         if (!rates || !Array.isArray(rates)) {
@@ -106,6 +118,7 @@ router.post('/kyc', verifyRole('aggregator'), upload.fields([
     { name: 'vehicle_photo', maxCount: 1 }
 ]), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
+    console.log('[DIAG] POST /api/aggregators/kyc', { userId, files: Object.keys(req.files || {}) });
 
     try {
         // Find aggregator profile to ensure it exists
