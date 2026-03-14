@@ -22,7 +22,14 @@ import { useAuthStore } from '../../../store/authStore';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { safeBack } from '../../../utils/navigation';
 
-const TIMES = ['8–10 AM', '10–12 PM', '12–2 PM', '2–4 PM', '4–6 PM', 'Evening'];
+const TIMES = [
+  { label: 'Morning · 8–10 AM', value: 'morning' },
+  { label: 'Morning · 10–12 PM', value: 'morning' },
+  { label: 'Afternoon · 12–2 PM', value: 'afternoon' },
+  { label: 'Afternoon · 2–4 PM', value: 'afternoon' },
+  { label: 'Afternoon · 4–6 PM', value: 'afternoon' },
+  { label: 'Evening · 6 PM+', value: 'evening' },
+];
 const DEFAULT_ADDRESS = 'Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034';
 
 export default function Step3Screen() {
@@ -162,12 +169,12 @@ export default function Step3Screen() {
               <View style={styles.timeGrid}>
                 {TIMES.map((t) => (
                   <Pressable
-                    key={t}
-                    style={[styles.timeChip, scheduledTime === t ? styles.chipSelected : styles.chipUnselected]}
-                    onPress={() => setScheduledTime(t)}
+                    key={t.label}
+                    style={[styles.timeChip, scheduledTime === t.value ? styles.chipSelected : styles.chipUnselected]}
+                    onPress={() => setScheduledTime(t.value)}
                   >
-                    <Text variant="caption" style={{ color: scheduledTime === t ? colors.surface : colors.navy, textAlign: 'center' }}>
-                      {t}
+                    <Text variant="caption" style={{ color: scheduledTime === t.value ? colors.surface : colors.navy, textAlign: 'center' }}>
+                      {t.label}
                     </Text>
                   </Pressable>
                 ))}

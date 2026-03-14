@@ -1,10 +1,11 @@
 import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
-import './instrument'; // V14/D3: Must be first
+import './instrument';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { clerkMiddleware } from '@clerk/express'; // ADD THIS
 import { authMiddleware } from './middleware/auth';
 import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
@@ -26,17 +27,14 @@ console.log('[DIAG] env.DATABASE_URL exists:', !!process.env.DATABASE_URL);
 console.log('[DIAG] env.CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? `${process.env.CLERK_SECRET_KEY.slice(0, 8)}...` : 'MISSING');
 console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? `${process.env.CLERK_PUBLISHABLE_KEY.slice(0, 8)}...` : 'MISSING');
 
-// 1. V34: helmet() MUST be the very first middleware
 app.use(helmet());
 
-// 2. X1: CORS middleware based on ALLOWED_ORIGINS env var, with no wildcards
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o: string) => o.trim())
   : [];
 
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -46,40 +44,35 @@ app.use(cors({
   credentials: true,
 }));
 
-// 3. Body parsing: express.json() with strict: true and a 10kb limit
 app.use(express.json({ strict: true, limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-
-// 4. Sanitize all incoming JSON HTML tags
 app.use(sanitizeBody);
 
-// Test route for G6.4
 app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 
-// Auth router mounted BEFORE global Clerk JWT middleware.
-// /api/auth/* routes are public — request-otp and verify-otp bypass Clerk.
-// The authMiddleware exemption list (path.startsWith('/api/auth/')) already covers these.
-app.use('/api/auth', authRouter); // PUBLIC routes — no Clerk JWT
+// Public auth routes — before any Clerk middleware
+app.use('/api/auth', authRouter);
 
-// 5. Auth Middleware
+// clerkMiddleware() populates req.auth so getAuth() works in route handlers.
+// Does NOT enforce auth or redirect — your authMiddleware handles enforcement.
+app.use(clerkMiddleware()); // ADD THIS — must come before authMiddleware
+
+// Custom authMiddleware: verifies token via createClerkClient().verifyToken(),
+// returns 401 (never redirects), exempts /api/auth/* and /api/rates
 app.use(authMiddleware);
 
-// Routes
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// APIs
 app.use('/api/orders', ordersRouter);
 app.use('/api/aggregators', aggregatorsRouter);
 app.use('/api/users', usersRouter);
-app.use('/api/rates', ratesRouter);         // public — already exempted in authMiddleware
-app.use('/api/messages', messagesRouter);   // /api/messages?order_id=... (NOT nested under orders)
+app.use('/api/rates', ratesRouter);
+app.use('/api/messages', messagesRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);
 
-
-// 6. Global error handler MUST be last
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 8080;

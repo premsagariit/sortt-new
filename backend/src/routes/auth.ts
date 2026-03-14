@@ -27,6 +27,7 @@ const computeHmac = (data: string, secret: string) => {
 
 router.post('/request-otp', async (req: Request, res: Response) => {
     const { phone } = req.body;
+    console.log(`[DIAG] POST /api/auth/request-otp | phone: ${phone}`);
 
     if (!phone || !/^(\+91|91)?[6-9]\d{9}$/.test(phone)) {
         return res.status(400).json({ error: 'Invalid Indian phone number' });
@@ -121,6 +122,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
 
 router.post('/verify-otp', async (req: Request, res: Response) => {
     const { phone, otp, user_type } = req.body;
+    console.log(`[DIAG] POST /api/auth/verify-otp | phone: ${phone} | otp: ${otp} | user_type: ${user_type}`);
 
     if (!phone || !otp) {
         return res.status(400).json({ error: 'Phone and OTP are required' });
@@ -194,18 +196,15 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
         const userRecord = upsertResult.rows[0];
 
-        // Generate SignIn Token for Frontend
-        const sessionResponse = await clerkClient.sessions.createSession({
+        // Generate SignIn Token for Frontend (Ticket Strategy)
+        const signInToken = await clerkClient.signInTokens.createSignInToken({
             userId: clerkUserId,
+            expiresInSeconds: 60 * 5, // 5 minutes validity
         });
 
-        const sessionToken = await clerkClient.sessions.getToken(
-            sessionResponse.id
-        );
-
-        // Return token and safe user DTO (excluding phone_hash and clerk_user_id)
+        // Return token (ticket) and safe user DTO (excluding phone_hash and clerk_user_id)
         res.json({
-            token: sessionToken,
+            token: signInToken.token,
             user: {
                 id: userRecord.id,
                 user_type: userRecord.user_type,

@@ -29,6 +29,7 @@ export class GoogleMapsProvider implements IMapProvider {
     });
 
     if (response.data.status !== 'OK' || !response.data.results || response.data.results.length === 0) {
+      console.error('[DIAG] Geocode API Error:', response.data.status, response.data.error_message);
       throw new Error('geocode_failed');
     }
 

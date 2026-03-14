@@ -138,7 +138,7 @@ export default function AggregatorOrdersScreen() {
             <View style={styles.rowLeft}>
               <Numeric size={13} color={colors.muted} style={styles.monoText}>#{order.id}</Numeric>
               <View style={styles.dotSeparator} />
-              <Text variant="caption" color={colors.muted}>{order.distanceKm.toFixed(1)} km</Text>
+              <Text variant="caption" color={colors.muted}>{order.distanceKm ? order.distanceKm.toFixed(1) : '—'} km</Text>
             </View>
             <Numeric size={20} color={colors.amber} style={styles.priceText}>~₹{order.estimatedPrice}</Numeric>
           </View>

@@ -93,9 +93,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
         material_codes,
         estimated_weights,
         pickup_address: state.addressLine,
-        preferred_pickup_window: state.scheduledDate && state.scheduledTime
-          ? `${state.scheduledDate} ${state.scheduledTime}`
-          : 'flexible',
+        pickup_preference: state.scheduledTime || 'anytime',
         seller_note: state.notes || undefined,
       });
       return { success: true, orderId: res.data.order?.id };

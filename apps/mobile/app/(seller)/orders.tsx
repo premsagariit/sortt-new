@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -8,6 +8,7 @@ import { OrderCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ClipboardText, CaretRight, WarningCircle, ArrowClockwise } from 'phosphor-react-native';
 import { useOrderStore } from '../../store/orderStore';
+import { api } from '../../lib/api';
 
 const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
 type FilterType = typeof FILTERS[number];
@@ -35,6 +36,8 @@ export default function SellerOrdersScreen() {
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const cancelOrder = useOrderStore((s) => s.cancelOrder);
 
+  const [rates, setRates] = useState<any[]>([]);
+
   // Deep-link: open to a specific tab via ?tab=Completed etc.
   useEffect(() => {
     if (tab && FILTERS.includes(tab as FilterType)) {
@@ -42,10 +45,19 @@ export default function SellerOrdersScreen() {
     }
   }, [tab]);
 
-  // Fetch on mount
+  // Fetch on mount + auto-refresh
   useEffect(() => {
     fetchOrders();
-  }, []);
+    api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
+
+    // Polling every 30s
+    const poll = setInterval(() => {
+      fetchOrders();
+      api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
+    }, 30_000);
+
+    return () => clearInterval(poll);
+  }, [fetchOrders]);
 
   const handleRetry = useCallback(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -66,8 +78,20 @@ export default function SellerOrdersScreen() {
     return true;
   });
 
-  const hasActiveOrder = orders.some(o => ACTIVE_STATUSES.includes(o.status));
-  const firstActive = orders.find(o => ACTIVE_STATUSES.includes(o.status));
+  const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
+  const hasActiveOrder = activeOrders.length > 0;
+  const firstActive = activeOrders[0];
+
+  const calculateEstimate = useCallback((order: any) => {
+    if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
+      if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
+      return 0;
+    }
+    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
+      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
+      return sum + (rate * (weight as number));
+    }, 0);
+  }, [rates]);
 
   // Format date string from ISO
   const formatDate = (iso: string) => {
@@ -124,7 +148,7 @@ export default function SellerOrdersScreen() {
         >
           <View>
             <Text variant="label" style={{ color: colors.amber, fontWeight: '700' } as any}>
-              1 active pickup in progress
+              {activeOrders.length} active order{activeOrders.length > 1 ? 's' : ''} for pickup
             </Text>
             <Text variant="caption" color={colors.muted} style={{ marginTop: 2 } as any}>
               Tap to track
@@ -178,7 +202,7 @@ export default function SellerOrdersScreen() {
                 orderId={order.orderId}
                 status={order.status}
                 materials={order.materials}
-                amountRupees={order.estimatedAmount}
+                amountRupees={calculateEstimate(order)}
                 aggregator="—"
                 date={formatDate(order.createdAt)}
               />

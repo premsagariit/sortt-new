@@ -1,5 +1,5 @@
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+// import * as Notifications from 'expo-notifications'; // Deferred to inside function to suppress Expo Go SDK 53+ warnings
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
@@ -13,6 +13,7 @@ export async function registerForPushNotificationsAsync(): Promise<PushTokenResp
   // Expo push tokens still work in Expo Go for local notifications,
   // but getDevicePushTokenAsync (FCM/APNs) requires an EAS dev/prod build.
   // We return what we can and skip what we can't — never throw.
+  const Notifications = require('expo-notifications');
 
   if (Platform.OS === 'android') {
     try {
