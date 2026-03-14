@@ -23,6 +23,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Package, ChatCircle, ArrowRight } from 'phosphor-react-native';
@@ -42,8 +43,10 @@ import { useOrderStore } from '../../../store/orderStore';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
 import type { OrderStatus } from '../../../components/ui/StatusChip';
-import { MapPin, Phone, CheckCircle, CaretRight, Star, CurrencyInr, Nut, Jar, FileText, Laptop, Dress, Martini, ChatCircleDots } from 'phosphor-react-native';
+import { MapPin, Phone, CheckCircle, CaretRight, Star, CurrencyInr, ChatCircleDots } from 'phosphor-react-native';
 import { safeBack } from '../../../utils/navigation';
+import { MaterialChip, MATERIAL_LABELS, type MaterialCode } from '../../../components/ui/MaterialChip';
+import { api } from '../../../lib/api';
 
 // Removed mock MOCK_ORDER_DETAIL. Using live store.
 
@@ -79,12 +82,19 @@ const MATERIAL_BG: Record<string, string> = {
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userType = useAuthStore((s: any) => s.userType);
+  const authUserId = useAuthStore((s: any) => s.user?.id || 'user-agg-001'); // fallback for mocking
   const storeOrders = useOrderStore((s: any) => s.orders);
   const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
 
   const [isLoading, setIsLoading] = React.useState(true);
+  const [rates, setRates] = React.useState<any[]>([]);
+  const [showCancelSheet, setShowCancelSheet] = useState(false);
+  const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
 
   React.useEffect(() => {
+    // Fetch rates for estimation calculation
+    api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
+
     if (id && typeof id === 'string') {
       fetchOrder(id).finally(() => setIsLoading(false));
     } else {
@@ -92,10 +102,37 @@ export default function OrderDetailScreen() {
     }
   }, [id, fetchOrder]);
 
+  // Fetch scrap photo media for this order
+  React.useEffect(() => {
+    if (!id || typeof id !== 'string') return;
+    setMediaUrls([]);
+    api.get(`/api/orders/${id}/media`)
+      .then(async (res) => {
+        const items: any[] = res.data.media ?? [];
+        const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
+        // Fetch signed URLs for each scrap photo
+        const urls = await Promise.all(
+          scrapPhotos.map((m: any) =>
+            api.get(`/api/orders/${id}/media/${m.id}/url`)
+              .then((r) => r.data.url as string)
+              .catch(() => null)
+          )
+        );
+        setMediaUrls(urls.filter(Boolean) as string[]);
+      })
+      .catch(() => {});
+  }, [id]);
+
   const order = storeOrders.find((o: any) => o.orderId === id);
 
-  // Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6
-  const [showCancelSheet, setShowCancelSheet] = useState(false);
+  // Move memo up to prevent hook order warning/crash
+  const calculatedEstimate = React.useMemo(() => {
+    if (!order || !order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) return 0;
+    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
+      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
+      return sum + (rate * (weight as number));
+    }, 0);
+  }, [order, rates]);
 
   if (isLoading) {
     return (
@@ -127,18 +164,19 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const isCompleted = order.status === 'completed';
-  const isActiveRide = order.status === 'en_route' || order.status === 'arrived';
-  const showAggCard = order.status !== 'created' && order.aggregatorId;
-
   // V25: full address revealed only post-acceptance
-  const displayAddress = order.status === 'created'
-    ? order.pickupLocality          // pre-acceptance: locality only
-    : (order.pickupAddress || order.pickupLocality); // post-acceptance: full address if available
+  // Sellers always see their own full address. V25 only hides address from aggregators pre-acceptance.
+  const displayAddress = userType === 'seller'
+    ? (order.pickupAddress || order.pickupLocality)   // seller always sees full address
+    : order.status === 'created'
+      ? order.pickupLocality          // aggregator pre-acceptance: locality only
+      : (order.pickupAddress || order.pickupLocality); // aggregator post-acceptance: full address
 
-  // For Aggregator: can only cancel if accepted but not en-route yet
-  // For Seller: can cancel if created or accepted
-  const authUserId = useAuthStore((s: any) => s.user?.id || 'user-agg-001'); // fallback for mocking
+  // Derived state flags (must be defined before JSX)
+  const isCompleted = order.status === 'completed';
+  const isActiveRide = ['en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
+  // showAggCard: show aggregator info card when viewing as seller and aggregator is assigned
+  const showAggCard = userType === 'seller' && !!order.aggregatorId && order.status !== 'created';
   const canCancel = userType === 'seller'
     ? (order.status === 'created' || order.status === 'accepted')
     : (order.status === 'accepted' && order.aggregatorId === authUserId);
@@ -200,10 +238,13 @@ export default function OrderDetailScreen() {
                     Assigned Aggregator
                   </Text>
                   <Text variant="caption" color={colors.muted}>
-                    <Star size={12} color={colors.amber} weight="fill" />
-                    <Numeric size={12} color={colors.muted}>
-                      4.5
-                    </Numeric>
+                    {/* Rating */}
+                    <View style={styles.headerInfoItem}>
+                      <Star size={12} color={colors.amber} weight="fill" />
+                      <Numeric size={12} color={colors.muted}>
+                        {typeof order.rating === 'number' ? order.rating.toFixed(1) : '4.5'}
+                      </Numeric>
+                    </View>
                     {' · '}
                     <Numeric size={12} color={colors.muted}>
                       Verified Partner
@@ -231,13 +272,16 @@ export default function OrderDetailScreen() {
                 />
                 <View style={styles.aggInfo}>
                   <Text variant="subheading" color={colors.navy}>
-                    Seller
+                    {typeof order.sellerType === 'string' ? order.sellerType : 'Seller'}
                   </Text>
                   <Text variant="caption" color={colors.muted}>
-                    {'⭐ '}
-                    <Numeric size={12} color={colors.muted}>
-                      {order.rating ? order.rating.toFixed(1) : 'New'}
-                    </Numeric>
+                    {/* Rating */}
+                    <View style={styles.headerInfoItem}>
+                      <Star size={12} color={colors.amber} weight="fill" />
+                      <Numeric size={12} color={colors.muted}>
+                        {typeof order.rating === 'number' ? order.rating.toFixed(1) : '4.8'}
+                      </Numeric>
+                    </View>
                     {' seller rating'}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 4 }}>
@@ -359,29 +403,39 @@ export default function OrderDetailScreen() {
             ORDER SUMMARY
           </Text>
           <View style={styles.metaPillRow}>
-            {(order.materials || []).map((mat: any, i: number) => {
-              const weights = [12, 8, 4, 15]; // mock weights
+            {(order.materials || []).map((mat: string) => {
+              const weight = order.estimatedWeights?.[mat] || 0;
+              const label = weight > 0 
+                ? `${MATERIAL_LABELS[mat as MaterialCode]} · ${weight} kg`
+                : undefined;
               return (
-                <View key={mat} style={[styles.metaPill, { backgroundColor: MATERIAL_BG[mat], borderColor: MATERIAL_COLORS[mat] }]}>
-                  {mat === 'metal' && <Nut size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  {mat === 'plastic' && <Jar size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  {mat === 'paper' && <FileText size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  {mat === 'ewaste' && <Laptop size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  {mat === 'fabric' && <Dress size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  {mat === 'glass' && <Martini size={14} color={MATERIAL_COLORS[mat]} weight="fill" />}
-                  <Text variant="caption" style={{ color: MATERIAL_COLORS[mat], fontWeight: '600', marginLeft: 4 } as any}>
-                    {mat.charAt(0).toUpperCase() + mat.slice(1)} · {weights[i % weights.length]} kg
-                  </Text>
-                </View>
+                <MaterialChip
+                  key={mat}
+                  material={mat as MaterialCode}
+                  label={label}
+                />
               );
             })}
           </View>
+          {/* Scrap photos (if any) */}
+          {mediaUrls.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs }}>
+              {mediaUrls.map((url, idx) => (
+                <Image
+                  key={idx}
+                  source={{ uri: url }}
+                  style={{ width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
+          )}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryValueRow}>
             <Text variant="caption" color={colors.muted}>Estimated value</Text>
             <Numeric size={18} color={colors.navy}>
               {'~₹'}
-              {order.estimatedAmount}
+              {calculatedEstimate.toFixed(0)}
             </Numeric>
           </View>
         </View>
@@ -576,6 +630,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  headerInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   chatPillBtn: {
     borderRadius: 16,
     borderWidth: 1,
@@ -620,6 +679,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
     backgroundColor: colorExtended.surface2,
+  },
+  locationText: {
+    color: colors.surface,
+    fontSize: 12,
+  },
+  headerInfo: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: 4,
   },
   timelineCheck: {
     color: colors.surface,

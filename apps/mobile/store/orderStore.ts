@@ -28,16 +28,28 @@ export interface Order {
   sellerId?: string;
   sellerType?: string;
   rating?: number;
+  window?: string;
+  estimatedWeights?: Record<string, number>;
 }
 
 // Maps API response shape → internal Order type
 function mapApiOrder(o: any): Order {
+  // Normalize preferred_pickup_window
+  let windowLabel = 'Flexible';
+  if (o.preferred_pickup_window) {
+    if (typeof o.preferred_pickup_window === 'object') {
+      windowLabel = o.preferred_pickup_window.type || 'Flexible';
+    } else {
+      windowLabel = String(o.preferred_pickup_window);
+    }
+  }
+
   return {
     orderId: o.id ?? o.orderId,
     status: o.status,
     materials: o.material_codes ?? o.materials ?? [],
-    estimatedAmount: o.estimated_value ?? o.estimatedAmount ?? 0,
-    confirmedAmount: o.confirmed_value ?? o.confirmedAmount ?? null,
+    estimatedAmount: typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0),
+    confirmedAmount: typeof o.confirmed_value === 'number' ? o.confirmed_value : (o.confirmedAmount ?? null),
     pickupLocality: o.pickup_locality ?? o.pickupLocality ?? '',
     pickupAddress: o.pickup_address ?? o.pickupAddress ?? null,
     createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
@@ -45,8 +57,10 @@ function mapApiOrder(o: any): Order {
     aggregatorId: o.aggregator_id ?? o.aggregatorId ?? null,
     otp: o.otp ?? '',
     sellerId: o.seller_id,
-    sellerType: o.seller_type,
-    rating: o.rating,
+    sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
+    rating: typeof o.rating === 'number' ? o.rating : undefined,
+    window: windowLabel,
+    estimatedWeights: o.estimated_weights ?? o.estimatedWeights ?? {},
   };
 }
 
@@ -67,8 +81,8 @@ interface OrderStoreState {
   reset: () => void;
 
   // ── Async API actions ──
-  fetchOrders: () => Promise<void>;
-  fetchOrder: (id: string) => Promise<void>;
+  fetchOrders: (silent?: boolean) => Promise<void>;
+  fetchOrder: (id: string, silent?: boolean) => Promise<void>;
   cancelOrder: (id: string) => Promise<void>;
   createOrder: (payload: Record<string, unknown>) => Promise<Order>;
 }
@@ -104,20 +118,20 @@ export const useOrderStore = create<OrderStoreState>()(
       reset: () => set({ orders: [], activeOrderId: null, isLoading: false, error: null, rejectedOrderIds: [] }),
 
       // ── Async: fetch seller's orders list ──
-      fetchOrders: async () => {
-        set({ isLoading: true, error: null });
+      fetchOrders: async (silent = false) => {
+        if (!silent) set({ isLoading: true, error: null });
         try {
           const res = await api.get('/api/orders');
           const orders: Order[] = (res.data.orders ?? []).map(mapApiOrder);
           set({ orders, isLoading: false });
         } catch (e: any) {
-          set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+          if (!silent) set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
         }
       },
 
       // ── Async: fetch single order, merge into store ──
-      fetchOrder: async (id: string) => {
-        set({ isLoading: true, error: null });
+      fetchOrder: async (id: string, silent = false) => {
+        if (!silent) set({ isLoading: true, error: null });
         try {
           const res = await api.get(`/api/orders/${id}`);
           const order = mapApiOrder(res.data);
@@ -126,7 +140,7 @@ export const useOrderStore = create<OrderStoreState>()(
             isLoading: false,
           }));
         } catch (e: any) {
-          set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load order', isLoading: false });
+          if (!silent) set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load order', isLoading: false });
         }
       },
 

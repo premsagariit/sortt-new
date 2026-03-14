@@ -13,12 +13,13 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Pressable, Animated, AppState, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { House, Bell, ArrowRight, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
+import { House, MapPin, Calendar, Bell, ArrowRight, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -26,6 +27,7 @@ import { IconButton } from '../../components/ui/Button';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAggregatorStore, NewOrderRequest } from '../../store/aggregatorStore';
+import { useAuthStore } from '../../store/authStore';
 import type { MaterialCode } from '../../components/ui/MaterialChip';
 import { api } from '../../lib/api';
 
@@ -68,6 +70,7 @@ export default function AggregatorHomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const { isOnline, setOnline, earnings, businessName, primaryArea, fetchFeed, error } = useAggregatorStore();
+  const userType = useAuthStore((s: any) => s.userType);
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
   const displayName = businessName || MOCK_AGG_NAME;
@@ -75,56 +78,98 @@ export default function AggregatorHomeScreen() {
   const displayAreaShort = primaryArea ? primaryArea.split(',')[0]?.trim() || primaryArea : MOCK_AGG_AREA_SHORT;
 
   const [screenState, setScreenState] = React.useState<'loading' | 'error' | 'empty' | 'populated'>('loading');
+  // liveRates stored as { material_code: rate_per_kg } map for O(1) lookup in render
   const [liveRates, setLiveRates] = React.useState<Record<string, number> | null>(null);
 
-  // ── Heartbeat ──────────────────────────────────────────────
+  // ── Heartbeat & Polling ──────────────────────────────────────────
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const sendHeartbeat = () => {
+  const sendHeartbeat = useCallback(() => {
+    // Role check prevents 403 when seller UI is active
+    if (userType !== 'aggregator') return;
     api.post('/api/aggregators/heartbeat', { is_online: true }).catch(() => {});
-  };
+  }, [userType]);
 
-  const startHeartbeat = () => {
+  const startHeartbeat = useCallback(() => {
+    if (userType !== 'aggregator') return;
     sendHeartbeat(); // immediate ping
-    intervalRef.current = setInterval(sendHeartbeat, 120_000);
-  };
-  const stopHeartbeat = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    api.post('/api/aggregators/heartbeat', { is_online: false }).catch(() => {});
-  };
+    intervalRef.current = setInterval(sendHeartbeat, 60_000); // 1 min heartbeat
+  }, [userType, sendHeartbeat]);
 
-  useEffect(() => {
-    startHeartbeat();
-    const sub = AppState.addEventListener('change', state => {
-      if (state === 'background' || state === 'inactive') stopHeartbeat();
-    });
-    return () => { stopHeartbeat(); sub.remove(); };
-  }, []);
-
-  const handleToggle = async () => {
-    if (isOnline) {
-      stopHeartbeat();
-      setOnline(false);
-    } else {
-      setOnline(true);
-      startHeartbeat(); // this sends immediate ping + starts new interval
+  const stopHeartbeat = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-  };
+    if (userType === 'aggregator') {
+      api.post('/api/aggregators/heartbeat', { is_online: false }).catch(() => {});
+    }
+  }, [userType]);
 
-  // ── Data Fetching ───────────────────────────────────────────
-  const loadData = () => {
-    setScreenState('loading');
-    Promise.all([
-      fetchFeed(),
-      api.get<{ rates: Record<string, number> }>('/api/rates').then(res => setLiveRates(res.data.rates)).catch()
-    ]).then(() => {
-      setScreenState('populated');
-    });
-  };
+  /** Toggle aggregator online/offline status */
+  const handleToggle = useCallback(() => {
+    const next = !isOnline;
+    setOnline(next);
+    api.post('/api/aggregators/heartbeat', { is_online: next }).catch(() => {});
+  }, [isOnline, setOnline]);
+
+  const loadDataAsync = useCallback(async (silent = false) => {
+    if (!silent) setScreenState('loading');
+    try {
+      const [, ratesRes] = await Promise.all([
+        fetchFeed(silent),   // pass silent so no isLoading flash
+        api.get('/api/rates').catch(() => null),
+      ]);
+      if (ratesRes) {
+        // Convert array → { material_code: rate_per_kg } map for O(1) lookup
+        const map: Record<string, number> = {};
+        for (const r of (ratesRes.data.rates ?? [])) {
+          map[r.material_code] = r.rate_per_kg;
+        }
+        setLiveRates(map);
+      }
+      if (!silent) setScreenState('populated');
+      else setScreenState(prev => prev === 'loading' ? 'populated' : prev); // don't regress
+    } catch {
+      if (!silent) setScreenState('error');
+    }
+  }, [fetchFeed]);
 
   useEffect(() => {
-    loadData();
-  }, [fetchFeed]);
+    // Only run heartbeat and polling if aggregator
+    if (userType === 'aggregator') {
+      startHeartbeat();
+      loadDataAsync();
+
+      // Auto-refresh: poll for new orders every 30s
+      pollRef.current = setInterval(() => loadDataAsync(true), 30_000);
+    }
+
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        if (userType === 'aggregator') startHeartbeat();
+      } else {
+        stopHeartbeat();
+      }
+    });
+
+    return () => {
+      stopHeartbeat();
+      if (pollRef.current) clearInterval(pollRef.current);
+      sub.remove();
+    };
+  }, [userType]);
+
+  // Re-fetch whenever this tab gains focus (handles switching from other tabs)
+  useFocusEffect(
+    useCallback(() => {
+      if (userType === 'aggregator') {
+        loadDataAsync(true);
+      }
+    }, [userType, loadDataAsync])
+  );
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -147,7 +192,21 @@ export default function AggregatorHomeScreen() {
           </View>
           <View style={styles.distanceBadge}>
             <Text variant="caption" style={styles.distanceText}>
-              {item.distanceKm.toFixed(1)} km
+              {typeof item.distanceKm === 'number' ? `${item.distanceKm.toFixed(1)} km` : '0.0 km'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.headerInfo}>
+          <View style={styles.headerInfoItem}>
+            <MapPin size={12} color={colors.muted} />
+            <Numeric size={12} color={colors.muted}>
+              {typeof item.distanceKm === 'number' ? `${item.distanceKm.toFixed(1)} km` : '0.0 km'}
+            </Numeric>
+          </View>
+          <View style={styles.headerInfoItem}>
+            <Calendar size={12} color={colors.muted} />
+            <Text variant="caption" color={colors.muted}>
+              {typeof item.window === 'string' ? item.window : 'Flexible'}
             </Text>
           </View>
         </View>
@@ -385,7 +444,7 @@ export default function AggregatorHomeScreen() {
             <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
               Failed to load feed
             </Text>
-            <Pressable onPress={loadData} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
+            <Pressable onPress={() => loadDataAsync()} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
               <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
             </Pressable>
           </View>
@@ -593,7 +652,17 @@ const styles = StyleSheet.create({
   },
   locationText: {
     color: colors.surface,
-    opacity: 0.75,
+    fontSize: 12,
+  },
+  headerInfo: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: 4,
+  },
+  headerInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   heroStats: {
     flexDirection: 'row',

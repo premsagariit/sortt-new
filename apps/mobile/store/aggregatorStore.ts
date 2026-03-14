@@ -113,9 +113,9 @@ interface AggregatorStoreState {
 
   // ── Async API Actions ──────────────────────────────────────────
   /** GET /api/orders/feed — populates newOrders (locality only, V25) */
-  fetchFeed: () => Promise<void>;
+  fetchFeed: (silent?: boolean) => Promise<void>;
   /** GET /api/orders?role=aggregator — populates aggOrders for Active/Completed/Cancelled tabs */
-  fetchAggregatorOrders: () => Promise<void>;
+  fetchAggregatorOrders: (silent?: boolean) => Promise<void>;
   /** PATCH /api/aggregators/profile — updates business_name, operating_area */
   updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: string }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates */
@@ -145,18 +145,29 @@ const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
 function mapFeedOrder(o: any): NewOrderRequest {
   const createdAt = o.created_at ? new Date(o.created_at) : new Date();
   const postedMinutesAgo = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+  
+  // V10 Fix: preferred_pickup_window might be an object { type: '...' }
+  let windowLabel = 'Flexible';
+  if (o.preferred_pickup_window) {
+    if (typeof o.preferred_pickup_window === 'object') {
+      windowLabel = o.preferred_pickup_window.type || 'Flexible';
+    } else {
+      windowLabel = String(o.preferred_pickup_window);
+    }
+  }
+
   return {
     id: o.id,
     locality: o.pickup_locality ?? 'Unknown area',    // V25: only locality, never full address
-    distanceKm: o.distance_km ?? 0,
+    distanceKm: typeof o.distance_km === 'number' ? o.distance_km : 0,
     materials: (o.material_codes ?? []) as MaterialCode[],
-    estimatedKg: o.estimated_weight_kg ?? 0,
+    estimatedKg: typeof o.estimated_weight_kg === 'number' ? o.estimated_weight_kg : 0,
     postedMinutesAgo,
-    estimatedPrice: o.estimated_value ?? 0,
-    sellerType: o.seller_type ?? 'Seller',
-    rating: o.seller_rating ?? 4.5,
+    estimatedPrice: typeof o.estimated_value === 'number' ? o.estimated_value : 0,
+    window: windowLabel,
+    sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
+    rating: typeof o.seller_rating === 'number' ? o.seller_rating : 4.5,
     isHighValue: (o.estimated_value ?? 0) > 500,
-    window: o.preferred_pickup_window ?? 'Flexible',
   };
 }
 
@@ -271,25 +282,25 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   }),
 
   // ── Async: GET /api/orders/feed ────────────────────────────────
-  fetchFeed: async () => {
-    set({ isLoading: true, feedError: null });
+  fetchFeed: async (silent = false) => {
+    if (!silent) set({ isLoading: true, feedError: null });
     try {
       const res = await api.get('/api/orders/feed');
       const orders = (res.data.orders ?? []).map(mapFeedOrder);
       set({ newOrders: orders, isLoading: false });
     } catch (e: any) {
-      set({ feedError: e.response?.data?.error ?? e.message ?? 'Failed to load feed', isLoading: false });
+      if (!silent) set({ feedError: e.response?.data?.error ?? e.message ?? 'Failed to load feed', isLoading: false });
     }
   },
 
   // ── Async: GET /api/orders?role=aggregator ─────────────────────
-  fetchAggregatorOrders: async () => {
-    set({ isLoading: true, error: null });
+  fetchAggregatorOrders: async (silent = false) => {
+    if (!silent) set({ isLoading: true, error: null });
     try {
       const res = await api.get('/api/orders', { params: { role: 'aggregator' } });
       set({ aggOrders: res.data.orders ?? [], isLoading: false });
     } catch (e: any) {
-      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+      if (!silent) set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
     }
   },
 

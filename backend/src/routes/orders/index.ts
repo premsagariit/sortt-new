@@ -39,6 +39,7 @@ const stripHtml = (text?: string) => text ? sanitizeHtml(text, { allowedTags: []
 router.post('/', verifyUserRole('seller'), async (req, res) => {
   try {
     const userId = req.user?.id;
+    console.log('[DIAG] POST /api/orders | userId:', userId, 'body:', JSON.stringify(req.body));
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -54,7 +55,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     const {
       material_codes,
       estimated_weights,
-      pickup_address_text: pickup_address, // Map from incoming field to standardized name
+      pickup_address,
       pickup_preference: preferred_pickup_window,
       seller_note
     } = req.body;
@@ -66,7 +67,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       return res.status(400).json({ error: 'estimated_weights is required' });
     }
     if (!pickup_address) {
-      return res.status(400).json({ error: 'pickup_address_text is required' });
+      return res.status(400).json({ error: 'pickup_address is required' });
     }
 
     const cleanAddress = stripHtml(pickup_address);
@@ -74,11 +75,14 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
 
     const geo = await mapProvider.geocode(cleanAddress).catch((err: any) => {
       if (err.message === 'unsupported_city' || err.message === 'geocode_failed') {
+        console.warn('[DIAG] Geocode caught error:', err.message);
         throw err;
       }
       console.error('Geocode error:', err);
       throw new Error('geocode_failed');
     });
+
+    console.log('[DIAG] Geocode success:', JSON.stringify(geo));
 
     // Need to use transaction explicitly in withUser if needed.
     // withUser does NOT begin a transaction by default!
@@ -126,7 +130,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
               FROM device_tokens d
               JOIN aggregator_availability a ON d.user_id = a.user_id AND a.is_online = true
               JOIN aggregator_profiles p ON a.user_id = p.user_id AND p.city_code = $1
-              JOIN aggregator_material_rates m ON p.user_id = m.user_id AND m.material_code = ANY($2)
+              JOIN aggregator_material_rates m ON p.user_id = m.aggregator_id AND m.material_code = ANY($2)
             `, [geo.cityCode, material_codes]);
 
         const tokens = aggRes.rows.map(r => r.expo_token).filter(t => t.startsWith('ExponentPushToken'));
@@ -181,35 +185,51 @@ router.get('/', async (req, res) => {
 
     if (role === 'aggregator') {
       // Return orders accepted by this aggregator
+      const baseQuery = `
+        SELECT o.*, 
+               COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+               COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.aggregator_id = $1
+      `;
       if (cursor) {
         result = await query(`
-            SELECT * FROM orders
-            WHERE aggregator_id = $1 AND created_at < $2
-            ORDER BY created_at DESC
+            ${baseQuery} AND o.created_at < $2
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
             LIMIT $3
           `, [userId, cursor, limit + 1]);
       } else {
         result = await query(`
-            SELECT * FROM orders
-            WHERE aggregator_id = $1
-            ORDER BY created_at DESC
+            ${baseQuery}
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
             LIMIT $2
           `, [userId, limit + 1]);
       }
     } else {
       // Default: seller's own orders
+      const baseQuery = `
+        SELECT o.*, 
+               COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+               COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.seller_id = $1
+      `;
       if (cursor) {
         result = await query(`
-            SELECT * FROM orders
-            WHERE seller_id = $1 AND created_at < $2
-            ORDER BY created_at DESC
+            ${baseQuery} AND o.created_at < $2
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
             LIMIT $3
           `, [userId, cursor, limit + 1]);
       } else {
         result = await query(`
-            SELECT * FROM orders
-            WHERE seller_id = $1
-            ORDER BY created_at DESC
+            ${baseQuery}
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
             LIMIT $2
           `, [userId, limit + 1]);
       }
@@ -266,7 +286,8 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     params.push(limit + 1);
 
     const result = await query(`
-            SELECT DISTINCT o.*
+            SELECT o.*, 
+                   COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes
             FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
             JOIN aggregator_material_rates r
@@ -276,6 +297,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
               AND o.deleted_at IS NULL
               AND o.city_code = $2
               ${cursorClause}
+            GROUP BY o.id
             ORDER BY o.created_at DESC
             LIMIT $${params.length}
         `, params);
@@ -358,6 +380,14 @@ router.post('/:id/media', upload.single('file'), async (req, res) => {
 
           if (redis) {
             await redis.set(`otp:order:${orderId}`, hmac, { ex: 600 });
+          }
+
+          // [DEV ONLY] Always log the OTP to console so we can test without WhatsApp
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`\n\n[DEV OTP] ==========================================`);
+            console.log(`[DEV OTP] ORDER ID: ${orderId}`);
+            console.log(`[DEV OTP] CODE:     ${otp}`);
+            console.log(`[DEV OTP] ==========================================\n\n`);
           }
 
           // Fetch seller phone for WhatsApp send
@@ -455,6 +485,39 @@ router.get('/:id/media/:mediaId/url', async (req, res) => {
 
 // --- End Day 10 routes ---
 
+// 3d. GET /api/orders/:id/media — list all media items for an order (V25: parties only)
+router.get('/:id/media', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { id: orderId } = req.params;
+
+    // Verify party membership
+    const orderRes = await query(
+      'SELECT seller_id, aggregator_id FROM orders WHERE id = $1',
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+    const order = orderRes.rows[0];
+    const isParty = order.seller_id === userId || order.aggregator_id === userId;
+    if (!isParty) return res.status(403).json({ error: 'Forbidden' });
+
+    const mediaRes = await query(
+      `SELECT id, media_type, created_at
+       FROM order_media
+       WHERE order_id = $1
+       ORDER BY created_at ASC`,
+      [orderId]
+    );
+    return res.json({ media: mediaRes.rows });
+  } catch (e: any) {
+    console.error('GET /api/orders/:id/media error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 3. GET /api/orders/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -463,7 +526,15 @@ router.get('/:id', async (req, res) => {
 
     const { id } = req.params;
 
-    const result = await query('SELECT * FROM orders WHERE id = $1', [id]);
+    const result = await query(`
+      SELECT o.*,
+             COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+             jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      WHERE o.id = $1
+      GROUP BY o.id
+    `, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 
     const order = result.rows[0];

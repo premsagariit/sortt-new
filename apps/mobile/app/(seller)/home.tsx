@@ -13,7 +13,8 @@
 
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, FlatList, Pressable, Animated, ActivityIndicator } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Bell, Tray, Recycle, ChartLineUp, Truck, CaretUp, CaretDown, Minus, ArrowRight, CaretRight as CaretRightIcon } from 'phosphor-react-native';
 import { APP_NAME } from '../../constants/app';
@@ -60,8 +61,8 @@ export default function SellerHomeScreen() {
     return sum > 0 ? `₹${sum.toLocaleString('en-IN')}` : '₹0';
   }, [orders]);
   const ordersCount = String(orders.length).padStart(2, '0');
-  const activeCount = String(orders.filter(o => ACTIVE_STATUSES.includes(o.status)).length).padStart(2, '0');
   const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
+  const activeCount = String(activeOrders.length).padStart(2, '0');
 
   // ── Live rates from GET /api/rates ─────────────────────────────
   const [rates, setRates] = useState<RateEntry[]>([]);
@@ -70,7 +71,7 @@ export default function SellerHomeScreen() {
     setRatesLoading(true);
     try {
       const res = await api.get('/api/rates');
-      setRates(res.data.rates?.slice(0, 3) ?? []);
+      setRates(res.data.rates || []);
     } catch { /* non-fatal: rates section stays empty */ } finally {
       setRatesLoading(false);
     }
@@ -81,7 +82,34 @@ export default function SellerHomeScreen() {
     fetchMe();
     fetchOrders();
     fetchRates();
-  }, []);
+
+    // Auto-refresh: poll every 30s — silent so no loading flash
+    const poll = setInterval(() => {
+      fetchOrders(true);
+      fetchRates();
+    }, 30_000);
+
+    return () => clearInterval(poll);
+  }, [fetchMe, fetchOrders, fetchRates]);
+
+  // Re-fetch silently when tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders(true);
+      fetchRates();
+    }, [fetchOrders, fetchRates])
+  );
+
+  const calculateEstimate = useCallback((order: any) => {
+    if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
+      if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
+      return 0;
+    }
+    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
+      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
+      return sum + (rate * (weight as number));
+    }, 0);
+  }, [rates]);
 
   const titleOpacity = scrollY.interpolate({
     inputRange: [0, 40],
@@ -202,7 +230,7 @@ export default function SellerHomeScreen() {
           <View style={styles.ratesList}>
             {ratesLoading ? (
               <ActivityIndicator size="small" color={colors.muted} style={{ marginVertical: 12 }} />
-            ) : rates.length > 0 ? rates.map(r => (
+            ) : rates.length > 0 ? rates.slice(0, 3).map(r => (
               <View key={r.material_code} style={styles.rateCard}>
                 <View style={styles.rateInfo}>
                   <Text variant="body" style={styles.rateMaterial}>{r.name}</Text>
@@ -303,7 +331,7 @@ export default function SellerHomeScreen() {
               orderId={item.orderId}
               status={item.status}
               materials={item.materials}
-              amountRupees={item.estimatedAmount}
+              amountRupees={calculateEstimate(item)}
               date={new Date(item.createdAt).toDateString() === new Date().toDateString() ? 'Today' : new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             />
           </Pressable>

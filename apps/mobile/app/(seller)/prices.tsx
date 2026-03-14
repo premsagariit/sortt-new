@@ -1,24 +1,42 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Info, Warning } from 'phosphor-react-native';
+import { useFocusEffect } from 'expo-router';
+import { Info, Warning, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
-import { MarketRateCard, MaterialCode } from '../../components/ui/Card';
 import { safeBack } from '../../utils/navigation';
+import { api } from '../../lib/api';
 
-const MOCK_RATES: { id: string; material: string; price: number; trend: string; materialCode: MaterialCode }[] = [
-  { id: '1', material: 'Iron scrap', price: 28, trend: 'up', materialCode: 'metal' },
-  { id: '2', material: 'Cardboard', price: 10, trend: 'flat', materialCode: 'paper' },
-  { id: '3', material: 'Plastic (PET)', price: 12, trend: 'down', materialCode: 'plastic' },
-  { id: '4', material: 'Newspaper', price: 14, trend: 'up', materialCode: 'paper' },
-  { id: '5', material: 'Copper wire', price: 420, trend: 'up', materialCode: 'metal' },
-  { id: '6', material: 'Aluminum', price: 110, trend: 'flat', materialCode: 'metal' },
-];
+interface RateEntry {
+  material_code: string;
+  name: string;
+  rate_per_kg: number;
+  trend: 'up' | 'down' | 'flat';
+}
 
 export default function MarketRatesScreen() {
   const router = useRouter();
+  const [rates, setRates] = useState<RateEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadRates = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/api/rates');
+      setRates(res.data.rates || []);
+    } catch {
+      /* non-fatal — empty state shown */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadRates(); }, [loadRates]);
+
+  // Refresh on tab focus
+  useFocusEffect(useCallback(() => { loadRates(); }, [loadRates]));
 
   return (
     <View style={styles.container}>
@@ -47,25 +65,41 @@ export default function MarketRatesScreen() {
           </View>
         </View>
 
-        {/* Materials Grid */}
-        <View style={styles.grid}>
-          {MOCK_RATES.map((item) => (
-            <View key={item.id} style={styles.gridItem}>
-              <MarketRateCard
-                material={item.material}
-                materialCode={item.materialCode}
-                ratePerKg={item.price}
-                trend={item.trend as any}
-              />
-            </View>
-          ))}
-        </View>
+        {/* Rates Grid */}
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.muted} style={{ marginTop: 40 }} />
+        ) : rates.length === 0 ? (
+          <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', marginTop: 40 }}>
+            Rates unavailable — check back soon.
+          </Text>
+        ) : (
+          <View style={styles.grid}>
+            {rates.map((item) => (
+              <View key={item.material_code} style={styles.gridItem}>
+                <View style={styles.rateCard}>
+                  <View style={styles.rateHeader}>
+                    <Text variant="label" color={colors.navy}>{item.name}</Text>
+                    {item.trend === 'up'
+                      ? <CaretUp size={16} color={colors.teal} weight="bold" />
+                      : item.trend === 'down'
+                      ? <CaretDown size={16} color={colors.red} weight="bold" />
+                      : <Minus size={16} color={colors.muted} weight="bold" />}
+                  </View>
+                  <Numeric size={20} color={colors.navy} style={{ marginTop: spacing.xs }}>
+                    ₹{item.rate_per_kg}
+                  </Numeric>
+                  <Text variant="caption" color={colors.muted}>per kg</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Ad Banner */}
         <View style={styles.adBanner}>
           <Text variant="caption" style={styles.adTag}>SPONSORED</Text>
           <Text variant="subheading" color={colors.surface}>Sell directly to top processors</Text>
-          <Text variant="caption" style={styles.adSub}>Higher rates for bulk plastic & e-waste</Text>
+          <Text variant="caption" style={styles.adSub}>Higher rates for bulk plastic &amp; e-waste</Text>
           <Pressable style={styles.adBtn}>
             <Text variant="caption" style={styles.adBtnText}>Learn More</Text>
           </Pressable>
@@ -89,7 +123,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 80,
   },
   localityTag: {
     flexDirection: 'row',
@@ -119,12 +153,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
+    marginBottom: spacing.xl,
   },
   gridItem: {
     width: '47.5%',
   },
+  rateCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  rateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   adBanner: {
-    marginTop: spacing.xl,
+    marginTop: spacing.sm,
     backgroundColor: colors.navy,
     borderRadius: radius.card,
     padding: spacing.lg,
@@ -142,20 +189,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     marginBottom: spacing.sm,
-  },
-  heroSection: {
-    backgroundColor: colors.navy,
-    paddingHorizontal: 20,
-    paddingTop: 10, // Adjusted for overscroll filler alignment
-    paddingBottom: 24,
-  },
-  overscrollFiller: {
-    position: 'absolute',
-    top: -1000,
-    left: 0,
-    right: 0,
-    height: 1000,
-    backgroundColor: colors.navy,
   },
   adBtn: {
     backgroundColor: colors.teal,

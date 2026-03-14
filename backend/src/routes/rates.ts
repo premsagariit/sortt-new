@@ -5,6 +5,29 @@ import { query } from '../lib/db';
 
 const router = Router();
 
+// ── Material display names (canonical) ────────────────────────────────────────
+const MATERIAL_NAMES: Record<string, string> = {
+  metal:   'Metal / Iron',
+  paper:   'Paper / Cardboard',
+  plastic: 'Plastic (PET)',
+  ewaste:  'E-Waste',
+  fabric:  'Fabric / Cloth',
+  glass:   'Glass',
+};
+
+// ── Baseline rates for trend computation (update when scraper is live) ─────────
+const BASELINE_RATES: Record<string, number> = {
+  metal: 28, paper: 12, plastic: 8, ewaste: 60, fabric: 6, glass: 5,
+};
+
+function computeTrend(code: string, rate: number): 'up' | 'down' | 'flat' {
+  const baseline = BASELINE_RATES[code];
+  if (baseline === undefined) return 'flat';
+  if (rate > baseline) return 'up';
+  if (rate < baseline) return 'down';
+  return 'flat';
+}
+
 // GET /api/rates — PUBLIC (no auth, exempted in auth.ts)
 // V17: Cache-Control + ETag headers required
 // Queries current_price_index materialized view (refreshed daily by node-cron)
@@ -13,12 +36,21 @@ router.get('/', async (req: Request, res: Response) => {
         const result = await query(`
             SELECT city_code, material_code, rate_per_kg, scraped_at
             FROM current_price_index
-            WHERE city_code = 'HYD'
             ORDER BY material_code
         `);
 
+        // Enrich with display name and trend before sending
+        const rates = result.rows.map((r: any) => ({
+            city_code:    r.city_code,
+            material_code: r.material_code,
+            name:          MATERIAL_NAMES[r.material_code] ?? r.material_code,
+            rate_per_kg:   Number(r.rate_per_kg),
+            trend:         computeTrend(r.material_code, Number(r.rate_per_kg)),
+            scraped_at:    r.scraped_at,
+        }));
+
         const payload = {
-            rates: result.rows,
+            rates,
             cached_at: new Date().toISOString()
         };
         const body = JSON.stringify(payload);
