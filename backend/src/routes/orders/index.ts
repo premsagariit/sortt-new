@@ -169,30 +169,50 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
   }
 });
 
-// 2. GET /api/orders (cursor pagination for seller)
+// 2. GET /api/orders — seller (default) or aggregator via ?role=aggregator
 router.get('/', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { cursor } = req.query;
-
+    const { cursor, role } = req.query;
     const limit = 20;
     let result;
-    if (cursor) {
-      result = await query(`
-          SELECT * FROM orders
-          WHERE seller_id = $1 AND created_at < $2
-          ORDER BY created_at DESC
-          LIMIT $3
-        `, [userId, cursor, limit + 1]);
+
+    if (role === 'aggregator') {
+      // Return orders accepted by this aggregator
+      if (cursor) {
+        result = await query(`
+            SELECT * FROM orders
+            WHERE aggregator_id = $1 AND created_at < $2
+            ORDER BY created_at DESC
+            LIMIT $3
+          `, [userId, cursor, limit + 1]);
+      } else {
+        result = await query(`
+            SELECT * FROM orders
+            WHERE aggregator_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+          `, [userId, limit + 1]);
+      }
     } else {
-      result = await query(`
-          SELECT * FROM orders
-          WHERE seller_id = $1
-          ORDER BY created_at DESC
-          LIMIT $2
-        `, [userId, limit + 1]);
+      // Default: seller's own orders
+      if (cursor) {
+        result = await query(`
+            SELECT * FROM orders
+            WHERE seller_id = $1 AND created_at < $2
+            ORDER BY created_at DESC
+            LIMIT $3
+          `, [userId, cursor, limit + 1]);
+      } else {
+        result = await query(`
+            SELECT * FROM orders
+            WHERE seller_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+          `, [userId, limit + 1]);
+      }
     }
 
     const rows = result.rows;

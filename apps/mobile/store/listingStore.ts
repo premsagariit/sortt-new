@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { MaterialCode } from '../components/ui/MaterialChip';
+import { api } from '../lib/api';
 
 export interface ListingState {
   // Step 1
@@ -30,6 +31,9 @@ export interface ListingState {
   setAddressLine: (a: string) => void;
   setNotes: (n: string) => void;
   resetListing: () => void;
+
+  // ── Async API action ──
+  submitListing: () => Promise<{ success: boolean; orderId?: string; error?: string }>;
 }
 
 const initialState = {
@@ -45,7 +49,7 @@ const initialState = {
   notes: '',
 };
 
-export const useListingStore = create<ListingState>((set) => ({
+export const useListingStore = create<ListingState>((set, get) => ({
   ...initialState,
 
   setMaterials: (selectedMaterials) => set({ selectedMaterials }),
@@ -75,4 +79,31 @@ export const useListingStore = create<ListingState>((set) => ({
   setNotes: (notes) => set({ notes }),
 
   resetListing: () => set(initialState),
+
+  // ── POST /api/orders — builds payload from current form state ──
+  submitListing: async () => {
+    const state = get();
+    const material_codes = state.selectedMaterials;
+    const estimated_weights: Record<string, number> = {};
+    for (const code of material_codes) {
+      estimated_weights[code] = parseFloat(state.weights[code] ?? '0') || 0;
+    }
+    try {
+      const res = await api.post('/api/orders', {
+        material_codes,
+        estimated_weights,
+        pickup_address: state.addressLine,
+        preferred_pickup_window: state.scheduledDate && state.scheduledTime
+          ? `${state.scheduledDate} ${state.scheduledTime}`
+          : 'flexible',
+        seller_note: state.notes || undefined,
+      });
+      return { success: true, orderId: res.data.order?.id };
+    } catch (e: any) {
+      const code = e.response?.data?.error;
+      const message = e.response?.data?.message ?? e.message ?? 'Submission failed';
+      return { success: false, error: code ?? message };
+    }
+  },
 }));
+

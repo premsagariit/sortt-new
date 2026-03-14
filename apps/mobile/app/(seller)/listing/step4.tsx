@@ -10,7 +10,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { CheckCircle, Nut, Jar, FileText, Laptop, Package, MapPin, Calendar, Info, Dress, Martini } from 'phosphor-react-native';
+import { CheckCircle, Nut, Jar, FileText, Laptop, Package, MapPin, Calendar, Info, Dress, Martini, WarningCircle } from 'phosphor-react-native';
+import { api } from '../../../lib/api';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
@@ -20,15 +21,14 @@ import { useListingStore } from '../../../store/listingStore';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
 import { safeBack } from '../../../utils/navigation';
 
-// Mock rates logic matching Step 1
-const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
-  metal: { min: 25, max: 35 },
-  plastic: { min: 8, max: 15 },
-  paper: { min: 7, max: 12 },
-  ewaste: { min: 50, max: 150 },
-  fabric: { min: 10, max: 18 },
-  glass: { min: 2, max: 6 },
-  custom: { min: 5, max: 15 },
+const FALLBACK_RATES: Record<MaterialCode, number> = {
+  metal: 30,
+  plastic: 11.5,
+  paper: 9.5,
+  ewaste: 100,
+  fabric: 14,
+  glass: 4,
+  custom: 10,
 };
 
 export default function Step4Screen() {
@@ -42,10 +42,34 @@ export default function Step4Screen() {
     notes,
     resetListing,
     customNames,
+    submitListing,
   } = useListingStore();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+
+  const [rates, setRates] = useState<Record<string, number>>(FALLBACK_RATES);
+  const [ratesLoading, setRatesLoading] = useState(true);
+
+  // Fetch true rates
+  useEffect(() => {
+    async function fetchRates() {
+      try {
+        const res = await api.get('/api/rates');
+        const rateMap: Record<string, number> = {};
+        for (const r of res.data.rates) {
+          rateMap[r.material_code] = r.rate_per_kg;
+        }
+        setRates((prev) => ({ ...prev, ...rateMap }));
+      } catch (err) {
+        // silently fallback to FALLBACK_RATES
+      } finally {
+        setRatesLoading(false);
+      }
+    }
+    fetchRates();
+  }, []);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,8 +110,8 @@ export default function Step4Screen() {
     const weightStr = weights[code] || '0';
     const weightNum = parseFloat(weightStr) || 0;
 
-    // Use midpoint for the estimate
-    const rate = (RATE_ESTIMATES[code].min + RATE_ESTIMATES[code].max) / 2;
+    // Use fetched rate or fallback
+    const rate = rates[code] || FALLBACK_RATES[code] || 0;
     const itemTotal = weightNum * rate;
     totalEstimate += itemTotal;
 
@@ -102,14 +126,27 @@ export default function Step4Screen() {
     };
   }).filter((item) => item.weight > 0);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setErrorBanner(null);
     setIsSubmitting(true);
-    // Mock network delay
-    setTimeout(() => {
-      resetListing();
-      setIsSubmitting(false);
+    
+    const res = await submitListing();
+    
+    setIsSubmitting(false);
+    if (res.success) {
       setShowSuccess(true);
-    }, 1000);
+    } else {
+      const errStr = res.error || '';
+      if (errStr.includes('unsupported_city')) {
+        setErrorBanner('Service unavailable in this area');
+      } else if (errStr.includes('geocode_failed')) {
+        setErrorBanner('Address not found — please check and try again');
+      } else if (errStr.includes('429')) {
+        setErrorBanner("You've reached the daily listing limit");
+      } else {
+        setErrorBanner(errStr || 'Failed to submit listing');
+      }
+    }
   };
 
   if (showSuccess) {
@@ -161,7 +198,11 @@ export default function Step4Screen() {
             <View style={styles.earningsHeaderRow}>
               <Text variant="heading" style={{ fontSize: 16 }}>Earnings Calculator</Text>
               <View style={[styles.liveRatesPill, { backgroundColor: colors.amberLight }]}>
-                <Text variant="caption" color={colors.amber} style={{ fontWeight: '600' }}>Live Rates</Text>
+                {ratesLoading ? (
+                  <ActivityIndicator size="small" color={colors.amber} />
+                ) : (
+                  <Text variant="caption" color={colors.amber} style={{ fontWeight: '600' }}>Live Rates</Text>
+                )}
               </View>
             </View>
 
@@ -253,6 +294,13 @@ export default function Step4Screen() {
             </View>
           </View>
 
+          {errorBanner && (
+            <View style={styles.errorBannerWrap}>
+              <WarningCircle size={20} color={colors.red} weight="bold" />
+              <Text variant="body" style={styles.errorBannerText as any}>{errorBanner}</Text>
+            </View>
+          )}
+
           {/* Info Banner */}
           <View style={styles.infoBanner}>
             <Info size={18} color={colors.navy} />
@@ -300,10 +348,24 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   liveRatesPill: {
-    backgroundColor: colors.amberLargeLight,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 12,
+  },
+  errorBannerWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.redLight,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    marginBottom: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.red,
+  },
+  errorBannerText: {
+    color: colors.red,
+    flex: 1,
   },
   tableHeader: {
     flexDirection: 'row',

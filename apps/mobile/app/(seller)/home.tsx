@@ -11,84 +11,77 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useMemo, useRef } from 'react';
-import { StyleSheet, View, FlatList, Pressable, Animated } from 'react-native';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, FlatList, Pressable, Animated, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Bell, Tray, Recycle, ChartLineUp, Truck, CaretUp, CaretDown, Minus, ArrowRight, CaretRight as CaretRightIcon } from 'phosphor-react-native';
 import { APP_NAME } from '../../constants/app';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
+import { useOrderStore } from '../../store/orderStore';
 import { useAuthStore } from '../../store/authStore';
+import { api } from '../../lib/api';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { BaseCard, OrderCard, MaterialCode, OrderStatus } from '../../components/ui/Card';
 import { IconButton } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Avatar } from '../../components/ui/Avatar';
 import { SorttLogo } from '../../components/ui/SorttLogo';
-
-// ── Mock Data ──────────────────────────────────────────────────────
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
-
-interface MockOrder {
-  orderId: string;
-  status: OrderStatus;
-  materials: MaterialCode[];
-  amountRupees: number;
-  date: string;
-}
-
-const MOCK_ORDERS: MockOrder[] = [
-  {
-    orderId: 'ORD-2841',
-    status: 'en_route',
-    materials: ['paper', 'metal'],
-    amountRupees: 380,
-    date: 'Today',
-  },
-  {
-    orderId: 'ORD-2790',
-    status: 'completed',
-    materials: ['plastic', 'ewaste'],
-    amountRupees: 640,
-    date: '22 Feb 2026',
-  },
-  {
-    orderId: 'ORD-2751',
-    status: 'completed',
-    materials: ['paper'],
-    amountRupees: 210,
-    date: '18 Feb 2026',
-  },
-  {
-    orderId: 'ORD-7777',
-    status: 'arrived',
-    materials: ['paper', 'plastic'],
-    amountRupees: 280,
-    date: 'Today',
-  },
-];
-
-
 import { router } from 'expo-router';
 
-// ───────────────────────────────────────────────────────────────────
+// ── Rate shape from GET /api/rates ───────────────────────────────────
+interface RateEntry { material_code: string; name: string; rate_per_kg: number; trend: 'up' | 'down' | 'flat'; }
 
-// ── Mock fallbacks (replaced by backend data on Day 7) ──────────────
-const MOCK_SELLER_NAME = 'Ravi Kumar';
-const MOCK_SELLER_LOCALITY = 'Kondapur';
-const MOCK_SELLER_CITY = 'Hyderabad';
-const MOCK_EARNED = '₹2,840';
-const MOCK_ORDERS_COUNT = '07';
-const MOCK_ACTIVE_COUNT = '01';
+// ── Avatar image source ────────────────────────────────────────────────
+const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
+
+
+const ACTIVE_STATUSES = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'];
 
 export default function SellerHomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  // Read from store with mock fallbacks (Day 7: store populated from backend)
-  const displayName = useAuthStore((s) => s.name) || MOCK_SELLER_NAME;
-  const displayLocality = useAuthStore((s) => s.locality) || MOCK_SELLER_LOCALITY;
-  const displayCity = useAuthStore((s) => s.city) || MOCK_SELLER_CITY;
+  // ── Store ────────────────────────────────────────────────────────
+  const displayName = useAuthStore((s) => s.name) || 'You';
+  const displayLocality = useAuthStore((s) => s.locality) || '—';
+  const displayCity = useAuthStore((s) => s.city) || 'Your city';
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+
+  const orders = useOrderStore((s) => s.orders);
+  const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  const ordersLoading = useOrderStore((s) => s.isLoading);
+
+  // ── Live stats derived from store ──────────────────────────────
+  const totalEarned = useMemo(() => {
+    const sum = orders
+      .filter(o => o.status === 'completed')
+      .reduce((acc, o) => acc + (o.confirmedAmount ?? o.estimatedAmount), 0);
+    return sum > 0 ? `₹${sum.toLocaleString('en-IN')}` : '₹0';
+  }, [orders]);
+  const ordersCount = String(orders.length).padStart(2, '0');
+  const activeCount = String(orders.filter(o => ACTIVE_STATUSES.includes(o.status)).length).padStart(2, '0');
+  const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
+
+  // ── Live rates from GET /api/rates ─────────────────────────────
+  const [rates, setRates] = useState<RateEntry[]>([]);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const fetchRates = useCallback(async () => {
+    setRatesLoading(true);
+    try {
+      const res = await api.get('/api/rates');
+      setRates(res.data.rates?.slice(0, 3) ?? []);
+    } catch { /* non-fatal: rates section stays empty */ } finally {
+      setRatesLoading(false);
+    }
+  }, []);
+
+  // ── On mount ──────────────────────────────────────────────────
+  useEffect(() => {
+    fetchMe();
+    fetchOrders();
+    fetchRates();
+  }, []);
 
   const titleOpacity = scrollY.interpolate({
     inputRange: [0, 40],
@@ -149,15 +142,15 @@ export default function SellerHomeScreen() {
           {/* New Hero Stats Row (matches Aggregator pattern) */}
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_EARNED}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{totalEarned}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Earned</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_ORDERS_COUNT}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{ordersCount}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Orders</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_ACTIVE_COUNT}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{activeCount}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Active</Text>
             </View>
           </View>
@@ -207,29 +200,21 @@ export default function SellerHomeScreen() {
           </View>
 
           <View style={styles.ratesList}>
-            <View style={styles.rateCard}>
-              <View style={styles.rateInfo}>
-                <Text variant="body" style={styles.rateMaterial}>Metal (Iron)</Text>
-                <Numeric style={styles.ratePrice}>₹28/kg</Numeric>
+            {ratesLoading ? (
+              <ActivityIndicator size="small" color={colors.muted} style={{ marginVertical: 12 }} />
+            ) : rates.length > 0 ? rates.map(r => (
+              <View key={r.material_code} style={styles.rateCard}>
+                <View style={styles.rateInfo}>
+                  <Text variant="body" style={styles.rateMaterial}>{r.name}</Text>
+                  <Numeric style={styles.ratePrice}>₹{r.rate_per_kg}/kg</Numeric>
+                </View>
+                {r.trend === 'up' ? <CaretUp size={18} color={colors.teal} weight="bold" /> :
+                 r.trend === 'down' ? <CaretDown size={18} color={colors.red} weight="bold" /> :
+                 <Minus size={18} color={colors.muted} weight="bold" />}
               </View>
-              <CaretUp size={18} color={colors.teal} weight="bold" />
-            </View>
-
-            <View style={styles.rateCard}>
-              <View style={styles.rateInfo}>
-                <Text variant="body" style={styles.rateMaterial}>Paper</Text>
-                <Numeric style={styles.ratePrice}>₹12/kg</Numeric>
-              </View>
-              <Minus size={18} color={colors.muted} weight="bold" />
-            </View>
-
-            <View style={styles.rateCard}>
-              <View style={styles.rateInfo}>
-                <Text variant="body" style={styles.rateMaterial}>Plastic (PET)</Text>
-                <Numeric style={styles.ratePrice}>₹8/kg</Numeric>
-              </View>
-              <CaretDown size={18} color={colors.red} weight="bold" />
-            </View>
+            )) : (
+              <Text variant="caption" color={colors.muted} style={{ paddingVertical: 8 }}>Rates unavailable — check back soon.</Text>
+            )}
           </View>
         </View>
 
@@ -300,7 +285,7 @@ export default function SellerHomeScreen() {
 
       {/* ── Scrollable FlatList ── */}
       <Animated.FlatList
-        data={MOCK_ORDERS.filter(o => o.status !== 'completed')}
+        data={activeOrders}
         keyExtractor={(item) => item.orderId}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
@@ -318,8 +303,8 @@ export default function SellerHomeScreen() {
               orderId={item.orderId}
               status={item.status}
               materials={item.materials}
-              amountRupees={item.amountRupees}
-              date={item.date}
+              amountRupees={item.estimatedAmount}
+              date={new Date(item.createdAt).toDateString() === new Date().toDateString() ? 'Today' : new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             />
           </Pressable>
         )}

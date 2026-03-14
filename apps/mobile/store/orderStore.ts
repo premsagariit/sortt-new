@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api } from '../lib/api';
 
 export type OrderStatus =
   | 'created' | 'accepted' | 'en_route'
@@ -22,16 +23,41 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   aggregatorId: string | null;
-  otp: string; // Added for mock flow
+  otp: string;
+  // ── Extended fields from API (may be undefined for list views) ──
+  sellerId?: string;
+  sellerType?: string;
+  rating?: number;
+}
+
+// Maps API response shape → internal Order type
+function mapApiOrder(o: any): Order {
+  return {
+    orderId: o.id ?? o.orderId,
+    status: o.status,
+    materials: o.material_codes ?? o.materials ?? [],
+    estimatedAmount: o.estimated_value ?? o.estimatedAmount ?? 0,
+    confirmedAmount: o.confirmed_value ?? o.confirmedAmount ?? null,
+    pickupLocality: o.pickup_locality ?? o.pickupLocality ?? '',
+    pickupAddress: o.pickup_address ?? o.pickupAddress ?? null,
+    createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
+    updatedAt: o.updated_at ?? o.updatedAt ?? new Date().toISOString(),
+    aggregatorId: o.aggregator_id ?? o.aggregatorId ?? null,
+    otp: o.otp ?? '',
+    sellerId: o.seller_id,
+    sellerType: o.seller_type,
+    rating: o.rating,
+  };
 }
 
 interface OrderStoreState {
   orders: Order[];
   activeOrderId: string | null;
   isLoading: boolean;
+  error: string | null;
   rejectedOrderIds: string[];
 
-  // Actions
+  // ── Sync actions (used by aggregator flow / mock transition) ──
   setOrders: (orders: Order[]) => void;
   setActiveOrderId: (id: string | null) => void;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
@@ -39,56 +65,21 @@ interface OrderStoreState {
   addOrder: (order: Order) => void;
   setLoading: (v: boolean) => void;
   reset: () => void;
-}
 
-const INITIAL_ORDERS: Order[] = [
-  {
-    orderId: 'order-agg-001',
-    status: 'created',
-    materials: ['metal', 'paper'],
-    estimatedAmount: 850,
-    confirmedAmount: null,
-    pickupLocality: 'Banjara Hills',
-    pickupAddress: 'Road No. 12, Hyderabad',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    aggregatorId: null, // Visible in feed
-    otp: '1234',
-  },
-  {
-    orderId: 'order-agg-002',
-    status: 'accepted',
-    materials: ['plastic', 'ewaste'],
-    estimatedAmount: 320,
-    confirmedAmount: null,
-    pickupLocality: 'Kondapur',
-    pickupAddress: 'Block B, Kondapur',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    aggregatorId: 'user-agg-001', // Visible in Active tab
-    otp: '5678',
-  },
-  {
-    orderId: 'ORD-7777',
-    status: 'arrived',
-    materials: ['plastic', 'paper'],
-    estimatedAmount: 450,
-    confirmedAmount: null,
-    pickupLocality: 'Banjara Hills',
-    pickupAddress: 'Road No. 12, Hyderabad',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    aggregatorId: 'AGG-123',
-    otp: '1234',
-  }
-];
+  // ── Async API actions ──
+  fetchOrders: () => Promise<void>;
+  fetchOrder: (id: string) => Promise<void>;
+  cancelOrder: (id: string) => Promise<void>;
+  createOrder: (payload: Record<string, unknown>) => Promise<Order>;
+}
 
 export const useOrderStore = create<OrderStoreState>()(
   persist(
-    (set) => ({
-      orders: INITIAL_ORDERS,
+    (set, get) => ({
+      orders: [],
       activeOrderId: null,
       isLoading: false,
+      error: null,
       rejectedOrderIds: [],
 
       setOrders: (orders) => set({ orders }),
@@ -110,7 +101,57 @@ export const useOrderStore = create<OrderStoreState>()(
 
       setLoading: (v) => set({ isLoading: v }),
 
-      reset: () => set({ orders: INITIAL_ORDERS, activeOrderId: null, isLoading: false, rejectedOrderIds: [] }),
+      reset: () => set({ orders: [], activeOrderId: null, isLoading: false, error: null, rejectedOrderIds: [] }),
+
+      // ── Async: fetch seller's orders list ──
+      fetchOrders: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const res = await api.get('/api/orders');
+          const orders: Order[] = (res.data.orders ?? []).map(mapApiOrder);
+          set({ orders, isLoading: false });
+        } catch (e: any) {
+          set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+        }
+      },
+
+      // ── Async: fetch single order, merge into store ──
+      fetchOrder: async (id: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const res = await api.get(`/api/orders/${id}`);
+          const order = mapApiOrder(res.data);
+          set((state) => ({
+            orders: [...state.orders.filter(o => o.orderId !== order.orderId), order],
+            isLoading: false,
+          }));
+        } catch (e: any) {
+          set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load order', isLoading: false });
+        }
+      },
+
+      // ── Async: cancel an order (V35 — no status='completed' ever set from client) ──
+      cancelOrder: async (id: string) => {
+        try {
+          await api.delete(`/api/orders/${id}`);
+          set((state) => ({
+            orders: state.orders.map(o =>
+              o.orderId === id ? { ...o, status: 'cancelled', updatedAt: new Date().toISOString() } : o
+            ),
+          }));
+        } catch (e: any) {
+          set({ error: e.response?.data?.error ?? e.message ?? 'Failed to cancel order' });
+          throw e; // re-throw so screen can show feedback
+        }
+      },
+
+      // ── Async: create a new order ──
+      createOrder: async (payload: Record<string, unknown>) => {
+        const res = await api.post('/api/orders', payload);
+        const order = mapApiOrder(res.data.order);
+        set((state) => ({ orders: [order, ...state.orders] }));
+        return order;
+      },
     }),
     {
       name: 'sortt-order-storage',

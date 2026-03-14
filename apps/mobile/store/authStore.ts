@@ -19,6 +19,7 @@
  */
 
 import { create } from 'zustand';
+import { api } from '../lib/api';
 
 // ── Global Clerk Hooks ────────────────────────────────────────────
 let globalClerkSignOut: (() => Promise<void>) | null = null;
@@ -73,25 +74,31 @@ interface AuthState {
    * Invokes the injected clerk.signOut() to invalidate the JWT.
    */
   signOut: () => Promise<void>;
+
+  // ── API actions ──
+  /** True once fetchMe has successfully populated profile data */
+  meLoaded: boolean;
+  /** Fetch current user profile from GET /api/users/me. Never stores phone_hash or clerk_user_id (V7, V24) */
+  fetchMe: () => Promise<void>;
 }
 
 const initialState: Pick<AuthState,
   'phoneNumber' | 'isLoading' | 'session' | 'userId' | 'userType' |
-  'accountType' | 'name' | 'locality' | 'city'
+  'accountType' | 'name' | 'locality' | 'city' | 'meLoaded'
 > = {
   phoneNumber: '',
   isLoading: false,
   session: null,
-  userId: null,       // Set after auth — Day 7 populates from Clerk session
-  userType: null,     // Set on user-type screen — null until user makes a choice
+  userId: null,
+  userType: null,
   accountType: null,
   name: '',
   locality: '',
   city: '',
+  meLoaded: false,
 };
-
 // ─── Store ────────────────────────────────────────────────────────
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   ...initialState,
 
   setPhoneNumber: (phone) => set({ phoneNumber: phone }),
@@ -114,6 +121,27 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     }
     set(initialState);
+  },
+
+  // ── GET /api/users/me — never reads phone_hash or clerk_user_id (V7, V24) ──
+  fetchMe: async () => {
+    if (get().meLoaded) return; // already hydrated this session
+    try {
+      const res = await api.get('/api/users/me');
+      const u = res.data;
+      set({
+        userId: u.id ?? null,
+        userType: u.user_type ?? null,
+        name: u.name ?? '',
+        locality: u.locality ?? '',
+        city: u.city ?? '',
+        meLoaded: true,
+        // Explicitly NOT setting phone_hash or clerk_user_id (V7, V24)
+      });
+    } catch (e: any) {
+      // Non-fatal: screen will fall back to whatever is already in store
+      console.warn('[authStore] fetchMe failed:', e?.response?.data?.error ?? e.message);
+    }
   },
 
   requestOtp: async (phone: string) => {

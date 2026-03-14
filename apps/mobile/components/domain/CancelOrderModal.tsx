@@ -46,7 +46,7 @@ export function CancelOrderModal({ orderId, onClose, onConfirm }: CancelOrderMod
                         disabled={!cancelReason}
                         onPress={() => {
                             if (orderId && cancelReason) {
-                                cancelOrder(orderId, cancelReason);
+                                cancelOrder(orderId);
                                 if (onConfirm) onConfirm(cancelReason);
                                 onClose();
                             }

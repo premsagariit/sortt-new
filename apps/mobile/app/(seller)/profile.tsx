@@ -8,6 +8,7 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { useOrderStore } from '../../store/orderStore';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 
 // Mock data directly in component file per requirements
@@ -69,17 +70,31 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProp
 export default function SellerProfileScreen() {
   const router = useRouter();
   const authStore = useAuthStore();
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+  const orders = useOrderStore((s) => s.orders);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isBusinessMode, setIsBusinessMode] = useState(false);
-
   const [heroHeight, setHeroHeight] = useState(300);
 
+  // Fetch on mount (idempotent — skips if meLoaded)
+  useEffect(() => { fetchMe(); }, []);
 
-  // Do NOT replace this with a hardcoded measured value.
+  const profileData = isBusinessMode ? BUSINESS_DATA : INDIVIDUAL_DATA;
+
+  // Use live store values with fallbacks to existing mock constants
+  const liveName = authStore.name || profileData.name;
+  const liveLocality = authStore.locality || INDIVIDUAL_DATA.location;
+  const liveCity = authStore.city || '';
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const userType = authStore.session?.userType || 'seller';
-  const profileData = isBusinessMode ? BUSINESS_DATA : INDIVIDUAL_DATA;
+
+  // Computed stats from orderStore
+  const totalEarned = useOrderStore.getState().orders
+    .filter(o => o.status === 'completed')
+    .reduce((acc, o) => acc + (o.confirmedAmount ?? o.estimatedAmount), 0);
+  const totalOrders = orders.length;
+
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, heroHeight - 80],

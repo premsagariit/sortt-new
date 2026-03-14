@@ -13,8 +13,8 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useRef, useMemo } from 'react';
-import { StyleSheet, View, Pressable, Animated } from 'react-native';
+import React, { useRef, useMemo, useEffect } from 'react';
+import { StyleSheet, View, Pressable, Animated, AppState, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -27,6 +27,7 @@ import { SorttLogo } from '../../components/ui/SorttLogo';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAggregatorStore, NewOrderRequest } from '../../store/aggregatorStore';
 import type { MaterialCode } from '../../components/ui/MaterialChip';
+import { api } from '../../lib/api';
 
 // ── Note: Feed is now sourced from aggregatorStore.newOrders ────────
 
@@ -66,12 +67,64 @@ export default function AggregatorHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { isOnline, setOnline, earnings, businessName, primaryArea } = useAggregatorStore();
+  const { isOnline, setOnline, earnings, businessName, primaryArea, fetchFeed, error } = useAggregatorStore();
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
   const displayName = businessName || MOCK_AGG_NAME;
   const displayArea = primaryArea || MOCK_AGG_AREA;
   const displayAreaShort = primaryArea ? primaryArea.split(',')[0]?.trim() || primaryArea : MOCK_AGG_AREA_SHORT;
+
+  const [screenState, setScreenState] = React.useState<'loading' | 'error' | 'empty' | 'populated'>('loading');
+  const [liveRates, setLiveRates] = React.useState<Record<string, number> | null>(null);
+
+  // ── Heartbeat ──────────────────────────────────────────────
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const sendHeartbeat = () => {
+    api.post('/api/aggregators/heartbeat', { is_online: true }).catch(() => {});
+  };
+
+  const startHeartbeat = () => {
+    sendHeartbeat(); // immediate ping
+    intervalRef.current = setInterval(sendHeartbeat, 120_000);
+  };
+  const stopHeartbeat = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    api.post('/api/aggregators/heartbeat', { is_online: false }).catch(() => {});
+  };
+
+  useEffect(() => {
+    startHeartbeat();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'background' || state === 'inactive') stopHeartbeat();
+    });
+    return () => { stopHeartbeat(); sub.remove(); };
+  }, []);
+
+  const handleToggle = async () => {
+    if (isOnline) {
+      stopHeartbeat();
+      setOnline(false);
+    } else {
+      setOnline(true);
+      startHeartbeat(); // this sends immediate ping + starts new interval
+    }
+  };
+
+  // ── Data Fetching ───────────────────────────────────────────
+  const loadData = () => {
+    setScreenState('loading');
+    Promise.all([
+      fetchFeed(),
+      api.get<{ rates: Record<string, number> }>('/api/rates').then(res => setLiveRates(res.data.rates)).catch()
+    ]).then(() => {
+      setScreenState('populated');
+    });
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [fetchFeed]);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -162,7 +215,6 @@ export default function AggregatorHomeScreen() {
   const handleNotifications = () => router.push('/(shared)/notifications' as any);
 
   // ── Screen State ──────────────────────────────────────────────────
-  const [screenState, setScreenState] = React.useState<'loading' | 'empty' | 'populated'>('populated');
   // Use newOrders from store so Dismiss causes immediate re-render
   const activeFeed = useAggregatorStore((s) => s.newOrders);
 
@@ -181,7 +233,7 @@ export default function AggregatorHomeScreen() {
             </View>
             <Pressable
               style={[styles.onlinePill, isOnline ? styles.onlinePillActive : styles.onlinePillInactive]}
-              onPress={() => setOnline(!isOnline)}
+              onPress={handleToggle}
             >
               <View style={[styles.onlineDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
               <Text variant="caption" style={[styles.onlineText, { color: isOnline ? colors.statusOnline : colors.muted }]}>
@@ -246,7 +298,11 @@ export default function AggregatorHomeScreen() {
               <View style={styles.rateInfo}>
                 <Text variant="body" style={styles.rateMaterial}>{rate.label}</Text>
                 <View style={styles.rateRight}>
-                  <Numeric style={styles.ratePrice}>{rate.rateDisplay}</Numeric>
+                  {liveRates ? (
+                    <Numeric style={styles.ratePrice}>₹{liveRates[rate.code]}/kg</Numeric>
+                  ) : (
+                    <Numeric style={styles.ratePrice}>{rate.rateDisplay}</Numeric>
+                  )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                     {rate.trend === 'up' && <CaretUp size={10} color={colors.teal} weight="bold" />}
                     {rate.trend === 'down' && <CaretDown size={10} color={colors.red} weight="bold" />}
@@ -319,12 +375,24 @@ export default function AggregatorHomeScreen() {
 
       {/* ── FlatList with screenState management ── */}
       {screenState === 'loading' ? (
-        <View style={styles.listContentPad}>
-          <Text variant="caption">Loading nearby orders...</Text>
+        <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
+          <ActivityIndicator size="large" color={colors.navy} />
+          <Text variant="caption" style={{ marginTop: 12 }}>Loading nearby orders...</Text>
+        </View>
+      ) : screenState === 'error' ? (
+        <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
+          <View style={{ padding: 16, backgroundColor: colorExtended.redLight, borderRadius: 8, borderColor: colors.red, borderWidth: 1, width: '100%' }}>
+            <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
+              Failed to load feed
+            </Text>
+            <Pressable onPress={loadData} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
+              <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <Animated.FlatList
-          data={screenState === 'empty' ? [] : activeFeed}
+          data={activeFeed.length === 0 ? [] : activeFeed}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={renderHeader}

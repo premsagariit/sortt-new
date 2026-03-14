@@ -19,6 +19,7 @@ import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore } from '../../store/authStore';
+import { useAggregatorStore } from '../../store/aggregatorStore';
 
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
@@ -31,7 +32,7 @@ export default function AggregatorEditProfileScreen() {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const trimmedName = newName.trim();
         const trimmedLocality = newLocality.trim();
 
@@ -53,13 +54,19 @@ export default function AggregatorEditProfileScreen() {
         setIsSaving(true);
         setError(null);
 
-        // Simulate small delay for UX feedback
-        setTimeout(() => {
+        try {
+            await useAggregatorStore.getState().updateProfile({
+                business_name: trimmedName,
+                operating_area: trimmedLocality,
+            });
             setName(trimmedName);
             setLocality(trimmedLocality);
             setIsSaving(false);
             router.back();
-        }, 600);
+        } catch (err: any) {
+            setIsSaving(false);
+            setError(err.message || 'Failed to update profile');
+        }
     };
 
     return (

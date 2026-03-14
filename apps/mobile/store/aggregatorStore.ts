@@ -1,7 +1,8 @@
-// Scaffold — backend wired on Day 4 per @PLAN.md
-// No backend API calls here. All actions are local state only.
+// Wired to live API on Day 11.
+// Zustand store for aggregator-specific runtime state.
 import { create } from 'zustand';
 import type { MaterialCode } from '../components/ui/MaterialChip';
+import { api } from '../lib/api';
 
 export interface NearbyOrder {
   orderId: string;
@@ -64,12 +65,15 @@ interface AggregatorStoreState {
 
   // ── Runtime State ──────────────────────────────────────────────
   nearbyOrders: NearbyOrder[];
-  newOrders: NewOrderRequest[];       // Incoming requests (New tab)
-  activeOrders: string[];             // Accepted order IDs
-  dismissedOrderIds: string[];        // Dismissed from home feed (no-op dismissals)
+  newOrders: NewOrderRequest[];       // Incoming requests (New tab, from live feed)
+  aggOrders: any[];                   // Accepted orders for Active/Completed/Cancelled tabs
+  activeOrders: string[];             // Accepted order IDs (legacy compat)
+  dismissedOrderIds: string[];
   earnings: AggregatorEarnings;
   isOnline: boolean;
   isLoading: boolean;
+  feedError: string | null;
+  error: string | null;
 
   // ── Photo Capture State ────────────────────────────────────────
   scalePhotoUri: string | null;
@@ -79,7 +83,7 @@ interface AggregatorStoreState {
   kycShopPhotoUri: string | null;
   kycVehiclePhotoUri: string | null;
 
-  // ── Actions ────────────────────────────────────────────────────
+  // ── Sync Actions ───────────────────────────────────────────────
   setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'aggregatorType' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
   setOperatingAreas: (areas: string[]) => void;
   setMaterialSelected: (id: string, selected: boolean) => void;
@@ -89,17 +93,12 @@ interface AggregatorStoreState {
   setOnline: (v: boolean) => void;
   setLoading: (v: boolean) => void;
 
-  /** Home feed: Dismiss (no detail view) — removes from home only */
   dismissOrder: (orderId: string) => void;
-
-  /** New tab: Reject without accepting — removes from newOrders, NOT added to cancelled */
   dismissNewOrder: (orderId: string) => void;
-
-  /** New tab: Accept — moves to Active, creates order in orderStore */
   acceptNewOrder: (orderId: string) => void;
 
-  /** Active tab: Cancel — moves to Cancelled in orderStore */
-  cancelOrder: (orderId: string, reason: string) => void;
+  /** Active tab: Cancel — calls orderStore, moves to cancelled */
+  cancelOrder: (orderId: string) => void;
 
   /** Legacy: Used by order-detail.tsx Accept button */
   acceptOrder: (orderId: string) => void;
@@ -111,6 +110,16 @@ interface AggregatorStoreState {
   setKycShopPhotoUri: (uri: string | null) => void;
   setKycVehiclePhotoUri: (uri: string | null) => void;
   reset: () => void;
+
+  // ── Async API Actions ──────────────────────────────────────────
+  /** GET /api/orders/feed — populates newOrders (locality only, V25) */
+  fetchFeed: () => Promise<void>;
+  /** GET /api/orders?role=aggregator — populates aggOrders for Active/Completed/Cancelled tabs */
+  fetchAggregatorOrders: () => Promise<void>;
+  /** PATCH /api/aggregators/profile — updates business_name, operating_area */
+  updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: string }) => Promise<void>;
+  /** PATCH /api/aggregators/rates — updates material rates */
+  updateRates: (rates: { material_code: string; rate_per_kg: number }[]) => Promise<void>;
 }
 
 const initialMaterials: MaterialConfig[] = [
@@ -122,36 +131,6 @@ const initialMaterials: MaterialConfig[] = [
   { id: 'glass', name: 'Glass', selected: false, ratePerKg: 5, avgRateHint: 5, bgToken: 'glassBg' },
 ];
 
-// Seed — guarantees ≥1 card in New tab every rebuild
-const SEED_NEW_ORDERS: NewOrderRequest[] = [
-  {
-    id: 'NEW-001',
-    locality: 'Banjara Hills area',
-    distanceKm: 1.4,
-    materials: ['metal', 'paper'],
-    estimatedKg: 22,
-    postedMinutesAgo: 8,
-    estimatedPrice: 896,
-    sellerType: 'Industry seller',
-    rating: 4.9,
-    isHighValue: true,
-    window: 'Today · 10 AM — 12 PM',
-  },
-  {
-    id: 'NEW-002',
-    locality: 'Jubilee Hills area',
-    distanceKm: 2.1,
-    materials: ['plastic', 'glass'],
-    estimatedKg: 8,
-    postedMinutesAgo: 22,
-    estimatedPrice: 320,
-    sellerType: 'Residential seller',
-    rating: 4.7,
-    isHighValue: false,
-    window: 'Today · 2 PM — 4 PM',
-  },
-];
-
 const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
   { day: 'Monday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
   { day: 'Tuesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
@@ -161,6 +140,25 @@ const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
   { day: 'Saturday', isOpen: true, start: '10:00 AM', end: '04:00 PM' },
   { day: 'Sunday', isOpen: false, start: '10:00 AM', end: '02:00 PM' },
 ];
+
+// Maps feed API order → NewOrderRequest (V25: never includes pickup_address)
+function mapFeedOrder(o: any): NewOrderRequest {
+  const createdAt = o.created_at ? new Date(o.created_at) : new Date();
+  const postedMinutesAgo = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+  return {
+    id: o.id,
+    locality: o.pickup_locality ?? 'Unknown area',    // V25: only locality, never full address
+    distanceKm: o.distance_km ?? 0,
+    materials: (o.material_codes ?? []) as MaterialCode[],
+    estimatedKg: o.estimated_weight_kg ?? 0,
+    postedMinutesAgo,
+    estimatedPrice: o.estimated_value ?? 0,
+    sellerType: o.seller_type ?? 'Seller',
+    rating: o.seller_rating ?? 4.5,
+    isHighValue: (o.estimated_value ?? 0) > 500,
+    window: o.preferred_pickup_window ?? 'Flexible',
+  };
+}
 
 export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   fullName: '',
@@ -174,12 +172,15 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   materials: initialMaterials,
 
   nearbyOrders: [],
-  newOrders: SEED_NEW_ORDERS,
+  newOrders: [],           // Populated via fetchFeed (no seed data)
+  aggOrders: [],           // Populated via fetchAggregatorOrders
   activeOrders: [],
   dismissedOrderIds: [],
   earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
   isOnline: false,
   isLoading: false,
+  feedError: null,
+  error: null,
   scalePhotoUri: null,
   kycAadhaarFrontUri: null,
   kycAadhaarBackUri: null,
@@ -222,8 +223,8 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
       pickupAddress: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      aggregatorId: 'user-agg-001',
-      otp: Math.floor(1000 + Math.random() * 9000).toString(),
+      aggregatorId: 'self',
+      otp: '',
     });
     return {
       newOrders: state.newOrders.filter(o => o.id !== orderId),
@@ -231,7 +232,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     };
   }),
 
-  cancelOrder: (orderId, _reason) => set((state) => {
+  cancelOrder: (orderId) => set((state) => {
     const { useOrderStore } = require('./orderStore');
     useOrderStore.getState().updateOrderStatus(orderId, 'cancelled');
     return {
@@ -262,9 +263,65 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     weeklySchedule: WEEKLY_SCHEDULE_DEFAULT,
     operatingAreas: [],
     materials: initialMaterials,
-    nearbyOrders: [], newOrders: SEED_NEW_ORDERS, activeOrders: [], dismissedOrderIds: [],
+    nearbyOrders: [], newOrders: [], aggOrders: [], activeOrders: [], dismissedOrderIds: [],
     earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
-    isOnline: false, isLoading: false,
-    scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null, kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
+    isOnline: false, isLoading: false, feedError: null, error: null,
+    scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
+    kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
   }),
+
+  // ── Async: GET /api/orders/feed ────────────────────────────────
+  fetchFeed: async () => {
+    set({ isLoading: true, feedError: null });
+    try {
+      const res = await api.get('/api/orders/feed');
+      const orders = (res.data.orders ?? []).map(mapFeedOrder);
+      set({ newOrders: orders, isLoading: false });
+    } catch (e: any) {
+      set({ feedError: e.response?.data?.error ?? e.message ?? 'Failed to load feed', isLoading: false });
+    }
+  },
+
+  // ── Async: GET /api/orders?role=aggregator ─────────────────────
+  fetchAggregatorOrders: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await api.get('/api/orders', { params: { role: 'aggregator' } });
+      set({ aggOrders: res.data.orders ?? [], isLoading: false });
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+    }
+  },
+
+  // ── Async: PATCH /api/aggregators/profile ─────────────────────
+  // NOTE: fields match backend contract exactly (not name/locality — V35 guard)
+  updateProfile: async (payload) => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.patch('/api/aggregators/profile', payload);
+      // Reflect business_name in local state if provided
+      if (payload.business_name !== undefined) {
+        set({ businessName: payload.business_name });
+      }
+      if (payload.operating_area !== undefined) {
+        set({ primaryArea: payload.operating_area });
+      }
+      set({ isLoading: false });
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to save profile', isLoading: false });
+      throw e;
+    }
+  },
+
+  // ── Async: PATCH /api/aggregators/rates ─────────────────────────
+  updateRates: async (rates) => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.patch('/api/aggregators/rates', { rates });
+      set({ isLoading: false });
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to update rates', isLoading: false });
+      throw e;
+    }
+  },
 }));

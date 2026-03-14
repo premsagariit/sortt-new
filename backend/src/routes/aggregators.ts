@@ -121,13 +121,15 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 // Heartbeat — upserts aggregator online status (called every ~2 min from mobile foreground)
 router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
+    // Accept optional is_online from body — defaults to true for backward compatibility
+    const isOnline = req.body?.is_online !== undefined ? Boolean(req.body.is_online) : true;
     try {
         await query(`
             INSERT INTO aggregator_availability (user_id, is_online, last_ping_at)
-            VALUES ($1, true, NOW())
+            VALUES ($1, $2, NOW())
             ON CONFLICT (user_id) DO UPDATE
-                SET is_online = true, last_ping_at = NOW()
-        `, [userId]);
+                SET is_online = $2, last_ping_at = NOW()
+        `, [userId, isOnline]);
         return res.json({ success: true });
     } catch (e: any) {
         console.error('Heartbeat error:', e);

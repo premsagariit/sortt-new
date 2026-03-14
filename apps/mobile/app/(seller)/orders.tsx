@@ -1,74 +1,87 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text } from '../../components/ui/Typography';
 import { OrderCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { ClipboardText, CaretRight } from 'phosphor-react-native';
-
-const MOCK_SELLER_ORDERS = [
-  {
-    orderId: 'ORD-2841', status: 'en_route' as OrderStatus, materials: ['paper', 'metal'] as MaterialCode[],
-    amount: 380, aggregator: 'Suresh Metals & More', date: 'Today, 11:02 AM'
-  },
-  {
-    orderId: 'ORD-2809', status: 'completed' as OrderStatus, materials: ['plastic'] as MaterialCode[],
-    amount: 210, aggregator: 'Raju Scrap Works', date: '25 Feb 2026'
-  },
-  {
-    orderId: 'ORD-2790', status: 'completed' as OrderStatus, materials: ['ewaste'] as MaterialCode[],
-    amount: 990, aggregator: 'Suresh Metals & More', date: '22 Feb 2026'
-  },
-  {
-    orderId: 'ORD-2751', status: 'cancelled' as OrderStatus, materials: ['fabric', 'paper'] as MaterialCode[],
-    amount: 0, aggregator: '—', date: '18 Feb 2026'
-  },
-  {
-    orderId: 'ORD-2730', status: 'completed' as OrderStatus, materials: ['metal', 'glass'] as MaterialCode[],
-    amount: 640, aggregator: 'Raju Scrap Works', date: '14 Feb 2026'
-  },
-  {
-    orderId: 'ORD-7777', status: 'arrived' as OrderStatus, materials: ['paper', 'plastic'] as MaterialCode[],
-    amount: 280, aggregator: 'Suresh Metals & More', date: 'Today, 3:30 PM'
-  },
-];
+import { ClipboardText, CaretRight, WarningCircle, ArrowClockwise } from 'phosphor-react-native';
+import { useOrderStore } from '../../store/orderStore';
 
 const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
 type FilterType = typeof FILTERS[number];
+
+const ACTIVE_STATUSES: OrderStatus[] = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'];
+
+// Simple animated skeleton row
+function SkeletonRow() {
+  return (
+    <View style={styles.skeletonRow}>
+      <View style={[styles.skeletonBlock, { width: 80, height: 14, marginBottom: 8 }]} />
+      <View style={[styles.skeletonBlock, { width: '60%', height: 12 }]} />
+    </View>
+  );
+}
 
 export default function SellerOrdersScreen() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<FilterType>('Active');
   const { tab } = useLocalSearchParams();
 
+  const orders = useOrderStore((s) => s.orders);
+  const isLoading = useOrderStore((s) => s.isLoading);
+  const error = useOrderStore((s) => s.error);
+  const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  const cancelOrder = useOrderStore((s) => s.cancelOrder);
+
+  // Deep-link: open to a specific tab via ?tab=Completed etc.
   useEffect(() => {
     if (tab && FILTERS.includes(tab as FilterType)) {
       setActiveFilter(tab as FilterType);
     }
   }, [tab]);
 
-  // Derive filtered list
-  const displayOrders = MOCK_SELLER_ORDERS.filter(order => {
+  // Fetch on mount
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const handleRetry = useCallback(() => { fetchOrders(); }, [fetchOrders]);
+
+  const handleCancel = useCallback(async (orderId: string) => {
+    try {
+      await cancelOrder(orderId);
+    } catch {
+      // error already set in store; UI will surface it
+    }
+  }, [cancelOrder]);
+
+  // Filter client-side from store
+  const displayOrders = orders.filter(order => {
     if (activeFilter === 'All') return true;
-    if (activeFilter === 'Active') return ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
+    if (activeFilter === 'Active') return ACTIVE_STATUSES.includes(order.status);
     if (activeFilter === 'Completed') return order.status === 'completed';
     if (activeFilter === 'Cancelled') return order.status === 'cancelled';
     return true;
   });
 
-  // Check if any order is active for the banner
-  const hasActiveOrder = MOCK_SELLER_ORDERS.some(o => o.status === 'en_route' || o.status === 'accepted');
+  const hasActiveOrder = orders.some(o => ACTIVE_STATUSES.includes(o.status));
+  const firstActive = orders.find(o => ACTIVE_STATUSES.includes(o.status));
+
+  // Format date string from ISO
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <NavBar
-        variant="light"
-        title="My Orders"
-      />
+      <NavBar variant="light" title="My Orders" />
 
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
@@ -100,16 +113,11 @@ export default function SellerOrdersScreen() {
         </ScrollView>
       </View>
 
-      {/* Active Banner */}
-      {hasActiveOrder && (
+      {/* Active Order Banner */}
+      {hasActiveOrder && firstActive && (
         <Pressable
           style={styles.activeBanner}
-          onPress={() => {
-            const firstActive = MOCK_SELLER_ORDERS.find(o => ['en_route', 'accepted', 'arrived', 'weighing_in_progress'].includes(o.status));
-            if (firstActive) {
-              router.push(`/(shared)/order/${firstActive.orderId}` as any);
-            }
-          }}
+          onPress={() => router.push(`/(shared)/order/${firstActive.orderId}` as any)}
           accessible
           accessibilityRole="button"
           accessibilityLabel="Track active order"
@@ -126,15 +134,38 @@ export default function SellerOrdersScreen() {
         </Pressable>
       )}
 
+      {/* Error Banner with Retry */}
+      {error && !isLoading && (
+        <Pressable
+          style={styles.errorBanner}
+          onPress={handleRetry}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading orders"
+        >
+          <WarningCircle size={16} color={colors.red} />
+          <Text variant="caption" style={styles.errorText as any}>
+            {error}
+          </Text>
+          <ArrowClockwise size={16} color={colors.red} />
+        </Pressable>
+      )}
+
       {/* Order List */}
       <ScrollView
         style={styles.listContainer}
         contentContainerStyle={[
           styles.listContent,
-          displayOrders.length === 0 && styles.listEmpty
+          !isLoading && displayOrders.length === 0 && styles.listEmpty,
         ]}
       >
-        {displayOrders.length > 0 ? (
+        {isLoading ? (
+          // Skeleton loading state — 3 rows
+          <>
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </>
+        ) : displayOrders.length > 0 ? (
           displayOrders.map(order => (
             <Pressable
               key={order.orderId}
@@ -147,17 +178,20 @@ export default function SellerOrdersScreen() {
                 orderId={order.orderId}
                 status={order.status}
                 materials={order.materials}
-                amountRupees={order.amount}
-                aggregator={order.aggregator}
-                date={order.date}
+                amountRupees={order.estimatedAmount}
+                aggregator="—"
+                date={formatDate(order.createdAt)}
               />
             </Pressable>
           ))
         ) : (
           <EmptyState
             icon={<ClipboardText size={48} color={colors.border} weight="thin" />}
-            heading="No orders yet"
-            body="Your pickup history will appear here."
+            heading={activeFilter === 'All' ? 'No orders yet' : `No ${activeFilter.toLowerCase()} orders`}
+            body={activeFilter === 'All'
+              ? 'Your pickup history will appear here.'
+              : `You have no ${activeFilter.toLowerCase()} pickups right now.`
+            }
           />
         )}
       </ScrollView>
@@ -174,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    height: 56, // Fixed height for the filter strip
+    height: 56,
   },
   filterScroll: {
     paddingHorizontal: spacing.md,
@@ -182,7 +216,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    height: 48,  // Fix 6: removed height:32 — was confusingly coexisting with minHeight:48
+    height: 48,
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: colors.surface,
@@ -205,7 +239,8 @@ const styles = StyleSheet.create({
   activeBanner: {
     borderRadius: 12,
     marginTop: 8,
-    backgroundColor: colorExtended.amberLight, // Fix 6: was '#FEF9EC' (hardcoded hex — MEMORY.md §2 violation)
+    marginHorizontal: spacing.md,
+    backgroundColor: colorExtended.amberLight,
     borderLeftWidth: 3,
     borderLeftColor: colors.amber,
     paddingHorizontal: spacing.md,
@@ -214,6 +249,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     minHeight: 48,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    backgroundColor: colors.redLight,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.red,
+  },
+  errorText: {
+    flex: 1,
+    color: colors.red,
+  },
+  skeletonRow: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  skeletonBlock: {
+    backgroundColor: colors.border,
+    borderRadius: 4,
   },
   listContainer: {
     flex: 1,

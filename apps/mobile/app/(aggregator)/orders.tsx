@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { colors, spacing, radius } from '../../constants/tokens';
+import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialChip } from '../../components/ui/MaterialChip';
@@ -13,72 +13,24 @@ import { useOrderStore } from '../../store/orderStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 
-/**
- * app/(aggregator)/orders.tsx
- * ──────────────────────────────────────────────────────────────────
- * Aggregator Order Feed Screen.
- *
- * Features:
- * - 4-tab layout: New | Active | Completed | Cancelled
- * - New tab: incoming requests — Accept moves to Active, Reject disappears (not Cancelled)
- * - Active tab: accepted orders — Cancel moves to Cancelled
- * - Completed & Cancelled tabs: historical
- * - At least 1 seed order per tab on every rebuild
- * ──────────────────────────────────────────────────────────────────
- */
-
 type TabType = 'new' | 'active' | 'completed' | 'cancelled';
-
-// Seed data for Active, Completed, Cancelled tabs
-const SEED_ACTIVE_ORDERS = [
-  {
-    id: 'ACTIVE-001',
-    distance: '1.4 km',
-    price: 620,
-    locality: 'Madhapur area',
-    window: 'Today · 10 AM — 12 PM',
-    materials: ['paper', 'plastic'] as MaterialCode[],
-    sellerType: 'Shop seller',
-    rating: 4.8,
-    status: 'en_route' as OrderStatus,
-  },
-];
-
-const SEED_COMPLETED_ORDERS = [
-  {
-    id: 'COMP-001',
-    distance: '2.1 km',
-    price: 1250,
-    locality: 'Gachibowli area',
-    window: 'Yesterday · 11 AM',
-    materials: ['metal', 'ewaste'] as MaterialCode[],
-    sellerType: 'Industry seller',
-    rating: 5.0,
-    status: 'completed' as OrderStatus,
-  },
-];
-
-const SEED_CANCELLED_ORDERS = [
-  {
-    id: 'CAN-001',
-    distance: '3.2 km',
-    price: 580,
-    locality: 'Kukatpally area',
-    window: '2 days ago',
-    materials: ['plastic', 'glass'] as MaterialCode[],
-    sellerType: 'Shop seller',
-    rating: 4.2,
-    status: 'cancelled' as OrderStatus,
-  },
-];
 
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
-  const { orders } = useOrderStore();
-  const { newOrders, dismissNewOrder, acceptNewOrder, cancelOrder } = useAggregatorStore();
+  const { newOrders, aggOrders, dismissNewOrder, acceptNewOrder, cancelOrder, fetchAggregatorOrders, error } = useAggregatorStore();
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadOrders = () => {
+    setIsLoading(true);
+    fetchAggregatorOrders().finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, [fetchAggregatorOrders]);
 
   const getMaterialKey = (m: string | null) => m ? m.toLowerCase().replace('-', '') : null;
   const matKey = getMaterialKey(selectedMaterial);
@@ -88,19 +40,14 @@ export default function AggregatorOrdersScreen() {
     o => !matKey || o.materials.includes(matKey as any)
   );
 
-  // ── Active, completed, cancelled (from order store + seeds) ────
-  const storeActiveOrders = orders.filter(o =>
+  // ── Active, completed, cancelled (from order store aggOrders) ────
+  const activeOrders = (aggOrders || []).filter((o: any) =>
     ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) &&
     (!matKey || o.materials?.includes(matKey as any))
   ).map(mapStoreOrder);
 
-  const storeCompletedOrders = orders.filter(o => o.status === 'completed').map(mapStoreOrder);
-  const storeCancelledOrders = orders.filter(o => o.status === 'cancelled').map(mapStoreOrder);
-
-  // Merge seed + store data (store data takes priority, seed fills gaps)
-  const activeOrders = storeActiveOrders.length > 0 ? storeActiveOrders : SEED_ACTIVE_ORDERS;
-  const completedOrders = storeCompletedOrders.length > 0 ? storeCompletedOrders : SEED_COMPLETED_ORDERS;
-  const cancelledOrders = storeCancelledOrders.length > 0 ? storeCancelledOrders : SEED_CANCELLED_ORDERS;
+  const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').map(mapStoreOrder);
+  const cancelledOrders = (aggOrders || []).filter((o: any) => o.status === 'cancelled').map(mapStoreOrder);
 
   function mapStoreOrder(o: any) {
     return {
@@ -257,7 +204,7 @@ export default function AggregatorOrdersScreen() {
   );
 
   // ── Active/Completed/Cancelled order card ──────────────────────
-  const renderOrderCard = (order: ReturnType<typeof mapStoreOrder> | typeof SEED_ACTIVE_ORDERS[0]) => {
+  const renderOrderCard = (order: ReturnType<typeof mapStoreOrder>) => {
     const isActive = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
     const isHistorical = order.status === 'completed' || order.status === 'cancelled';
 
@@ -376,7 +323,22 @@ export default function AggregatorOrdersScreen() {
       {renderFilters()}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {activeTab === 'new' ? (
+        {error && (
+          <View style={{ padding: 16, backgroundColor: colorExtended.redLight, borderRadius: 8, borderColor: colors.red, borderWidth: 1, marginBottom: 16 }}>
+            <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
+              {error}
+            </Text>
+            <Pressable onPress={loadOrders} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
+              <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+        {isLoading ? (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <ActivityIndicator size="large" color={colors.navy} />
+            <Text variant="caption" style={{ marginTop: 12 }}>Loading orders...</Text>
+          </View>
+        ) : activeTab === 'new' ? (
           filteredNewOrders.length > 0
             ? filteredNewOrders.map(renderNewOrderCard)
             : renderEmptyState('No new order requests')
@@ -401,7 +363,7 @@ export default function AggregatorOrdersScreen() {
           orderId={cancelOrderId}
           onClose={() => setCancelOrderId(null)}
           onConfirm={(reason: string) => {
-            cancelOrder(cancelOrderId, reason);
+            cancelOrder(cancelOrderId);
             setCancelOrderId(null);
             setActiveTab('cancelled');
           }}

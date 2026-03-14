@@ -4,8 +4,8 @@
  * Seller Browse Screen (S30) — Nearby Aggregators
  * ──────────────────────────────────────────────────────────────────
  */
-import React, { useState } from 'react';
-import { StyleSheet, View, FlatList, Pressable, ScrollView, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, FlatList, Pressable, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MagnifyingGlass, Star, X } from 'phosphor-react-native';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -13,6 +13,7 @@ import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MaterialCode } from '../../components/ui/Card';
+import { api } from '../../lib/api';
 
 // ── Mock Data ──────────────────────────────────────────────────────
 
@@ -86,6 +87,25 @@ export default function SellerBrowseScreen() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('All (14)');
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveRates, setLiveRates] = useState<Record<string, number> | null>(null);
+  const [isLoadingRates, setIsLoadingRates] = useState(true);
+
+  useEffect(() => {
+    api.get<{ rates: Record<string, number> }>('/api/rates')
+      .then((res: any) => {
+        setLiveRates(res.data.rates);
+        setIsLoadingRates(false);
+      })
+      .catch((err: any) => {
+        console.error('Failed to fetch rates', err);
+        setIsLoadingRates(false);
+      });
+  }, []);
+
+  const getRateKey = (label: string) => {
+    if (label === 'E-Waste') return 'ewaste';
+    return label.toLowerCase();
+  };
 
   const renderHeader = () => (
     <View>
@@ -185,7 +205,18 @@ export default function SellerBrowseScreen() {
         </View>
         <View style={styles.bestRateContainer}>
           <Text variant="caption" style={styles.bestRateLabel}>Best rate: {item.bestRateMaterial}</Text>
-          <Numeric style={styles.bestRateValue}>{item.bestRate}</Numeric>
+          {isLoadingRates ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ActivityIndicator size="small" color={colors.amber} />
+              <Text variant="caption" style={styles.bestRateValue}>Loading...</Text>
+            </View>
+          ) : (
+            <Numeric style={styles.bestRateValue}>
+              {liveRates && liveRates[getRateKey(item.bestRateMaterial)] 
+                ? `₹${liveRates[getRateKey(item.bestRateMaterial)]}/kg` 
+                : item.bestRate}
+            </Numeric>
+          )}
         </View>
       </View>
     </Pressable>

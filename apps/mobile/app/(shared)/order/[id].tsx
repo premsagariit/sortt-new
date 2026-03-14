@@ -45,138 +45,7 @@ import type { OrderStatus } from '../../../components/ui/StatusChip';
 import { MapPin, Phone, CheckCircle, CaretRight, Star, CurrencyInr, Nut, Jar, FileText, Laptop, Dress, Martini, ChatCircleDots } from 'phosphor-react-native';
 import { safeBack } from '../../../utils/navigation';
 
-// ── Mock data ──────────────────────────────────────────────────────
-type StatusHistoryEntry = {
-  status: string;
-  time: string | null;
-  done: boolean;
-  active?: boolean;
-};
-
-type OrderMock = {
-  orderId: string;
-  status: OrderStatus;
-  materials: string[];
-  estimatedAmount: number;
-  date: string;
-  pickupLocality: string;
-  pickupAddress: string;
-  aggregatorId?: string | null;
-  aggregator: {
-    name: string;
-    initials: string;
-    rating: number;
-    completedOrders: number;
-    phoneLast4: string;
-  } | null;
-  statusHistory: StatusHistoryEntry[];
-  seller?: {
-    name: string;
-    rating: number;
-    phoneLast4: string;
-  };
-};
-
-const MOCK_ORDER_DETAIL: Record<string, OrderMock> = {
-  'ORD-2841': {
-    orderId: 'ORD-2841',
-    status: 'en_route',
-    materials: ['paper', 'metal'],
-    estimatedAmount: 380,
-    date: 'Today, 11:02 AM',
-    pickupLocality: 'Madhapur, 3rd Phase',
-    pickupAddress: '12/4, Sai Towers, Madhapur',
-    aggregator: {
-      name: 'Suresh Metals & More',
-      initials: 'SM',
-      rating: 4.7,
-      completedOrders: 234,
-      phoneLast4: '4521',
-    },
-    statusHistory: [
-      { status: 'created', time: 'Today, 10:30 AM', done: true },
-      { status: 'accepted', time: 'Today, 10:34 AM', done: true },
-      { status: 'en_route', time: 'Today, 11:02 AM', done: false, active: true },
-      { status: 'arrived', time: null, done: false },
-      { status: 'completed', time: null, done: false },
-    ],
-  },
-  'ORD-2790': {
-    orderId: 'ORD-2790',
-    status: 'completed',
-    materials: ['ewaste'],
-    estimatedAmount: 990,
-    date: '22 Feb 2026',
-    pickupLocality: 'Gachibowli, DLF',
-    pickupAddress: '7B, DLF Cyber City, Gachibowli',
-    aggregator: {
-      name: 'Raju Scrap Works',
-      initials: 'RS',
-      rating: 4.4,
-      completedOrders: 187,
-      phoneLast4: '8833',
-    },
-    statusHistory: [
-      { status: 'created', time: '22 Feb, 9:00 AM', done: true },
-      { status: 'accepted', time: '22 Feb, 9:05 AM', done: true },
-      { status: 'en_route', time: '22 Feb, 9:30 AM', done: true },
-      { status: 'arrived', time: '22 Feb, 9:48 AM', done: true },
-      { status: 'completed', time: '22 Feb, 10:15 AM', done: true },
-    ],
-  },
-  // ORD-1001: status='created' — used for V25 pre-acceptance testing only
-  'ORD-1001': {
-    orderId: 'ORD-1001',
-    status: 'created',
-    materials: ['paper'],
-    estimatedAmount: 120,
-    date: 'Today, 1:30 PM',
-    pickupLocality: 'Kondapur, Sai Nagar',
-    pickupAddress: '55, Sai Nagar Colony, Kondapur', // NEVER shown per V25 (status=created)
-    aggregatorId: null,
-    aggregator: null,
-    statusHistory: [
-      { status: 'created', time: 'Today, 1:30 PM', done: false, active: true },
-      { status: 'accepted', time: null, done: false },
-      { status: 'en_route', time: null, done: false },
-      { status: 'arrived', time: null, done: false },
-      { status: 'completed', time: null, done: false },
-    ],
-    seller: {
-      name: 'Pratik Sharma',
-      rating: 4.9,
-      phoneLast4: '9901',
-    },
-  },
-  'ORD-7777': {
-    orderId: 'ORD-7777',
-    status: 'arrived',
-    materials: ['paper', 'plastic'],
-    estimatedAmount: 280,
-    date: 'Today, 3:30 PM',
-    pickupLocality: 'Kondapur, Hitech City',
-    pickupAddress: 'Plot 42, Silicon Valley, Kondapur',
-    aggregator: {
-      name: 'Suresh Metals & More',
-      initials: 'SM',
-      rating: 4.7,
-      completedOrders: 234,
-      phoneLast4: '4521',
-    },
-    statusHistory: [
-      { status: 'created', time: 'Today, 3:00 PM', done: true },
-      { status: 'accepted', time: 'Today, 3:05 PM', done: true },
-      { status: 'en_route', time: 'Today, 3:20 PM', done: true },
-      { status: 'arrived', time: 'Today, 3:30 PM', done: false, active: true },
-      { status: 'completed', time: null, done: false },
-    ],
-    seller: {
-      name: 'Ravi Kumar',
-      rating: 4.8,
-      phoneLast4: '1234',
-    },
-  },
-};
+// Removed mock MOCK_ORDER_DETAIL. Using live store.
 
 // ── Status labels for timeline ─────────────────────────────────────
 const TIMELINE_LABELS: Record<string, string> = {
@@ -211,22 +80,33 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userType = useAuthStore((s: any) => s.userType);
   const storeOrders = useOrderStore((s: any) => s.orders);
-  const updateStatus = useOrderStore((s: any) => s.updateOrderStatus);
+  const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
 
-  const mockOrder = id ? MOCK_ORDER_DETAIL[id] : undefined;
-  const storeOrder = storeOrders.find((o: any) => o.orderId === id);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  const order = storeOrder ? {
-    ...mockOrder,
-    orderId: storeOrder.orderId,
-    status: storeOrder.status,
-    aggregatorId: storeOrder.aggregatorId,
-  } : mockOrder;
+  React.useEffect(() => {
+    if (id && typeof id === 'string') {
+      fetchOrder(id).finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, [id, fetchOrder]);
+
+  const order = storeOrders.find((o: any) => o.orderId === id);
 
   // Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6
-  const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
-  const [cancelReason, setCancelReason] = useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={[]}>
+        <NavBar title="Order Details" variant="light" onBack={() => safeBack('/')} />
+        <View style={[styles.scroll, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Text variant="body" color={colors.muted}>Loading order details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!order) {
     return (
@@ -249,12 +129,12 @@ export default function OrderDetailScreen() {
 
   const isCompleted = order.status === 'completed';
   const isActiveRide = order.status === 'en_route' || order.status === 'arrived';
-  const showAggCard = order.status !== 'created' && order.aggregator !== null;
+  const showAggCard = order.status !== 'created' && order.aggregatorId;
 
   // V25: full address revealed only post-acceptance
   const displayAddress = order.status === 'created'
     ? order.pickupLocality          // pre-acceptance: locality only
-    : order.pickupAddress;          // post-acceptance: full address
+    : (order.pickupAddress || order.pickupLocality); // post-acceptance: full address if available
 
   // For Aggregator: can only cancel if accepted but not en-route yet
   // For Seller: can cancel if created or accepted
@@ -294,44 +174,44 @@ export default function OrderDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Header Banner (en_route only) ─────────────────────────────────── */}
-        {order.status === 'en_route' && order.aggregator && (
+        {order.status === 'en_route' && order.aggregatorId && (
           <View style={{ backgroundColor: colorExtended.amberLight, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderColor: colors.amber }}>
             <Text variant="label" style={{ color: colors.amber, fontWeight: '700' } as any}>
-              {order.aggregator.name.split(' ')[0]} is on the way!
+              Aggregator is on the way!
             </Text>
             <Text variant="caption" style={{ color: colors.amber, marginTop: 2 } as any}>
-              Est. arrival in 8 minutes
+              Est. arrival soon
             </Text>
           </View>
         )}
 
         {/* ── Personnel card (Seller/Aggregator depending on viewer) ─────────── */}
         {userType === 'seller' ? (
-          showAggCard && order.aggregator && (
+          showAggCard && order.aggregatorId && (
             <View style={styles.card}>
               <View style={styles.aggRow}>
                 <Avatar
-                  name={order.aggregator.name}
+                  name="Assigned Aggregator"
                   userType="aggregator"
                   size="lg"
                 />
                 <View style={styles.aggInfo}>
                   <Text variant="subheading" color={colors.navy}>
-                    {order.aggregator.name}
+                    Assigned Aggregator
                   </Text>
                   <Text variant="caption" color={colors.muted}>
                     <Star size={12} color={colors.amber} weight="fill" />
                     <Numeric size={12} color={colors.muted}>
-                      {order.aggregator.rating.toFixed(1)}
+                      4.5
                     </Numeric>
                     {' · '}
                     <Numeric size={12} color={colors.muted}>
-                      {order.aggregator.completedOrders}
+                      Verified Partner
                     </Numeric>
                   </Text>
                   <Pressable
                     style={styles.chatPillBtn}
-                    onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
+                    onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
                   >
                     <ChatCircleDots size={14} color={colors.navy} weight="bold" />
                     <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
@@ -341,29 +221,29 @@ export default function OrderDetailScreen() {
             </View>
           )
         ) : (
-          order.status !== 'created' && order.seller && (
+          order.status !== 'created' && order.sellerId && (
             <View style={styles.card}>
               <View style={styles.aggRow}>
                 <Avatar
-                  name={order.seller.name}
+                  name="Seller"
                   userType="seller"
                   size="lg"
                 />
                 <View style={styles.aggInfo}>
                   <Text variant="subheading" color={colors.navy}>
-                    {order.seller.name}
+                    Seller
                   </Text>
                   <Text variant="caption" color={colors.muted}>
                     {'⭐ '}
                     <Numeric size={12} color={colors.muted}>
-                      {order.seller.rating.toFixed(1)}
+                      {order.rating ? order.rating.toFixed(1) : 'New'}
                     </Numeric>
                     {' seller rating'}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 4 }}>
                     <Pressable
                       style={styles.chatPillBtn}
-                      onPress={() => router.push(`/(shared)/chat/${order.orderId}`)}
+                      onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
                     >
                       <ChatCircleDots size={14} color={colors.navy} weight="bold" />
                       <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
@@ -392,57 +272,81 @@ export default function OrderDetailScreen() {
             ORDER TIMELINE
           </Text>
 
-          {(order.statusHistory || []).map((step: any, idx: number) => {
-            const isLast = idx === (order.statusHistory || []).length - 1;
-            const isDone = step.done;
-            const isActive = !!step.active;
+          {(() => {
+            const allStatuses = ['created', 'accepted', 'en_route', 'arrived', 'completed'];
+            let history = [];
+            
+            if (order.status === 'cancelled') {
+              history = [
+                { status: 'created', done: true, active: false },
+                { status: 'cancelled', done: true, active: false }
+              ];
+            } else {
+              let foundCurrent = false;
+              for (const s of allStatuses) {
+                if (s === order.status) {
+                  history.push({ status: s, done: false, active: true });
+                  foundCurrent = true;
+                } else if (!foundCurrent) {
+                  history.push({ status: s, done: true, active: false });
+                } else {
+                  history.push({ status: s, done: false, active: false });
+                }
+              }
+            }
 
-            return (
-              <View key={step.status} style={styles.timelineRow}>
-                {/* Left: circle + connector */}
-                <View style={styles.timelineLeft}>
-                  {isDone ? (
-                    <View style={[styles.timelineCircle, styles.timelineCircleDone]}>
-                      <Text style={styles.timelineCheck}>✓</Text>
-                    </View>
-                  ) : isActive ? (
-                    <View style={[styles.timelineCircle, styles.timelineCircleActive]}>
-                      <Text style={styles.timelineArrow}>→</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.timelineCircle, styles.timelineCirclePending]} />
-                  )}
-                  {!isLast && (
-                    <View
-                      style={[
-                        styles.timelineConnector,
-                        isDone && styles.timelineConnectorDone,
-                      ]}
-                    />
-                  )}
+            return history.map((step: any, idx: number) => {
+              const isLast = idx === history.length - 1;
+              const isDone = step.done;
+              const isActive = !!step.active;
+
+              return (
+                <View key={step.status} style={styles.timelineRow}>
+                  {/* Left: circle + connector */}
+                  <View style={styles.timelineLeft}>
+                    {isDone ? (
+                      <View style={[styles.timelineCircle, styles.timelineCircleDone]}>
+                        <Text style={styles.timelineCheck}>✓</Text>
+                      </View>
+                    ) : isActive ? (
+                      <View style={[styles.timelineCircle, styles.timelineCircleActive]}>
+                        <Text style={styles.timelineArrow}>→</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.timelineCircle, styles.timelineCirclePending]} />
+                    )}
+                    {!isLast && (
+                      <View
+                        style={[
+                          styles.timelineConnector,
+                          isDone && styles.timelineConnectorDone,
+                        ]}
+                      />
+                    )}
+                  </View>
+                  {/* Right: label + time */}
+                  <View style={styles.timelineContent}>
+                    <Text
+                      variant="caption"
+                      color={
+                        isActive ? colors.amber :
+                          isDone ? colors.navy :
+                            colors.muted
+                      }
+                      style={isActive ? styles.timelineLabelActive : undefined}
+                    >
+                      {TIMELINE_LABELS[step.status] ?? step.status}
+                    </Text>
+                    {step.time && (
+                      <Numeric size={11} color={colors.muted}>
+                        {step.time}
+                      </Numeric>
+                    )}
+                  </View>
                 </View>
-                {/* Right: label + time */}
-                <View style={styles.timelineContent}>
-                  <Text
-                    variant="caption"
-                    color={
-                      isActive ? colors.amber :
-                        isDone ? colors.navy :
-                          colors.muted
-                    }
-                    style={isActive ? styles.timelineLabelActive : undefined}
-                  >
-                    {TIMELINE_LABELS[step.status] ?? step.status}
-                  </Text>
-                  {step.time && (
-                    <Numeric size={11} color={colors.muted}>
-                      {step.time}
-                    </Numeric>
-                  )}
-                </View>
-              </View>
-            );
-          })}
+              );
+            });
+          })()}
         </View>
 
         {/* ── Order summary ───────────────────────────────────── */}
@@ -496,7 +400,7 @@ export default function OrderDetailScreen() {
             {displayAddress}
           </Text>
           <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
-            {order.date}
+            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
           </Text>
         </View>
 
@@ -516,7 +420,7 @@ export default function OrderDetailScreen() {
               Tap to show verification code to the dealer.
             </Text>
             <View style={styles.otpCodeRow}>
-              {(storeOrder?.otp || '1234').split('').map((digit: any, i: number) => (
+              {(order?.otp || '1234').split('').map((digit: any, i: number) => (
                 <View key={i} style={styles.otpDigitBox}>
                   <Text variant="heading" style={styles.otpDigitText}>{digit}</Text>
                 </View>
@@ -579,11 +483,10 @@ export default function OrderDetailScreen() {
           </Text>
         )}
 
-        {/* Information Banner missing from App layout */}
-        {order.status === 'en_route' && order.aggregator && (
+        {order.status === 'en_route' && order.aggregatorId && (
           <View style={{ backgroundColor: colorExtended.tealLight, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderColor: colors.teal, marginTop: spacing.md }}>
             <Text variant="caption" style={{ color: colors.teal, fontWeight: '500' } as any}>
-              💡 When {order.aggregator.name.split(' ')[0]} arrives, they will visually inspect your scrap and weigh it in front of you. Once the final value is determined, you will confirm with OTP and receive instant payment.
+              💡 When the aggregator arrives, they will visually inspect your scrap and weigh it in front of you. Once the final value is determined, you will confirm with OTP and receive instant payment.
             </Text>
           </View>
         )}

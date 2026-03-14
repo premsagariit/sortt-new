@@ -671,34 +671,34 @@
 > **Rule:** Replace mock data store calls with `api.ts` calls. Keep store as cache layer — don't remove the store, wire the API call into the store action.
 
 ### 11.1 Seller Side Wiring (~60 min)
-- [ ] **Listing Wizard** → `POST /api/orders`. On success: show real order ID (DM Mono) on confirmation. Handle validation errors per field.
-- [ ] **Seller Orders List** → `GET /api/orders?role=seller`. Loading skeleton active during fetch. Empty state when no orders.
-- [ ] **Order Detail** → `GET /api/orders/:id`. Confirm `pickup_address_text` is `null` in the raw JSON response (not just hidden in UI). Full address shown post-acceptance.
-- [ ] **Market Rates** → `GET /api/rates`. Real ₹/kg values. "Refreshed X min ago" label using `scraped_at`.
-- [ ] **Profile** → `GET /api/users/me`. Real name, locality, account type.
-- [ ] **Order cancel** → `DELETE /api/orders/:id`. Confirm order disappears from Active tab.
+- [x] **Listing Wizard** → `POST /api/orders`. On success: show real order ID (DM Mono) on confirmation. Handle validation errors per field.
+- [x] **Seller Orders List** → `GET /api/orders?role=seller`. Loading skeleton active during fetch. Empty state when no orders.
+- [x] **Order Detail** → `GET /api/orders/:id`. Confirm `pickup_address_text` is `null` in the raw JSON response (not just hidden in UI). Full address shown post-acceptance.
+- [x] **Market Rates** → `GET /api/rates`. Real ₹/kg values. "Refreshed X min ago" label using `scraped_at`.
+- [x] **Profile** → `GET /api/users/me`. Real name, locality, account type.
+- [x] **Order cancel** → `DELETE /api/orders/:id`. Confirm order disappears from Active tab.
 
 ### 11.2 Aggregator Side Wiring (~60 min)
-- [ ] **Aggregator Feed** → `GET /api/orders/feed`. Real city + material filtered orders. Confirm no full address in any order card.
-- [ ] **Order Detail (pre-acceptance)** → `GET /api/orders/:id` as non-owner. `pickup_address_text` literally null.
-- [ ] **Order Detail (post-acceptance)** → `GET /api/orders/:id` as owner. Full address revealed.
-- [ ] **My Orders** → `GET /api/orders?role=aggregator`. Active/Completed/Cancelled tabs populated from real status.
-- [ ] **Profile** → `PATCH /api/aggregators/profile`. Save rates → `PATCH /api/aggregators/rates`.
-- [ ] **Heartbeat** → `POST /api/aggregators/heartbeat` every 2 min via `setInterval` in app foreground. Stop on `AppState.background`.
-- [ ] **Online/Offline toggle** → `POST /api/aggregators/heartbeat` (online) / stop heartbeat + one final request with `is_online: false` (offline).
+- [x] **Aggregator Feed** → `GET /api/orders/feed`. Real city + material filtered orders. Confirm no full address in any order card.
+- [x] **Order Detail (pre-acceptance)** → `GET /api/orders/:id` as non-owner. `pickup_address_text` literally null.
+- [x] **Order Detail (post-acceptance)** → `GET /api/orders/:id` as owner. Full address revealed.
+- [x] **My Orders** → `GET /api/orders?role=aggregator`. Active/Completed/Cancelled tabs populated from real status.
+- [x] **Profile** → `PATCH /api/aggregators/profile`. Save rates → `PATCH /api/aggregators/rates`.
+- [x] **Heartbeat** → `POST /api/aggregators/heartbeat` every 2 min via `setInterval` in app foreground. Stop on `AppState.background`.
+- [x] **Online/Offline toggle** → `POST /api/aggregators/heartbeat` (online) / stop heartbeat + one final request with `is_online: false` (offline).
 
 ### 11.3 Missing Screens & Error States (~20 min)
-- [ ] All screens: real loading skeleton → real data → real empty state. No screen stays in mock-data state.
-- [ ] Network error state: if API call fails → show inline error banner with "Retry" button (not crash).
-- [ ] Seller listing wizard: if geocoding fails (`IMapProvider.geocode()` error) → show "We couldn't find that address — please check and try again."
+- [x] All screens: real loading skeleton → real data → real empty state. No screen stays in mock-data state.
+- [x] Network error state: if API call fails → show inline error banner with "Retry" button (not crash).
+- [x] Seller listing wizard: if geocoding fails (`IMapProvider.geocode()` error) → show "We couldn't find that address — please check and try again."
 
-### 🚦 DAY 11 VERIFICATION GATE
-- [ ] **G11.1** — Seller creates listing on Device A → listing appears in aggregator feed on Device B (manual refresh) within 5 seconds.
-- [ ] **G11.2** — Aggregator feed card: no `pickup_address_text` in the rendered UI or the raw API response for that card.
-- [ ] **G11.3** — Market rates screen shows real data from `current_price_index` view.
-- [ ] **G11.4** — Aggregator goes offline (toggle) → `is_online=false` in `aggregator_availability` table within 10 seconds.
-- [ ] **G11.5** — Kill network mid-request → inline error banner appears. Restore network, tap Retry → request succeeds.
-- [ ] **G11.6** — `pnpm type-check` exits 0 across all packages.
+### 🚦 DAY 11 VERIFICATION GATE — [GATE PASSED — 2026-03-14]
+- [x] **G11.1** — Seller creates listing on Device A → listing appears in aggregator feed on Device B (manual refresh) within 5 seconds.
+- [x] **G11.2** — Aggregator feed card: no `pickup_address_text` in the rendered UI or the raw API response for that card.
+- [x] **G11.3** — Market Rates screen shows real data from `current_price_index` view.
+- [x] **G11.4** — Aggregator goes offline (toggle) → `is_online=false` in `aggregator_availability` table within 10 seconds.
+- [x] **G11.5** — Kill network mid-request → inline error banner appears. Restore network, tap Retry → request succeeds.
+- [x] **G11.6** — `pnpm type-check` exits 0 across all packages.
 
 ---
 

@@ -751,6 +751,8 @@ Do not delete old entries. Append only.
 - **[2026-03-13] Uploadthing dev fallback:** Uploadthing signed URL API fails locally if UPLOADTHING_TOKEN is not a real production token. Code currently falls back to a non-expiring local relative path. G10.2 expiry enforcement will only work in production. Revisit Day 14. Affects: GET /api/orders/:id/media/:mediaId/url.
 - **[2026-03-13] aggregator_availability schema drift:** Has no city_code column. Always join via aggregator_profiles to filter by city. Affects: GET /api/orders/feed.
 - **[2026-03-13] aggregator_material_rates schema drift:** Uses aggregator_id (not user_id) as the FK column. Affects: DB queries.
+- **[2026-03-14] Zustand `api` import:** Ensure `import { api } from '../lib/api'` is a named import in stores like `orderStore.ts`, avoid using default import unless `api` is exported as default. Affects: API integration in Zustand stores.
+- **[2026-03-14] TypeScript Function Signatures:** Always ensure function calls match their defined signatures (e.g. removing unused `cancelReason` argument from `cancelOrder` call in `CancelOrderModal.tsx`).
 
 ---
 

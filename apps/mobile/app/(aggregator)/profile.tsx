@@ -15,10 +15,6 @@ import { useAggregatorStore } from '../../store/aggregatorStore';
 const { width } = Dimensions.get('window');
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
-// Mock fallbacks (replaced by backend data on Day 4)
-const MOCK_AGG_FULLNAME = 'Vijay Kumar';
-const MOCK_AGG_LOCALITY = 'Banjara Hills';
-
 interface MenuItemProps {
   icon: React.ReactNode;
   title: string;
@@ -61,14 +57,15 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
 export default function AggregatorProfileScreen() {
   const router = useRouter();
   const authStore = useAuthStore();
-  const { fullName, primaryArea } = useAggregatorStore();
+  const { fetchMe, name, locality } = authStore;
   const [heroHeight, setHeroHeight] = useState(300);
 
-  // Read from store with mock fallbacks (Day 4: store populated from backend)
-  const displayName = fullName || MOCK_AGG_FULLNAME;
-  const displayLocality = primaryArea || MOCK_AGG_LOCALITY;
+  React.useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
 
-
+  const displayName = name || 'Aggregator';
+  const displayLocality = locality || 'Unknown Area';
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
