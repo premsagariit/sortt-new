@@ -27,14 +27,23 @@ import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 export default function ActiveOrderDetailScreen() {
     const router = useRouter();
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { orders } = useOrderStore();
+    const { orders, fetchOrder } = useOrderStore();
     const [showCancelModal, setShowCancelModal] = React.useState(false);
 
     const storeOrder = orders.find(o => o.orderId === id);
 
+    React.useEffect(() => {
+        if (id && !storeOrder) {
+            fetchOrder(id, true);
+        }
+    }, [id, storeOrder, fetchOrder]);
+
+    const internalOrderId = storeOrder?.orderId ?? id ?? 'ACTIVE-001';
+    const displayOrderNumber = storeOrder?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
+
     // Seed fallback matching SEED_ACTIVE_ORDERS in orders.tsx
     const MOCK_ORDER = {
-        id: (id as string) || 'ACTIVE-001',
+        id: displayOrderNumber,
         distance: '1.4 km',
         locality: storeOrder?.pickupLocality ?? 'Madhapur area',
         address: storeOrder?.pickupAddress ?? 'Plot 42, Road No. 3, Jubilee Hills, Hyderabad - 500033',
@@ -212,14 +221,14 @@ export default function ActiveOrderDetailScreen() {
                     label="Navigate"
                     style={styles.navigateBtn}
                     textStyle={styles.btnText}
-                    onPress={() => router.push('/(aggregator)/execution/navigate' as any)}
+                    onPress={() => router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: internalOrderId } } as any)}
                 />
             </View>
 
             {/* Cancel modal */}
             {showCancelModal && (
                 <CancelOrderModal
-                    orderId={MOCK_ORDER.id}
+                    orderId={internalOrderId}
                     onClose={() => setShowCancelModal(false)}
                     onConfirm={() => {
                         setShowCancelModal(false);

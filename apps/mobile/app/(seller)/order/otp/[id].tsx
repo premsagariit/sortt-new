@@ -19,6 +19,7 @@ export default function SellerOTPDisplayScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const order = useOrderStore((s) => s.orders.find(o => o.orderId === id));
+    const orderNumber = order?.orderNumber ?? `#${String(id ?? '').slice(0, 8).toUpperCase()}`;
 
     // Fallback OTP if not in store
     const otp = order?.otp || '1234';
@@ -32,7 +33,7 @@ export default function SellerOTPDisplayScreen() {
     const handleShare = async () => {
         try {
             await Share.share({
-                message: `My Sortt verification code for Order #${id} is: ${otp}`,
+                message: `My Sortt verification code for Order ${orderNumber} is: ${otp}`,
             });
         } catch (error) {
             console.error(error);
@@ -66,7 +67,7 @@ export default function SellerOTPDisplayScreen() {
                     </View>
                     <View style={styles.orderLabel}>
                         <Text variant="caption" color={colors.muted}>Order ID: </Text>
-                        <Numeric size={12} color={colors.navy}>{id}</Numeric>
+                        <Numeric size={12} color={colors.navy}>{orderNumber}</Numeric>
                     </View>
                 </View>
 

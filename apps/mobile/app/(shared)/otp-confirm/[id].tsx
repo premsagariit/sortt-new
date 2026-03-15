@@ -48,6 +48,7 @@ type WeightEntry = {
 
 type ConfirmationMock = {
   orderId: string;
+  orderNumber: string;
   locality: string;
   items: WeightEntry[];
   paymentMethod: string;
@@ -66,6 +67,7 @@ const MATERIAL_COLORS: Record<string, string> = {
 const MOCK_CONFIRMATION: Record<string, ConfirmationMock> = {
   'ORD-2841': {
     orderId: 'ORD-2841',
+    orderNumber: '#000001',
     locality: 'Madhapur, 3rd Phase',
     items: [
       { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
@@ -170,7 +172,7 @@ export default function OtpConfirmScreen() {
             </Text>
             <Text variant="caption" color={colors.teal} style={{ opacity: 0.8 }}>
               {confirmation.locality} · Order{' '}
-              <Numeric size={11} color={colors.teal}>#{confirmation.orderId}</Numeric>
+              <Numeric size={11} color={colors.teal}>{confirmation.orderNumber}</Numeric>
             </Text>
           </View>
         </View>

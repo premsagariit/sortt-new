@@ -23,12 +23,12 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { safeBack } from '../../../utils/navigation';
 
 const TIMES = [
-  { label: 'Morning · 8–10 AM', value: 'morning' },
-  { label: 'Morning · 10–12 PM', value: 'morning' },
-  { label: 'Afternoon · 12–2 PM', value: 'afternoon' },
-  { label: 'Afternoon · 2–4 PM', value: 'afternoon' },
-  { label: 'Afternoon · 4–6 PM', value: 'afternoon' },
-  { label: 'Evening · 6 PM+', value: 'evening' },
+  { label: 'Morning · 8–10 AM', value: 'morning_8_10' },
+  { label: 'Morning · 10–12 PM', value: 'morning_10_12' },
+  { label: 'Afternoon · 12–2 PM', value: 'afternoon_12_2' },
+  { label: 'Afternoon · 2–4 PM', value: 'afternoon_2_4' },
+  { label: 'Afternoon · 4–6 PM', value: 'afternoon_4_6' },
+  { label: 'Evening · 6 PM+', value: 'evening_6_plus' },
 ];
 const DEFAULT_ADDRESS = 'Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034';
 

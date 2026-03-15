@@ -130,6 +130,7 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
             ON CONFLICT (user_id) DO UPDATE
                 SET is_online = $2, last_ping_at = NOW()
         `, [userId, isOnline]);
+        console.log(`[HEARTBEAT] User ${userId} status updated: online=${isOnline}`);
         return res.json({ success: true });
     } catch (e: any) {
         console.error('Heartbeat error:', e);

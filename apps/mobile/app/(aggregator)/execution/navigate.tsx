@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Globe, Phone, ChatCenteredText, MapTrifold, CaretLeft } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
@@ -9,12 +9,25 @@ import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
 import { safeBack } from '../../../utils/navigation';
+import { useOrderStore } from '../../../store/orderStore';
 
 type NavigateState = 'accepted' | 'enroute';
 
 export default function NavigateScreen() {
     const [executionState, setExecutionState] = useState<NavigateState>('accepted');
     const insets = useSafeAreaInsets();
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const { orders, fetchOrder } = useOrderStore();
+    const order = orders.find((o) => o.orderId === id);
+
+    React.useEffect(() => {
+        if (id && !order) {
+            fetchOrder(id, true);
+        }
+    }, [id, order, fetchOrder]);
+
+    const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
+    const displayOrderNumber = order?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
 
     const handleBack = () => {
         safeBack('/(aggregator)/orders');
@@ -25,7 +38,7 @@ export default function NavigateScreen() {
             setExecutionState('enroute');
         } else {
             // Updated to point to the new persistent weighing screen within the execution stack
-            router.push(`/(aggregator)/execution/weighing/ORD-24091` as any);
+            router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
         }
     };
 
@@ -34,7 +47,7 @@ export default function NavigateScreen() {
             {/* NavBar - Light variant as per spec */}
             <NavBar
                 variant="light"
-                title="Order #ORD-24091"
+                title={`Order ${displayOrderNumber}`}
                 onBack={handleBack}
             />
 
@@ -74,7 +87,7 @@ export default function NavigateScreen() {
                     <View style={styles.dualActions}>
                         <SecondaryButton
                             label="Chat"
-                            onPress={() => router.push('/(shared)/chat/ORD-24091' as any)}
+                            onPress={() => router.push(`/(shared)/chat/${internalOrderId}` as any)}
                             style={styles.chatButton}
                             icon={<ChatCenteredText size={20} color={colors.navy} />}
                         />

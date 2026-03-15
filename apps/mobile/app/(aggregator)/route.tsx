@@ -29,6 +29,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Order {
   id: string;
+  orderNumber: string;
   locality: string;
   distance: string;
   materials: { type: 'metal' | 'paper' | 'fabric'; weight: number }[];
@@ -39,7 +40,8 @@ interface Order {
 
 const MOCK_ORDERS: Order[] = [
   {
-    id: '#24095',
+    id: 'route-order-1',
+    orderNumber: '#000005',
     locality: 'Banjara Hills',
     distance: '0.8 km',
     materials: [
@@ -51,7 +53,8 @@ const MOCK_ORDERS: Order[] = [
     lng: 40,
   },
   {
-    id: '#24093',
+    id: 'route-order-2',
+    orderNumber: '#000006',
     locality: 'Jubilee Hills',
     distance: '1.4 km',
     materials: [{ type: 'metal', weight: 10 }],
@@ -60,7 +63,8 @@ const MOCK_ORDERS: Order[] = [
     lng: 60,
   },
   {
-    id: '#24090',
+    id: 'route-order-3',
+    orderNumber: '#000007',
     locality: 'Somajiguda',
     distance: '2.1 km',
     materials: [
@@ -138,7 +142,7 @@ export default function RoutePlannerScreen() {
                   <Package size={14} color="#fff" weight="bold" />
                 </View>
                 <View style={styles.markerLabelBg}>
-                  <Text style={styles.markerLabel}>{order.id}</Text>
+                  <Text style={styles.markerLabel}>{order.orderNumber}</Text>
                 </View>
               </View>
             ))}

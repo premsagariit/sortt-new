@@ -20,8 +20,8 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,
@@ -36,8 +36,12 @@ import {
 } from '@expo-google-fonts/dm-mono';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
-import { setApiTokenGetter } from '../lib/api';
+import { api, setApiTokenGetter } from '../lib/api';
 import { setGlobalClerkSignOut } from '../store/authStore';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
+import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';
+import { useAuthStore } from '../store/authStore';
 
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
@@ -50,11 +54,50 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function OfflineAwareNavigator({
+  isOnline,
+  isRetrying,
+  onRetry,
+  role,
+  segments,
+}: {
+  isOnline: boolean;
+  isRetrying: boolean;
+  onRetry: () => void;
+  role: 'seller' | 'aggregator';
+  segments: string[];
+}) {
+  const { isSignedIn } = useAuth();
+  const rootGroup = segments[0];
+  const isAuthPage = rootGroup === '(auth)' || (segments.length === 0 && !isSignedIn);
+
+  if (isOnline) {
+    return <Stack screenOptions={{ headerShown: false }} />;
+  }
+
+  if (isAuthPage) {
+    return <AuthNetworkErrorScreen onRetry={onRetry} isRetrying={isRetrying} />;
+  }
+
+  return <NetworkErrorScreen onRetry={onRetry} isRetrying={isRetrying} role={role} />;
+}
+
 // ── Prevent the splash screen from auto-hiding before fonts are ready.
 // This must be called before the component tree renders.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const router = useRouter();
+  const { isOnline } = useNetworkStatus();
+  const pathname = usePathname();
+  const segments = useSegments();
+  const rootGroup = segments[0];
+  const storedUserType = useAuthStore((s) => s.userType);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [lastRole, setLastRole] = useState<'seller' | 'aggregator'>('seller');
+  const prevOnlineRef = useRef(isOnline);
+  const offlineAuthPathRef = useRef<string | null>(null);
+
   // ── Load DM Sans (all weights used across the design system)
   const [sansLoaded, sansError] = useFonts({
     'DMSans-Regular':  DMSans_400Regular,
@@ -89,17 +132,74 @@ export default function RootLayout() {
     }
   }, [fontsReady]);
 
+  useEffect(() => {
+    if (rootGroup === '(aggregator)') {
+      setLastRole('aggregator');
+    } else if (rootGroup === '(seller)') {
+      setLastRole('seller');
+    }
+  }, [rootGroup]);
+
+  useEffect(() => {
+    const isAuthPath = pathname?.startsWith('/(auth)');
+
+    if (!isOnline && isAuthPath) {
+      offlineAuthPathRef.current = pathname;
+      return;
+    }
+
+    const cameBackOnline = prevOnlineRef.current === false && isOnline === true;
+    if (cameBackOnline && offlineAuthPathRef.current) {
+      const previousAuthPath = offlineAuthPathRef.current;
+      const targetPath =
+        previousAuthPath === '/(auth)/phone' || previousAuthPath === '/(auth)/otp'
+          ? '/(auth)/phone'
+          : previousAuthPath;
+
+      offlineAuthPathRef.current = null;
+      if (pathname !== targetPath) {
+        router.replace(targetPath as any);
+      }
+    }
+
+    prevOnlineRef.current = isOnline;
+  }, [isOnline, pathname, router]);
+
+  const retryConnectivity = useCallback(async () => {
+    if (isRetrying) return;
+
+    setIsRetrying(true);
+    try {
+      await api.get('/api/rates');
+    } catch {
+      // Keep takeover active while offline or backend unreachable.
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [isRetrying]);
+
   // Hold the tree until fonts are ready to prevent a flash of unstyled text.
   if (!fontsReady) {
     return null;
   }
+
+  const resolvedRole: 'seller' | 'aggregator' =
+    storedUserType === 'aggregator' || storedUserType === 'seller'
+      ? storedUserType
+      : lastRole;
 
   // ── Expo Router root stack.
   // Using Stack instead of Slot to preserve memory/state between root segments.
   return (
     <ClerkProvider publishableKey={clerkPublishableKey!} tokenCache={tokenCache}>
       <ApiClientConfigurator>
-        <Stack screenOptions={{ headerShown: false }} />
+        <OfflineAwareNavigator
+          isOnline={isOnline}
+          isRetrying={isRetrying}
+          onRetry={retryConnectivity}
+          role={resolvedRole}
+          segments={segments}
+        />
       </ApiClientConfigurator>
     </ClerkProvider>
   );

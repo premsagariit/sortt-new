@@ -21,22 +21,22 @@ export default function MarketRatesScreen() {
   const [rates, setRates] = useState<RateEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadRates = useCallback(async () => {
-    setLoading(true);
+  const loadRates = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.get('/api/rates');
       setRates(res.data.rates || []);
     } catch {
       /* non-fatal — empty state shown */
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadRates(); }, [loadRates]);
 
   // Refresh on tab focus
-  useFocusEffect(useCallback(() => { loadRates(); }, [loadRates]));
+  useFocusEffect(useCallback(() => { loadRates(true); }, [loadRates]));
 
   return (
     <View style={styles.container}>

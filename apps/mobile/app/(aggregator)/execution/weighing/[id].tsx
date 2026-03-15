@@ -121,7 +121,7 @@ export default function WeighingScreen() {
             <NavBar
                 title="Weighing"
                 variant="light"
-                onBack={() => safeBack('/(aggregator)/execution/navigate' as any)}
+                onBack={() => safeBack(`/(aggregator)/execution/navigate?id=${id}` as any)}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent}>

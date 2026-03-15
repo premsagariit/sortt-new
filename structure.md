@@ -22,8 +22,12 @@ Sortt
 │   │   │   │   ├── execution # Order Execution Flow
 │   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
 │   │   │   │   │   ├── navigate.tsx # Map guidance to seller
-│   │   │   │   │   ├── weighing.tsx # Material weighing and camera capture
-│   │   │   │   │   └── otp.tsx # Waiting for seller OTP confirmation
+│   │   │   │   │   ├── confirm.tsx # Pickup confirmation transition state
+│   │   │   │   │   ├── receipt.tsx # Pickup completion receipt
+│   │   │   │   │   ├── otp
+│   │   │   │   │   │   └── [id].tsx # Waiting for seller OTP confirmation
+│   │   │   │   │   └── weighing
+│   │   │   │   │       └── [id].tsx # Material weighing and camera capture
 │   │   │   │   ├── home.tsx # Nearby orders feed for dealers
 │   │   │   │   ├── order-detail.tsx # Pre-acceptance view (Accept/Reject/Locality)
 │   │   │   │   ├── order-history-detail.tsx # Redesigned history view (Paid/Ratings)
@@ -94,6 +98,8 @@ Sortt
 │   │   │       ├── Button.tsx # Theme-compliant pressables
 │   │   │       ├── Card.tsx # Standard content wrappers
 │   │   │       ├── EmptyState.tsx # Placeholder for null data states
+│   │   │       ├── NetworkErrorScreen.tsx # Full-screen offline fallback (in-app routes)
+│   │   │       ├── AuthNetworkErrorScreen.tsx # Full-screen offline fallback (auth routes)
 │   │   │       ├── Input.tsx # Text/Form fields with validation
 │   │   │       ├── MaterialChip.tsx # Filter/Selection material bubbles
 │   │   │       ├── NavBar.tsx # Dynamic header with navigation hooks
@@ -107,7 +113,8 @@ Sortt
 │   │   │   ├── app.ts # Global strings and service URLs
 │   │   │   └── tokens.ts # Design tokens (Colors, Radius, Spacing)
 │   │   ├── hooks # Custom React hooks
-│   │   │   └── usePhotoCapture.ts # Standardized camera and picker hook
+│   │   │   ├── usePhotoCapture.ts # Standardized camera and picker hook
+│   │   │   └── useNetworkStatus.ts # Online/offline network listener
 │   │   ├── store # Zustand state containers
 │   │   │   ├── aggregatorStore.ts # Dealer-side order and session state
 │   │   │   ├── authStore.ts # User session, role, and onboarding data
@@ -116,7 +123,8 @@ Sortt
 │   │   │   ├── orderStore.ts # Cross-role order lifecycle state
 │   │   │   └── uiStore.ts # Navigation signals and global overlays
 │   │   ├── utils # Helper functions
-│   │   │   └── navigation.tsx # Safe navigation helpers (safeBack pattern)
+│   │   │   ├── navigation.tsx # Safe navigation helpers (safeBack pattern)
+│   │   │   └── error.ts # Network error classification helpers
 │   │   ├── package.json # NPM dependencies for mobile app
 │   │   ├── .env # Environment variables for mobile app
 │   │   └── tsconfig.json # TypeScript configuration for mobile app
@@ -181,6 +189,7 @@ Sortt
 │   ├── 0014_kyc_media_types.sql
 │   ├── 0015_otp_log_make_hmac_nullable.sql
 │   ├── 0016_standardise_column_names.sql
-│   └── 0017_standardise_trd_columns.sql
+│   ├── 0017_standardise_trd_columns.sql
+│   └── 0018_order_number_per_seller.sql
 ├── dist_deploy # Deployment artifacts (Azure App Service)
 └── structure.md # This file (Project Structure & Descriptions)

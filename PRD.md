@@ -24,6 +24,12 @@
 > - §10: Build tool reference updated. TRD reference updated to v4.1.
 > - §11: All 6 original open questions reviewed — 2 resolved (admin panel, GST template). 5 new TRD-derived open questions (OQ-1 to OQ-5) added.
 
+> ✅ **Implementation Sync Note (2026-03-16)**
+> - Human-readable order identifiers are now live via backend `order_display_id` (format `#000001`).
+> - Database migration `0018_order_number_per_seller.sql` has been applied for per-seller sequential numbering.
+> - Mobile execution flow now threads route `id` across navigate → weighing → OTP → confirm → receipt screens.
+> - Workspace gate check: `pnpm type-check` exits 0.
+
 ---
 
 ## 1. Executive Summary

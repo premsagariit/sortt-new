@@ -118,9 +118,13 @@ export default function OrderDetailScreen() {
               .catch(() => null)
           )
         );
-        setMediaUrls(urls.filter(Boolean) as string[]);
+        const resolvedMediaUrls = urls.filter(Boolean) as string[];
+        console.log('[OrderDetail] scrap mediaUrls', resolvedMediaUrls);
+        setMediaUrls(resolvedMediaUrls);
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.log('[OrderDetail] scrap media fetch failed', error?.message || error);
+      });
   }, [id]);
 
   const order = storeOrders.find((o: any) => o.orderId === id);
@@ -189,7 +193,7 @@ export default function OrderDetailScreen() {
   const handleAccept = () => {
     if (order.orderId) {
       useAggregatorStore.getState().acceptOrder(order.orderId);
-      router.push('/(aggregator)/execution/navigate' as any);
+      router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: order.orderId } } as any);
     }
   };
   const handleEnRoute = () => console.log('Marking en route');
@@ -199,7 +203,7 @@ export default function OrderDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={[]}>
       <NavBar
-        title={`Order #${order.orderId}`}
+        title={`Order ${order.orderNumber}`}
         variant="light"
         onBack={() => safeBack('/')}
         // We do not append status text to the title. It goes purely to the rightAction.
@@ -272,7 +276,7 @@ export default function OrderDetailScreen() {
                 />
                 <View style={styles.aggInfo}>
                   <Text variant="subheading" color={colors.navy}>
-                    {typeof order.sellerType === 'string' ? order.sellerType : 'Seller'}
+                    {typeof order.sellerName === 'string' && order.sellerName.length > 0 ? order.sellerName : 'Seller'}
                   </Text>
                   <Text variant="caption" color={colors.muted}>
                     {/* Rating */}
@@ -294,16 +298,39 @@ export default function OrderDetailScreen() {
                     </Pressable>
                     <Pressable
                       style={[styles.chatPillBtn, { borderColor: colors.tealLight, backgroundColor: colorExtended.tealLight }]}
-                      onPress={() => console.log('Call seller')}
+                      onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
                     >
-                      <Phone size={14} color={colors.teal} weight="fill" />
-                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>Call</Text>
+                      <ChatCircleDots size={14} color={colors.teal} weight="bold" />
+                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>Open Chat</Text>
                     </Pressable>
                   </View>
                 </View>
               </View>
             </View>
           )
+        )}
+
+        {/* ── Scrap photos (render above timeline) ─────────────────────────── */}
+        {mediaUrls.length > 0 && (
+          <View style={styles.card}>
+            <Text
+              variant="caption"
+              color={colors.navy}
+              style={styles.cardSectionLabel}
+            >
+              SCRAP PHOTO
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+              {mediaUrls.map((url, idx) => (
+                <Image
+                  key={idx}
+                  source={{ uri: url }}
+                  style={{ width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
+          </View>
         )}
 
         {/* ── Status timeline ─────────────────────────────────── */}
@@ -405,31 +432,19 @@ export default function OrderDetailScreen() {
           <View style={styles.metaPillRow}>
             {(order.materials || []).map((mat: string) => {
               const weight = order.estimatedWeights?.[mat] || 0;
-              const label = weight > 0 
-                ? `${MATERIAL_LABELS[mat as MaterialCode]} · ${weight} kg`
-                : undefined;
               return (
-                <MaterialChip
-                  key={mat}
-                  material={mat as MaterialCode}
-                  label={label}
-                />
+                <View key={mat} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <MaterialChip
+                    material={mat as MaterialCode}
+                    label={MATERIAL_LABELS[mat as MaterialCode]}
+                  />
+                  <Numeric size={12} color={colors.slate}>
+                    {weight} kg
+                  </Numeric>
+                </View>
               );
             })}
           </View>
-          {/* Scrap photos (if any) */}
-          {mediaUrls.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs }}>
-              {mediaUrls.map((url, idx) => (
-                <Image
-                  key={idx}
-                  source={{ uri: url }}
-                  style={{ width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
-                  resizeMode="cover"
-                />
-              ))}
-            </View>
-          )}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryValueRow}>
             <Text variant="caption" color={colors.muted}>Estimated value</Text>
@@ -458,29 +473,16 @@ export default function OrderDetailScreen() {
           </Text>
         </View>
 
-        {/* ── OTP Section (Seller only, when arrived) ───────────────────────── */}
-        {userType === 'seller' && order.status === 'arrived' && (
-          <Pressable
-            style={[styles.card, styles.otpCard]}
-            onPress={() => router.push(`/(seller)/order/otp/${id}` as any)}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text variant="caption" color={colors.navy} style={styles.cardSectionLabel}>
-                SHARE OTP WITH AGGREGATOR
-              </Text>
-              <CaretRight size={16} color={colors.navy} />
-            </View>
-            <Text variant="caption" color={colors.muted} style={{ marginBottom: spacing.md }}>
-              Tap to show verification code to the dealer.
+        {/* ── OTP instruction (seller, weighing_in_progress) ─────────────────── */}
+        {userType === 'seller' && order.status === 'weighing_in_progress' && (
+          <View style={[styles.card, styles.otpCard]}>
+            <Text variant="caption" color={colors.navy} style={styles.cardSectionLabel}>
+              PICKUP CONFIRMATION CODE
             </Text>
-            <View style={styles.otpCodeRow}>
-              {(order?.otp || '1234').split('').map((digit: any, i: number) => (
-                <View key={i} style={styles.otpDigitBox}>
-                  <Text variant="heading" style={styles.otpDigitText}>{digit}</Text>
-                </View>
-              ))}
-            </View>
-          </Pressable>
+            <Text variant="caption" color={colors.slate}>
+              Check your WhatsApp for the confirmation code to give the aggregator.
+            </Text>
+          </View>
         )}
 
         {/* ── Action bar ──────────────────────────────────────── */}

@@ -75,7 +75,7 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 
 export default function AggregatorSettingsScreen() {
     const router = useRouter();
-    const { fullName, aggregatorType, primaryArea } = useAggregatorStore();
+    const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus } = useAggregatorStore();
     const phoneNumber = useAuthStore((s) => s.phoneNumber);
 
     // Read from store with mock fallbacks (Day 4: store populated from backend)
@@ -87,7 +87,6 @@ export default function AggregatorSettingsScreen() {
     const displayLocality = primaryArea || MOCK_LOCALITY;
 
     // States match the UI requirements
-    const [onlineStatus, setOnlineStatus] = useState(true);
     const [autoOffline, setAutoOffline] = useState(true);
     const [newOrderAlerts, setNewOrderAlerts] = useState(true);
     const [priceUpdates, setPriceUpdates] = useState(true);
@@ -126,8 +125,8 @@ export default function AggregatorSettingsScreen() {
                     <SettingToggle
                         title="Online status"
                         subtitle="Visible to sellers when online"
-                        value={onlineStatus}
-                        onValueChange={setOnlineStatus}
+                        value={isOnline}
+                        onValueChange={updateOnlineStatus}
                     />
                     <SettingToggle
                         title="Auto-offline after hours"

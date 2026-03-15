@@ -46,8 +46,10 @@ export function BaseCard({ children, style }: BaseCardProps) {
 // OrderCard
 // ─────────────────────────────────────────────────────────────────────────────
 interface OrderCardProps {
-  /** Order ID — rendered in DM Mono */
+  /** Internal order ID (UUID) */
   orderId: string;
+  /** UI display order number, e.g. #000042 */
+  orderNumber?: string;
   status: OrderStatus;
   materials: MaterialCode[];
   /** Total amount in rupees — rendered in DM Mono */
@@ -63,6 +65,7 @@ interface OrderCardProps {
 
 export function OrderCard({
   orderId,
+  orderNumber,
   status,
   materials,
   amountRupees,
@@ -90,7 +93,7 @@ export function OrderCard({
         <View style={styles.orderHeader}>
           <View>
             <Text variant="subheading" color={colors.navy}>
-              #{orderId.slice(0, 8).toUpperCase()}
+              {orderNumber ?? `#${orderId.slice(0, 8).toUpperCase()}`}
             </Text>
             <Text variant="caption" style={{ color: ['cancelled', 'disputed'].includes(status) ? colors.muted : statusColor, fontWeight: '600', marginTop: 2 } as any}>
               {statusText}

@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
+import { isNetworkError } from '../utils/error';
 
 export interface NearbyOrder {
   orderId: string;
@@ -39,6 +40,7 @@ export interface DaySchedule {
 // ── Typed incoming order request (New tab) ─────────────────────────
 export interface NewOrderRequest {
   id: string;
+  orderNumber: string;
   locality: string;
   distanceKm: number;
   materials: MaterialCode[];
@@ -73,7 +75,11 @@ interface AggregatorStoreState {
   isOnline: boolean;
   isLoading: boolean;
   feedError: string | null;
+  lastFeedError: string | null;
+  lastFeedSyncAt: string | null;
+  lastAcceptedAt: string | null;
   error: string | null;
+  isNetworkError: boolean;
 
   // ── Photo Capture State ────────────────────────────────────────
   scalePhotoUri: string | null;
@@ -90,7 +96,6 @@ interface AggregatorStoreState {
   setMaterialRate: (id: string, rate: number) => void;
 
   setNearbyOrders: (orders: NearbyOrder[]) => void;
-  setOnline: (v: boolean) => void;
   setLoading: (v: boolean) => void;
 
   dismissOrder: (orderId: string) => void;
@@ -120,6 +125,8 @@ interface AggregatorStoreState {
   updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: string }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates */
   updateRates: (rates: { material_code: string; rate_per_kg: number }[]) => Promise<void>;
+  /** POST /api/aggregators/heartbeat — updates online status */
+  updateOnlineStatus: (v: boolean) => Promise<void>;
 }
 
 const initialMaterials: MaterialConfig[] = [
@@ -158,6 +165,10 @@ function mapFeedOrder(o: any): NewOrderRequest {
 
   return {
     id: o.id,
+    orderNumber:
+      typeof o.order_display_id === 'string' && o.order_display_id.trim().length > 0
+        ? o.order_display_id
+        : `#${String(o.id ?? '').slice(0, 8).toUpperCase()}`,
     locality: o.pickup_locality ?? 'Unknown area',    // V25: only locality, never full address
     distanceKm: typeof o.distance_km === 'number' ? o.distance_km : 0,
     materials: (o.material_codes ?? []) as MaterialCode[],
@@ -171,7 +182,7 @@ function mapFeedOrder(o: any): NewOrderRequest {
   };
 }
 
-export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
+export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   fullName: '',
   businessName: '',
   aggregatorType: null,
@@ -191,7 +202,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   isOnline: false,
   isLoading: false,
   feedError: null,
+  lastFeedError: null,
+  lastFeedSyncAt: null,
+  lastAcceptedAt: null,
   error: null,
+  isNetworkError: false,
   scalePhotoUri: null,
   kycAadhaarFrontUri: null,
   kycAadhaarBackUri: null,
@@ -209,7 +224,6 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
   })),
 
   setNearbyOrders: (orders) => set({ nearbyOrders: orders }),
-  setOnline: (v) => set({ isOnline: v }),
   setLoading: (v) => set({ isLoading: v }),
 
   dismissOrder: (orderId) => set((state) => ({
@@ -226,6 +240,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     const { useOrderStore } = require('./orderStore');
     useOrderStore.getState().addOrder({
       orderId: order.id,
+      orderNumber: order.orderNumber,
       status: 'accepted',
       materials: order.materials,
       estimatedAmount: order.estimatedPrice,
@@ -240,6 +255,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     return {
       newOrders: state.newOrders.filter(o => o.id !== orderId),
       activeOrders: [...state.activeOrders, orderId],
+      lastAcceptedAt: new Date().toISOString(),
     };
   }),
 
@@ -257,6 +273,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     return {
       dismissedOrderIds: [...state.dismissedOrderIds, orderId],
       activeOrders: [...state.activeOrders, orderId],
+      lastAcceptedAt: new Date().toISOString(),
     };
   }),
 
@@ -276,31 +293,50 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
     materials: initialMaterials,
     nearbyOrders: [], newOrders: [], aggOrders: [], activeOrders: [], dismissedOrderIds: [],
     earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
-    isOnline: false, isLoading: false, feedError: null, error: null,
+    isOnline: false, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: null, lastAcceptedAt: null, error: null,
+    isNetworkError: false,
     scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
     kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
   }),
 
   // ── Async: GET /api/orders/feed ────────────────────────────────
   fetchFeed: async (silent = false) => {
-    if (!silent) set({ isLoading: true, feedError: null });
+    // Preserve existing feedError if it exists until we succeed
+    if (!silent && !get().feedError) set({ isLoading: true, feedError: null, lastFeedError: null, isNetworkError: false });
+    else set({ isLoading: true, isNetworkError: false });
+
     try {
       const res = await api.get('/api/orders/feed');
       const orders = (res.data.orders ?? []).map(mapFeedOrder);
-      set({ newOrders: orders, isLoading: false });
+      set({ newOrders: orders, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: new Date().toISOString(), isNetworkError: false });
     } catch (e: any) {
-      if (!silent) set({ feedError: e.response?.data?.error ?? e.message ?? 'Failed to load feed', isLoading: false });
+      const message = e.response?.data?.error ?? e.message ?? 'Failed to load feed';
+      if (isNetworkError(e)) {
+        set({ isNetworkError: true, isLoading: false });
+      } else if (!silent) {
+        set({ feedError: message, lastFeedError: message, isLoading: false });
+      } else {
+        set({ lastFeedError: message, isLoading: false });
+      }
     }
   },
 
   // ── Async: GET /api/orders?role=aggregator ─────────────────────
   fetchAggregatorOrders: async (silent = false) => {
-    if (!silent) set({ isLoading: true, error: null });
+    if (!silent && !get().error) set({ isLoading: true, error: null, isNetworkError: false });
+    else set({ isLoading: true, isNetworkError: false });
+
     try {
       const res = await api.get('/api/orders', { params: { role: 'aggregator' } });
-      set({ aggOrders: res.data.orders ?? [], isLoading: false });
+      set({ aggOrders: res.data.orders ?? [], isLoading: false, error: null, isNetworkError: false });
     } catch (e: any) {
-      if (!silent) set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+      if (isNetworkError(e)) {
+        set({ isNetworkError: true, isLoading: false });
+      } else if (!silent) {
+        set({ error: e.response?.data?.error ?? e.message ?? 'Failed to load orders', isLoading: false });
+      } else {
+        set({ isLoading: false });
+      }
     }
   },
 
@@ -332,6 +368,19 @@ export const useAggregatorStore = create<AggregatorStoreState>((set) => ({
       set({ isLoading: false });
     } catch (e: any) {
       set({ error: e.response?.data?.error ?? e.message ?? 'Failed to update rates', isLoading: false });
+      throw e;
+    }
+  },
+
+  // ── Async: POST /api/aggregators/heartbeat ─────────────────────
+  updateOnlineStatus: async (v) => {
+    // Optimistic update
+    set({ isOnline: v, error: null });
+    try {
+      await api.post('/api/aggregators/heartbeat', { is_online: v });
+    } catch (e: any) {
+      // Revert on failure
+      set({ isOnline: !v, error: e.response?.data?.error ?? e.message ?? 'Failed to update status' });
       throw e;
     }
   },

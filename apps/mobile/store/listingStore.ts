@@ -49,6 +49,15 @@ const initialState = {
   notes: '',
 };
 
+const SLOT_TO_SESSION: Record<string, string> = {
+  morning_8_10: 'morning',
+  morning_10_12: 'morning',
+  afternoon_12_2: 'afternoon',
+  afternoon_2_4: 'afternoon',
+  afternoon_4_6: 'afternoon',
+  evening_6_plus: 'evening',
+};
+
 export const useListingStore = create<ListingState>((set, get) => ({
   ...initialState,
 
@@ -88,12 +97,15 @@ export const useListingStore = create<ListingState>((set, get) => ({
     for (const code of material_codes) {
       estimated_weights[code] = parseFloat(state.weights[code] ?? '0') || 0;
     }
+
+    const pickup_preference = SLOT_TO_SESSION[state.scheduledTime] || 'anytime';
+
     try {
       const res = await api.post('/api/orders', {
         material_codes,
         estimated_weights,
         pickup_address: state.addressLine,
-        pickup_preference: state.scheduledTime || 'anytime',
+        pickup_preference,
         seller_note: state.notes || undefined,
       });
       return { success: true, orderId: res.data.order?.id };

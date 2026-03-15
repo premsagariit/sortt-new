@@ -32,15 +32,23 @@ import { Avatar } from '../../components/ui/Avatar';
  * ──────────────────────────────────────────────────────────────────
  */
 
+
+interface MaterialDetail {
+    material: string;
+    weight: number;
+    actualWeight?: number;
+    rate: number;
+}
+
 // Mock material detail with weights (would come from backend post-weighing)
-const MOCK_MATERIAL_DETAILS: Record<string, Array<{ material: string; weight: number; rate: number }>> = {
+const MOCK_MATERIAL_DETAILS: Record<string, MaterialDetail[]> = {
     'COMP-001': [
         { material: 'Metal', weight: 18, rate: 28 },
         { material: 'E-Waste', weight: 4, rate: 60 },
     ],
     default_completed: [
-        { material: 'Metal', weight: 18, rate: 28 },
-        { material: 'E-Waste', weight: 4, rate: 60 },
+        { material: 'Metal', weight: 18, actualWeight: 17.2, rate: 28 },
+        { material: 'E-Waste', weight: 4, actualWeight: 4.5, rate: 60 },
     ],
     default_cancelled: [
         { material: 'Plastic', weight: 8, rate: 8 },
@@ -75,6 +83,7 @@ export default function OrderHistoryDetailScreen() {
     const displayOrder = order
         ? {
             id: order.orderId,
+            orderNumber: order.orderNumber,
             status: order.status,
             locality: order.pickupLocality,
             address: order.pickupAddress ?? 'Address available after acceptance',
@@ -87,6 +96,7 @@ export default function OrderHistoryDetailScreen() {
         }
         : {
             id: id ?? '—',
+            orderNumber: `#${String(id ?? '').slice(0, 8).toUpperCase()}`,
             status: resolvedStatus ?? 'completed',
             locality: isCancelled ? 'Kukatpally area' : 'Gachibowli area',
             address: isCancelled ? '—' : 'Road No. 5, Near Metro Station',
@@ -99,7 +109,9 @@ export default function OrderHistoryDetailScreen() {
     const materialDetails = MOCK_MATERIAL_DETAILS[displayOrder.id] ??
         (isCancelled ? MOCK_MATERIAL_DETAILS.default_cancelled : MOCK_MATERIAL_DETAILS.default_completed);
 
-    const totalAmount = materialDetails.reduce((sum, d) => sum + d.weight * d.rate, 0);
+    const subTotal = materialDetails.reduce((sum, d) => sum + (d.actualWeight ?? d.weight) * d.rate, 0);
+    const serviceFee = isCompleted ? Math.round(subTotal * 0.05) : 0;
+    const finalTotal = subTotal - serviceFee;
     const heroBg = isCancelled ? '#4A5568' : colors.teal;
 
     const handleSubmitRating = () => {
@@ -163,7 +175,7 @@ export default function OrderHistoryDetailScreen() {
                         {isCancelled ? 'ESTIMATED VALUE' : 'PAYMENT RECEIVED'}
                     </Text>
                     <Numeric size={30} style={[styles.amountValue, { color: isCancelled ? colors.muted : colors.navy }]}>
-                        {isCancelled ? '—' : `₹${displayOrder.amount}`}
+                        {isCancelled ? '—' : `₹${finalTotal}`}
                     </Numeric>
                     {isCompleted && (
                         <View style={styles.paidBadge}>
@@ -178,7 +190,7 @@ export default function OrderHistoryDetailScreen() {
                 <View style={styles.infoStrip}>
                     <View style={styles.infoItem}>
                         <Hash size={13} color={colors.muted} />
-                        <Numeric size={12} color={colors.navy} style={styles.monoText}>{displayOrder.id}</Numeric>
+                        <Numeric size={12} color={colors.navy} style={styles.monoText}>{displayOrder.orderNumber}</Numeric>
                     </View>
                     <View style={styles.stripDivider} />
                     <View style={styles.infoItem}>
@@ -231,23 +243,36 @@ export default function OrderHistoryDetailScreen() {
                             <View style={styles.table}>
                                 <View style={styles.tableHeader}>
                                     <Text variant="caption" color={colors.muted} style={[styles.col, styles.colMat]}>Material</Text>
-                                    <Text variant="caption" color={colors.muted} style={[styles.col, styles.colWeight]}>Weight</Text>
+                                    <View style={[styles.col, styles.colWeight]}>
+                                        <Text variant="caption" color={colors.muted} style={styles.centerText}>Weight (Est/Act)</Text>
+                                    </View>
                                     <Text variant="caption" color={colors.muted} style={[styles.col, styles.colRate]}>Rate</Text>
                                     <Text variant="caption" color={colors.muted} style={[styles.col, styles.colTotal]}>Amount</Text>
                                 </View>
                                 {materialDetails.map((item, idx) => (
                                     <View key={idx} style={[styles.tableRow, idx === materialDetails.length - 1 && { borderBottomWidth: 0 }]}>
                                         <Text variant="label" color={colors.navy} style={[styles.col, styles.colMat]}>{item.material}</Text>
-                                        <Numeric size={13} color={colors.teal} style={[styles.col, styles.colWeight]}>{item.weight} kg</Numeric>
+                                        <View style={[styles.col, styles.colWeight]}>
+                                            <Numeric size={11} color={colors.muted} style={styles.centerText}>{item.weight} kg</Numeric>
+                                            <Numeric size={13} color={colors.teal} style={[styles.centerText, { fontFamily: 'DMSans-Bold' }]}>{item.actualWeight ?? item.weight} kg</Numeric>
+                                        </View>
                                         <Numeric size={13} color={colors.muted} style={[styles.col, styles.colRate]}>₹{item.rate}</Numeric>
                                         <Numeric size={13} color={colors.amber} style={[styles.col, styles.colTotal, { fontWeight: '700' }]}>
-                                            ₹{item.weight * item.rate}
+                                            ₹{Math.round((item.actualWeight ?? item.weight) * item.rate)}
                                         </Numeric>
                                     </View>
                                 ))}
                                 <View style={styles.tableTotalRow}>
-                                    <Text variant="label" color={colors.navy} style={{ fontFamily: 'DMSans-Bold', flex: 1 }}>Total</Text>
-                                    <Numeric size={18} color={colors.navy} style={{ fontFamily: 'DMMono-Bold' }}>₹{totalAmount}</Numeric>
+                                    <Text variant="label" color={colors.navy} style={{ flex: 1 }}>Subtotal</Text>
+                                    <Numeric size={15} color={colors.navy}>₹{subTotal}</Numeric>
+                                </View>
+                                <View style={styles.tableTotalRow}>
+                                    <Text variant="label" color={colors.muted} style={{ flex: 1 }}>Service Fee (5%)</Text>
+                                    <Numeric size={15} color={colors.red}>- ₹{serviceFee}</Numeric>
+                                </View>
+                                <View style={[styles.tableTotalRow, { borderTopWidth: 2, borderTopColor: colors.navy, marginTop: 8, paddingTop: 8 }]}>
+                                    <Text variant="label" color={colors.navy} style={{ fontFamily: 'DMSans-Bold', flex: 1 }}>Total Earned</Text>
+                                    <Numeric size={20} color={colors.navy} style={{ fontFamily: 'DMMono-Bold' }}>₹{finalTotal}</Numeric>
                                 </View>
                             </View>
                         ) : (
@@ -536,9 +561,9 @@ const styles = StyleSheet.create({
     },
     col: { flex: 1 },
     colMat: { flex: 2 },
-    colWeight: { textAlign: 'center' },
-    colRate: { textAlign: 'center' },
-    colTotal: { textAlign: 'right' },
+    colWeight: { alignItems: 'center' },
+    colRate: { alignItems: 'center' },
+    colTotal: { alignItems: 'flex-end' },
 
     // ── OTP ──
     otpRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
@@ -598,4 +623,5 @@ const styles = StyleSheet.create({
         borderColor: '#FECACA',
         padding: spacing.md,
     },
+    centerText: { textAlign: 'center' },
 });

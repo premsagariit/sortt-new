@@ -21,6 +21,7 @@ import { MaterialChip } from '../../../components/ui/MaterialChip';
 const COMPLETED_ORDERS = [
     {
         orderId: 'ORD-2841',
+        orderNumber: '#000001',
         date: 'Today, 2:45 PM',
         amount: 1240,
         materials: ['metal', 'plastic'],
@@ -28,6 +29,7 @@ const COMPLETED_ORDERS = [
     },
     {
         orderId: 'ORD-1001',
+        orderNumber: '#000002',
         date: 'Yesterday, 11:20 AM',
         amount: 680,
         materials: ['paper'],
@@ -35,6 +37,7 @@ const COMPLETED_ORDERS = [
     },
     {
         orderId: 'ORD-7777',
+        orderNumber: '#000003',
         date: '4 Mar 2026',
         amount: 2150,
         materials: ['paper', 'plastic'],
@@ -42,6 +45,7 @@ const COMPLETED_ORDERS = [
     },
     {
         orderId: 'ORD-24091',
+        orderNumber: '#000004',
         date: '3 Mar 2026',
         amount: 1890,
         materials: ['metal', 'plastic'],
@@ -94,7 +98,7 @@ export default function OrderSummary() {
                         <View style={styles.orderContent}>
                             <View style={styles.orderTop}>
                                 <View>
-                                    <Numeric size={14} color={colors.navy}>#{order.orderId}</Numeric>
+                                    <Numeric size={14} color={colors.navy}>{order.orderNumber}</Numeric>
                                     <Text variant="caption" color={colors.muted}>{order.date}</Text>
                                 </View>
                                 <Numeric size={20} color={colors.teal}>₹{order.amount}</Numeric>

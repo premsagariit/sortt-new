@@ -7,9 +7,8 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialChip } from '../../components/ui/MaterialChip';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
-import { MagnifyingGlass, Clock, Check, X } from 'phosphor-react-native';
+import { MagnifyingGlass, Clock, Check, X, Lock } from 'phosphor-react-native';
 import { BaseCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
-import { useOrderStore } from '../../store/orderStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 
@@ -17,15 +16,13 @@ type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
-  const { newOrders, aggOrders, dismissNewOrder, acceptNewOrder, cancelOrder, fetchAggregatorOrders, error } = useAggregatorStore();
+  const { newOrders, aggOrders, dismissNewOrder, acceptNewOrder, cancelOrder, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const loadOrders = () => {
-    setIsLoading(true);
-    fetchAggregatorOrders().finally(() => setIsLoading(false));
+    fetchAggregatorOrders();
   };
 
   useEffect(() => {
@@ -52,6 +49,7 @@ export default function AggregatorOrdersScreen() {
   function mapStoreOrder(o: any) {
     return {
       id: o.orderId,
+      orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId ?? '').slice(0, 8).toUpperCase()}`,
       distance: '—',
       price: o.confirmedAmount ?? o.estimatedAmount,
       locality: o.pickupLocality,
@@ -136,9 +134,10 @@ export default function AggregatorOrdersScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardRow}>
             <View style={styles.rowLeft}>
-              <Numeric size={13} color={colors.muted} style={styles.monoText}>#{order.id}</Numeric>
+              <Numeric size={13} color={colors.muted} style={styles.monoText}>{order.orderNumber}</Numeric>
               <View style={styles.dotSeparator} />
-              <Text variant="caption" color={colors.muted}>{order.distanceKm ? order.distanceKm.toFixed(1) : '—'} km</Text>
+              <Lock size={12} color={colors.amber} weight="fill" />
+              <Text variant="caption" color={colors.muted} style={{ marginLeft: 2 }}>{order.distanceKm ? order.distanceKm.toFixed(1) : '—'} km</Text>
             </View>
             <Numeric size={20} color={colors.amber} style={styles.priceText}>~₹{order.estimatedPrice}</Numeric>
           </View>
@@ -227,7 +226,7 @@ export default function AggregatorOrdersScreen() {
           <View style={styles.cardContent}>
             <View style={styles.cardRow}>
               <View style={styles.rowLeft}>
-                <Numeric size={13} color={colors.muted} style={styles.monoText}>#{order.id}</Numeric>
+                <Numeric size={13} color={colors.muted} style={styles.monoText}>{order.orderNumber}</Numeric>
                 <View style={styles.dotSeparator} />
                 <Text variant="caption" color={colors.muted}>{order.distance}</Text>
               </View>
@@ -288,7 +287,7 @@ export default function AggregatorOrdersScreen() {
                     if (order.status === 'arrived') {
                       router.push(`/(aggregator)/execution/weighing/${order.id}` as any);
                     } else {
-                      router.push('/(aggregator)/execution/navigate' as any);
+                      router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: order.id } } as any);
                     }
                   }}
                 />
@@ -317,23 +316,30 @@ export default function AggregatorOrdersScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <NavBar title="Order Feed" variant="light" />
+      <>
+        {renderTabs()}
+        {renderFilters()}
 
-      {renderTabs()}
-      {renderFilters()}
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {error && (
-          <View style={{ padding: 16, backgroundColor: colorExtended.redLight, borderRadius: 8, borderColor: colors.red, borderWidth: 1, marginBottom: 16 }}>
-            <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
+          <View style={[styles.errorContainer, isLoading && { opacity: 0.7 }]}>
+            <Text variant="body" style={styles.errorText}>
               {error}
             </Text>
-            <Pressable onPress={loadOrders} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
-              <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
+            <Pressable 
+              onPress={isLoading ? undefined : loadOrders} 
+              disabled={isLoading}
+              style={styles.retryButton}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={colors.surface} />
+              ) : (
+                <Text variant="caption" style={styles.retryText}>Retry</Text>
+              )}
             </Pressable>
           </View>
         )}
-        {isLoading ? (
+        {isLoading && !error ? (
           <View style={{ alignItems: 'center', marginTop: 40 }}>
             <ActivityIndicator size="large" color={colors.navy} />
             <Text variant="caption" style={{ marginTop: 12 }}>Loading orders...</Text>
@@ -355,7 +361,8 @@ export default function AggregatorOrdersScreen() {
             ? cancelledOrders.map(renderOrderCard)
             : renderEmptyState('No cancelled orders')
         )}
-      </ScrollView>
+        </ScrollView>
+      </>
 
       {/* ── Cancellation Reason Bottom Sheet ─────────────────────── */}
       {cancelOrderId && (
@@ -439,4 +446,31 @@ const styles = StyleSheet.create({
   chatBtn: { flex: 1, height: 40 },
   carouselContainer: { height: 46 },
   emptyContent: { alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
+  errorContainer: { 
+    padding: 16, 
+    backgroundColor: colorExtended.redLight, 
+    borderRadius: 8, 
+    borderColor: colors.red, 
+    borderWidth: 1, 
+    marginBottom: 16 
+  },
+  errorText: { 
+    color: colors.red, 
+    textAlign: 'center' 
+  },
+  retryButton: { 
+    marginTop: 8, 
+    alignSelf: 'center', 
+    backgroundColor: colors.red, 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 16,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  retryText: { 
+    color: colors.surface, 
+    fontWeight: 'bold' 
+  },
 });

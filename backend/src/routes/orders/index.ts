@@ -306,6 +306,15 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     const hasMore = rows.length > limit;
     if (hasMore) rows.pop();
 
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[FEED DIAG] GET /api/orders/feed', {
+        userId,
+        city_code,
+        returnedCount: rows.length,
+        orderIds: rows.map((o: any) => o.id),
+      });
+    }
+
     // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
     return res.json({
       orders: rows.map((o: DbOrder) => buildOrderDto(o, userId)),
@@ -528,12 +537,14 @@ router.get('/:id', async (req, res) => {
 
     const result = await query(`
       SELECT o.*,
+             u.name as seller_name,
              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
              jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
       FROM orders o
+      LEFT JOIN users_public u ON u.id = o.seller_id
       LEFT JOIN order_items oi ON o.id = oi.order_id
       WHERE o.id = $1
-      GROUP BY o.id
+      GROUP BY o.id, u.name
     `, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radius } from '../../constants/tokens';
@@ -26,19 +26,30 @@ import { safeBack } from '../../utils/navigation';
 
 export default function AggregatorOrderDetailScreen() {
     const router = useRouter();
-    const { id } = useLocalSearchParams();
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const { orders, fetchOrder } = useOrderStore();
+    const storeOrder = orders.find((o) => o.orderId === id);
+
+    useEffect(() => {
+        if (id && !storeOrder) {
+            fetchOrder(id, true);
+        }
+    }, [id, storeOrder, fetchOrder]);
+
+    const internalOrderId = storeOrder?.orderId ?? id ?? 'ORD-24095';
+    const displayOrderNumber = storeOrder?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
 
     const MOCK_ORDER = {
-        id: (id as string) || 'ORD-24095',
+        id: displayOrderNumber,
         distance: '1.4 km',
-        locality: 'Banjara Hills area',
+        locality: storeOrder?.pickupLocality ?? 'Banjara Hills area',
         window: 'Today · 10 AM — 12 PM',
         items: [
             { material: 'Metal', weight: 18, rate: 28, yourRate: 30 },
             { material: 'Paper', weight: 15, rate: 12, yourRate: 14 },
             { material: 'Plastic', weight: 4, rate: 8, yourRate: 8 },
         ],
-        totalEst: 896,
+        totalEst: storeOrder?.estimatedAmount ?? 896,
     };
 
     const renderSummaryStrip = () => (
@@ -64,15 +75,15 @@ export default function AggregatorOrderDetailScreen() {
             <View style={styles.tableHeader}>
                 <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
                 <Text variant="caption" style={[styles.col, styles.colWeight]}>WEIGHT</Text>
-                <Text variant="caption" style={[styles.col, styles.colRate]}>RATE</Text>
+                <Text variant="caption" style={[styles.col, styles.colRate]}>SELLER RATE</Text>
                 <Text variant="caption" style={[styles.col, styles.colYourRate]}>AT YOUR RATE</Text>
             </View>
             {MOCK_ORDER.items.map((item, idx) => (
                 <View key={item.material} style={[styles.tableRow, idx === MOCK_ORDER.items.length - 1 && { borderBottomWidth: 0 }]}>
                     <Text variant="label" color={colors.navy} style={[styles.col, styles.colMaterial]}>{item.material}</Text>
                     <Numeric size={14} style={[styles.col, styles.colWeight, { color: colors.teal }]}>{item.weight} kg</Numeric>
-                    <Numeric size={14} color={colors.muted} style={[styles.col, styles.colRate]}>₹{item.rate}</Numeric>
-                    <Numeric size={14} color={colors.amber} style={[styles.col, styles.colYourRate]}>₹{item.yourRate}</Numeric>
+                    <Numeric size={14} color={colors.muted} style={[styles.col, styles.colRate]}>₹{item.rate}/kg</Numeric>
+                    <Numeric size={14} color={colors.amber} style={[styles.col, styles.colYourRate]}>₹{item.yourRate}/kg</Numeric>
                 </View>
             ))}
             <View style={styles.totalRow}>
@@ -117,12 +128,12 @@ export default function AggregatorOrderDetailScreen() {
                             Location preview locked
                         </Text>
                     </View>
-                    <View style={styles.unlockBanner}>
-                        <Lock size={14} color={colors.surface} weight="fill" />
-                        <Text variant="caption" color={colors.surface} style={{ marginLeft: 8, fontWeight: '600' }}>
-                            Accept Order to view full address
-                        </Text>
-                    </View>
+                        <View style={styles.unlockBanner}>
+                            <Lock size={16} color={colors.amber} weight="fill" />
+                            <Text variant="caption" color={colors.amber} style={styles.unlockText}>
+                                Full address revealed upon order acceptance
+                            </Text>
+                        </View>
                 </View>
             </View>
         </BaseCard>
@@ -165,7 +176,7 @@ export default function AggregatorOrderDetailScreen() {
                     style={styles.rejectBtn}
                     textStyle={styles.btnText}
                     onPress={() => {
-                        useAggregatorStore.getState().dismissNewOrder(MOCK_ORDER.id);
+                        useAggregatorStore.getState().dismissNewOrder(internalOrderId);
                         safeBack('/(aggregator)/orders');
                     }}
                 />
@@ -174,7 +185,7 @@ export default function AggregatorOrderDetailScreen() {
                     style={styles.acceptBtn}
                     textStyle={styles.btnText}
                     onPress={() => {
-                        useAggregatorStore.getState().acceptOrder(MOCK_ORDER.id);
+                        useAggregatorStore.getState().acceptOrder(internalOrderId);
                         router.replace('/(aggregator)/orders');
                     }}
                 />
@@ -228,6 +239,18 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontFamily: 'DMSans-Bold',
     },
+    unlockBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#FFFBEB',
+        padding: spacing.md,
+        borderRadius: radius.card,
+        marginTop: 12,
+        borderWidth: 1,
+        borderColor: '#FEF3C7',
+    },
+    unlockText: { fontFamily: 'DMSans-Medium', flex: 1 },
     tableCard: {
         backgroundColor: colors.surface,
         borderRadius: radius.card,
@@ -262,12 +285,13 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     colRate: {
-        flex: 1,
+        flex: 1.5,
         textAlign: 'center',
     },
     colYourRate: {
         flex: 2,
         textAlign: 'right',
+        fontFamily: 'DMSans-Bold',
     },
     totalRow: {
         flexDirection: 'row',
@@ -351,17 +375,6 @@ const styles = StyleSheet.create({
     mapCaption: {
         fontFamily: 'DMSans-Medium',
         opacity: 0.8,
-    },
-    unlockBanner: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: colors.navy,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 10,
     },
     bottomBar: {
         position: 'absolute',

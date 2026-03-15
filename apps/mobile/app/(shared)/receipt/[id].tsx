@@ -49,6 +49,7 @@ type WeightEntry = {
 
 type ReceiptMock = {
   orderId: string;
+  orderNumber: string;
   locality: string;
   items: WeightEntry[];
   paymentMethod: string;
@@ -68,6 +69,7 @@ const MATERIAL_COLORS: Record<string, string> = {
 const MOCK_RECEIPT: Record<string, ReceiptMock> = {
   'ORD-2841': {
     orderId: 'ORD-2841',
+    orderNumber: '#000001',
     locality: 'Madhapur, 3rd Phase',
     items: [
       { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
@@ -79,6 +81,7 @@ const MOCK_RECEIPT: Record<string, ReceiptMock> = {
   },
   'ORD-2790': {
     orderId: 'ORD-2790',
+    orderNumber: '#000002',
     locality: 'Gachibowli, DLF',
     items: [
       { material: 'E-Waste', materialKey: 'ewaste', weightKg: 8.5, ratePerKg: 120 },
@@ -137,7 +140,7 @@ export default function ReceiptScreen() {
             color={colors.surface}
             style={{ opacity: 0.6, marginTop: 4 }}
           >
-            #{receipt.orderId}
+            {receipt.orderNumber}
           </Numeric>
         </View>
 

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Animated, BackHandler, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle, Clock, CaretLeft } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
+import { useOrderStore } from '../../../store/orderStore';
 
 type ConfirmState = 'waiting' | 'verified';
 
@@ -15,6 +16,18 @@ export default function ConfirmScreen() {
     const [state, setState] = useState<ConfirmState>('waiting');
     const insets = useSafeAreaInsets();
     const pulseAnim = new Animated.Value(1);
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const { orders, fetchOrder } = useOrderStore();
+    const order = orders.find((o) => o.orderId === id);
+
+    useEffect(() => {
+        if (id && !order) {
+            fetchOrder(id, true);
+        }
+    }, [id, order, fetchOrder]);
+
+    const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
+    const displayOrderNumber = order?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
 
     // Block back button
     useEffect(() => {
@@ -54,14 +67,14 @@ export default function ConfirmScreen() {
     }, [state]);
 
     const handleFinish = () => {
-        router.push('/(aggregator)/execution/receipt');
+        router.push({ pathname: '/(aggregator)/execution/receipt', params: { id: internalOrderId } } as any);
     };
 
     return (
         <View style={styles.container}>
             <NavBar
                 variant="light"
-                title={state === 'waiting' ? "Order #ORD-24091" : "Pickup Confirmation"}
+                title={state === 'waiting' ? `Order ${displayOrderNumber}` : 'Pickup Confirmation'}
                 onBack={state === 'waiting' ? () => router.back() : undefined}
             />
 

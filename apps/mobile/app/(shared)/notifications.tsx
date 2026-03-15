@@ -35,7 +35,7 @@ const MOCK_NOTIFICATIONS: NotificationItem[] = [
         type: 'order',
         isRead: false,
         title: "Order completed",
-        body: "Order #8829 was successful. ₹1,240 added to your balance.",
+        body: "Order was successful. ₹1,240 added to your balance.",
         timestamp: "2h ago"
     },
     {

@@ -142,7 +142,7 @@ export default function DisputeScreen() {
                             <View>
                                 <Text variant="label" style={styles.cardSectionLabel}>Order</Text>
                                 <View style={styles.orderMeta}>
-                                    <Numeric size={12} color={colors.muted}>#ORD-24091</Numeric>
+                                    <Numeric size={12} color={colors.muted}>Order ID unavailable</Numeric>
                                     <StatusChip status="completed" />
                                 </View>
                             </View>

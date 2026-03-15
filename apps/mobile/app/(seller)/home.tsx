@@ -16,7 +16,7 @@ import { StyleSheet, View, FlatList, Pressable, Animated, ActivityIndicator } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Bell, Tray, Recycle, ChartLineUp, Truck, CaretUp, CaretDown, Minus, ArrowRight, CaretRight as CaretRightIcon } from 'phosphor-react-native';
+import { House, MapPin, Calendar, Bell, ArrowRight, Wallet, ArrowUp, Tray } from 'phosphor-react-native';
 import { APP_NAME } from '../../constants/app';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { useOrderStore } from '../../store/orderStore';
@@ -63,17 +63,27 @@ export default function SellerHomeScreen() {
   const ordersCount = String(orders.length).padStart(2, '0');
   const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
   const activeCount = String(activeOrders.length).padStart(2, '0');
+  const recentOrders = useMemo(() => {
+    return orders
+      .filter(o => ACTIVE_STATUSES.includes(o.status) || o.status === 'completed')
+      .sort((a, b) => {
+        const aTime = new Date(a.updatedAt || a.createdAt).getTime();
+        const bTime = new Date(b.updatedAt || b.createdAt).getTime();
+        return bTime - aTime;
+      })
+      .slice(0, 5);
+  }, [orders]);
 
   // ── Live rates from GET /api/rates ─────────────────────────────
   const [rates, setRates] = useState<RateEntry[]>([]);
   const [ratesLoading, setRatesLoading] = useState(false);
-  const fetchRates = useCallback(async () => {
-    setRatesLoading(true);
+  const fetchRates = useCallback(async (silent = false) => {
+    if (!silent) setRatesLoading(true);
     try {
       const res = await api.get('/api/rates');
       setRates(res.data.rates || []);
     } catch { /* non-fatal: rates section stays empty */ } finally {
-      setRatesLoading(false);
+      if (!silent) setRatesLoading(false);
     }
   }, []);
 
@@ -86,7 +96,7 @@ export default function SellerHomeScreen() {
     // Auto-refresh: poll every 30s — silent so no loading flash
     const poll = setInterval(() => {
       fetchOrders(true);
-      fetchRates();
+      fetchRates(true);
     }, 30_000);
 
     return () => clearInterval(poll);
@@ -96,20 +106,27 @@ export default function SellerHomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchOrders(true);
-      fetchRates();
+      fetchRates(true);
     }, [fetchOrders, fetchRates])
   );
 
   const calculateEstimate = useCallback((order: any) => {
+    if (!order) return 0;
     if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
       if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
       return 0;
     }
-    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
-      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
-      return sum + (rate * (weight as number));
-    }, 0);
+    try {
+      return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
+        const rate = (rates && Array.isArray(rates)) ? (rates.find(r => r.material_code === code)?.rate_per_kg ?? 0) : 0;
+        return sum + (rate * (Number(weight) || 0));
+      }, 0);
+    } catch (e) {
+      console.warn('[SellerHome] Error in calculateEstimate', e);
+      return order.estimatedAmount || 0;
+    }
   }, [rates]);
+
 
   const titleOpacity = scrollY.interpolate({
     inputRange: [0, 40],
@@ -146,6 +163,14 @@ export default function SellerHomeScreen() {
     if (hour < 17) return 'Good afternoon,';
     return 'Good evening,';
   }, []);
+
+  // Home screen should not go away when offline according to requirements.
+  // Instead, the Navbar will turn red and show a refresh button.
+  const loadDataAsync = useCallback(async (silent = false) => {
+    await fetchOrders(silent);
+    await fetchRates(silent);
+  }, [fetchOrders, fetchRates]);
+
 
   const handleCreateListing = () => router.push('/(seller)/listing/step1');
   const handleNotifications = () => router.push('/(shared)/notifications' as any);
@@ -190,27 +215,27 @@ export default function SellerHomeScreen() {
         {/* Primary CTA */}
         <Pressable style={styles.primaryCta} onPress={handleCreateListing}>
           <View style={styles.ctaIconBox}>
-            <Recycle size={22} color={colors.surface} weight="bold" />
+            <House size={22} color={colors.surface} weight="bold" />
           </View>
           <View style={styles.ctaTextCol}>
             <Text variant="subheading" style={styles.ctaTitle}>SELL SCRAP</Text>
             <Text variant="caption" style={styles.ctaSub}>List your scrap for pickup</Text>
           </View>
-          <CaretRightIcon size={20} color={colors.surface} weight="bold" />
+          <ArrowRight size={20} color={colors.surface} weight="bold" />
         </Pressable>
 
         {/* Secondary CTA Row */}
         <View style={styles.secCtaRow}>
           <Pressable style={styles.secCtaCard} onPress={handleMarketRates} hitSlop={12}>
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.surface2 }]}>
-              <ChartLineUp size={20} color={colors.navy} weight="bold" />
+              <Wallet size={20} color={colors.navy} weight="bold" />
             </View>
             <Text variant="caption" style={styles.secCtaTitle}>Market Rates</Text>
             <Text variant="caption" color={colors.muted}>Today's prices</Text>
           </Pressable>
           <Pressable style={styles.secCtaCard} onPress={handleMyOrders} hitSlop={12}>
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.tealLight }]}>
-              <Truck size={20} color={colors.teal} weight="bold" />
+              <Calendar size={20} color={colors.teal} weight="bold" />
             </View>
             <Text variant="caption" style={styles.secCtaTitle}>My Orders</Text>
             <Text variant="caption" color={colors.muted}>Track pickups</Text>
@@ -236,9 +261,9 @@ export default function SellerHomeScreen() {
                   <Text variant="body" style={styles.rateMaterial}>{r.name}</Text>
                   <Numeric style={styles.ratePrice}>₹{r.rate_per_kg}/kg</Numeric>
                 </View>
-                {r.trend === 'up' ? <CaretUp size={18} color={colors.teal} weight="bold" /> :
-                 r.trend === 'down' ? <CaretDown size={18} color={colors.red} weight="bold" /> :
-                 <Minus size={18} color={colors.muted} weight="bold" />}
+                {r.trend === 'up' ? <ArrowUp size={18} color={colors.teal} weight="bold" /> :
+                 r.trend === 'down' ? <ArrowUp size={18} color={colors.red} weight="bold" style={{ transform: [{ rotate: '180deg' }] }} /> :
+                 <View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><View style={{ width: 12, height: 2, backgroundColor: colors.muted }} /></View>}
               </View>
             )) : (
               <Text variant="caption" color={colors.muted} style={{ paddingVertical: 8 }}>Rates unavailable — check back soon.</Text>
@@ -248,7 +273,7 @@ export default function SellerHomeScreen() {
 
         {/* Section header */}
         <View style={styles.sectionHeader}>
-          <Text variant="subheading">Active Orders</Text>
+          <Text variant="subheading">Recent Orders</Text>
           <Pressable onPress={() => router.push('/(seller)/orders')}>
             <Text variant="caption" color={colors.red}>See all</Text>
           </Pressable>
@@ -261,39 +286,32 @@ export default function SellerHomeScreen() {
     <View style={styles.safe}>
       <StatusBar style="light" backgroundColor={colors.navy} />
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300, backgroundColor: colors.navy }} />
-      {/* ── Custom Animated NavBar ── */}
-      <View style={[styles.customNav, { paddingTop: insets.top, height: 56 + insets.top }]}>
-
-        {/* UNCOMPRESSED STATE (Title + Badge) */}
+      <View style={[
+        styles.customNav,
+        { paddingTop: insets.top, height: 56 + insets.top },
+      ]}>
+        {/* UNCOMPRESSED STATE */}
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: titleOpacity, transform: [{ translateY: titleTranslateY }] }]} pointerEvents="none">
           <View style={styles.uncompressedWrap}>
             <SorttLogo variant="compact-dark" />
-            <View style={[styles.badgePill, styles.badgeSeller, { marginTop: 2 }]}>
-              <View style={[styles.badgeDot, { backgroundColor: colors.teal }]} />
-              <Text variant="caption" style={[styles.badgeText, { color: colors.teal }]}>SELLER</Text>
-            </View>
           </View>
         </Animated.View>
 
-        {/* COMPRESSED STATE (Name + Loc) */}
+        {/* COMPRESSED STATE */}
         <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
           <View style={styles.compressedRow}>
             <View style={styles.navLeft}>
               <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
               <View style={styles.navMinimizedLoc}>
-                <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
+                <MapPin size={10} color={colors.surface} />
                 <Text variant="caption" style={styles.navMinimizedLocText}>{displayLocality}</Text>
               </View>
             </View>
           </View>
         </Animated.View>
 
-        {/* ALWAYS VISIBLE RIGHT ACTIONS */}
+        {/* RIGHT ACTIONS */}
         <View style={[styles.alwaysRight, { top: insets.top }]} pointerEvents="box-none">
-          <Animated.View style={[styles.compressedIndicator, { opacity: minimizedOpacity }]}>
-            <Text variant="caption" style={[styles.compressedIndicatorText, { color: colors.teal }]}>S</Text>
-          </Animated.View>
-
           <IconButton
             icon={<Bell size={22} color={colors.surface} />}
             onPress={handleNotifications}
@@ -304,16 +322,14 @@ export default function SellerHomeScreen() {
               name={displayName}
               userType="seller"
               size="sm"
-              source={AVATAR_SOURCE}
             />
           </Pressable>
         </View>
-
       </View>
 
       {/* ── Scrollable FlatList ── */}
       <Animated.FlatList
-        data={activeOrders}
+        data={recentOrders}
         keyExtractor={(item) => item.orderId}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
@@ -329,6 +345,7 @@ export default function SellerHomeScreen() {
           >
             <OrderCard
               orderId={item.orderId}
+              orderNumber={item.orderNumber}
               status={item.status}
               materials={item.materials}
               amountRupees={calculateEstimate(item)}

@@ -28,9 +28,17 @@ export default function OTPVerificationScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     const storeOrders = useOrderStore((s: any) => s.orders);
+    const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
     const updateStatus = useOrderStore((s: any) => s.updateOrderStatus);
     const order = storeOrders.find((o: any) => o.orderId === id);
+    const orderNumber = order?.orderNumber ?? `#${String(id ?? '').slice(0, 8).toUpperCase()}`;
     const targetOtp = order?.otp || '1234';
+
+    useEffect(() => {
+        if (id && !order) {
+            fetchOrder(id, true);
+        }
+    }, [id, order, fetchOrder]);
 
     const handleOtpChange = (val: string, index: number) => {
         const newOtp = [...otp];
@@ -94,7 +102,7 @@ export default function OTPVerificationScreen() {
                 <Animated.View style={[{ opacity: fadeAnim }, styles.successContent]}>
                     <Text variant="heading" style={styles.successHeading}>Payment Processed!</Text>
                     <Text variant="body" color={colors.muted} style={styles.successMessage}>
-                        Order #{id} has been marked as completed successfully.
+                        Order {orderNumber} has been marked as completed successfully.
                     </Text>
 
                     <View style={styles.receiptCard}>
@@ -105,7 +113,7 @@ export default function OTPVerificationScreen() {
                         <View style={styles.receiptDivider} />
                         <View style={styles.receiptRow}>
                             <Text variant="body" color={colors.slate}>Order Number</Text>
-                            <Numeric size={14} color={colors.navy}>{id}</Numeric>
+                            <Numeric size={14} color={colors.navy}>{orderNumber}</Numeric>
                         </View>
                     </View>
 

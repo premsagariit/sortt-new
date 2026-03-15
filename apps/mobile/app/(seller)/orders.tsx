@@ -47,12 +47,13 @@ export default function SellerOrdersScreen() {
 
   // Fetch on mount + auto-refresh
   useEffect(() => {
-    fetchOrders();
+    console.log('[SellerOrders] Component mounted, fetching orders...');
+    fetchOrders().then(() => console.log('[SellerOrders] Initial fetch completed'));
     api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
 
     // Polling every 30s
     const poll = setInterval(() => {
-      fetchOrders();
+      fetchOrders(true);
       api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
     }, 30_000);
 
@@ -69,6 +70,8 @@ export default function SellerOrdersScreen() {
     }
   }, [cancelOrder]);
 
+  const showInitialSkeleton = isLoading && orders.length === 0;
+
   // Filter client-side from store
   const displayOrders = orders.filter(order => {
     if (activeFilter === 'All') return true;
@@ -83,14 +86,20 @@ export default function SellerOrdersScreen() {
   const firstActive = activeOrders[0];
 
   const calculateEstimate = useCallback((order: any) => {
+    if (!order) return 0;
     if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
       if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
       return 0;
     }
-    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
-      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
-      return sum + (rate * (weight as number));
-    }, 0);
+    try {
+      return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
+        const rate = (rates && Array.isArray(rates)) ? (rates.find(r => r.material_code === code)?.rate_per_kg ?? 0) : 0;
+        return sum + (rate * (Number(weight) || 0));
+      }, 0);
+    } catch (e) {
+      console.warn('[SellerOrders] Error in calculateEstimate', e);
+      return order.estimatedAmount || 0;
+    }
   }, [rates]);
 
   // Format date string from ISO
@@ -159,18 +168,23 @@ export default function SellerOrdersScreen() {
       )}
 
       {/* Error Banner with Retry */}
-      {error && !isLoading && (
+      {(error && typeof error === 'string') && (
         <Pressable
-          style={styles.errorBanner}
-          onPress={handleRetry}
+          style={[styles.errorBanner, isLoading && { opacity: 0.7 }]}
+          onPress={isLoading ? undefined : handleRetry}
           accessibilityRole="button"
           accessibilityLabel="Retry loading orders"
+          disabled={isLoading}
         >
           <WarningCircle size={16} color={colors.red} />
           <Text variant="caption" style={styles.errorText as any}>
             {error}
           </Text>
-          <ArrowClockwise size={16} color={colors.red} />
+          {isLoading ? (
+            <ActivityIndicator size="small" color={colors.red} />
+          ) : (
+            <ArrowClockwise size={16} color={colors.red} />
+          )}
         </Pressable>
       )}
 
@@ -179,10 +193,10 @@ export default function SellerOrdersScreen() {
         style={styles.listContainer}
         contentContainerStyle={[
           styles.listContent,
-          !isLoading && displayOrders.length === 0 && styles.listEmpty,
+          !showInitialSkeleton && displayOrders.length === 0 && styles.listEmpty,
         ]}
       >
-        {isLoading ? (
+        {showInitialSkeleton ? (
           // Skeleton loading state — 3 rows
           <>
             <SkeletonRow />
@@ -200,6 +214,7 @@ export default function SellerOrdersScreen() {
             >
               <OrderCard
                 orderId={order.orderId}
+                orderNumber={order.orderNumber}
                 status={order.status}
                 materials={order.materials}
                 amountRupees={calculateEstimate(order)}

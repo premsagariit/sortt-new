@@ -1,16 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, BackHandler, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle, Star } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { BaseCard } from '../../../components/ui/Card';
+import { useOrderStore } from '../../../store/orderStore';
 
 export default function ReceiptScreen() {
     const [rating, setRating] = useState(0);
     const insets = useSafeAreaInsets();
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const { orders, fetchOrder } = useOrderStore();
+    const order = orders.find((o) => o.orderId === id);
+
+    useEffect(() => {
+        if (id && !order) {
+            fetchOrder(id, true);
+        }
+    }, [id, order, fetchOrder]);
+
+    const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
+    const displayOrderNumber = order?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
 
     // Block hardware back button
     useEffect(() => {
@@ -45,7 +58,7 @@ export default function ReceiptScreen() {
                         </Text>
                     </View>
                     <Numeric size={12} color={colors.surface} style={styles.orderId}>
-                        #ORD-24091
+                        {displayOrderNumber}
                     </Numeric>
                 </View>
 

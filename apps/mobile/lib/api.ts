@@ -52,12 +52,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    const method = error.config?.method?.toUpperCase();
-    const path = error.config?.url;
+    const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
+    const path = error.config?.url || 'UNKNOWN';
     const status = error.response?.status;
     const errorBody = error.response?.data;
 
-    console.error('[API ERROR]', method, path, status, errorBody);
+    const logFn = status ? console.error : console.warn;
+    logFn(`[API ERROR] ${method} ${path} | Status: ${status}`, errorBody || error.message);
 
     if (status === 401) {
       console.warn('[API] 401 Unauthorized — clearing auth state');

@@ -8,6 +8,21 @@
 > 📋 **v4.0 CHANGE SUMMARY (from v3.2)**
 > Supabase has been fully removed from this architecture. Reason: active ISP-level government block in India targeting `*.supabase.co` and `firebaseio.com` domains as of February 2026. All Supabase services (Auth, Realtime, Storage, Edge Functions, PostgreSQL) are replaced with India-accessible, non-blockable alternatives. PostGIS geospatial dependency removed and replaced with city-code/locality matching — appropriate for the single-city Hyderabad MVP pilot. Backend hosting moved from Render to Azure App Service (Central India). All other security controls, business logic, and UI rules are unchanged.
 
+> ✅ **Implementation Sync Note (2026-03-16)**
+> - `migrations/0018_order_number_per_seller.sql` implemented and applied.
+> - Orders now expose backend-formatted `order_display_id` (e.g. `#000042`) as the UI-facing identifier.
+> - `order_number` is persistence-only and not intended as a direct client field.
+> - Mobile order execution routes now carry internal order `id` end-to-end to keep display identity consistent across all steps.
+> - Full offline/network-error handling layer implemented in mobile app:
+>   - `hooks/useNetworkStatus.ts` — thin `@react-native-community/netinfo` wrapper exposing `{ isOnline: boolean }`.
+>   - `utils/error.ts` — `isNetworkError(e)` helper classifying Axios/network errors.
+>   - `OfflineAwareNavigator` in `app/_layout.tsx` — gates the router: when `isOnline === false`, the entire `<Stack>` is replaced with the appropriate offline screen; TabBar and nav icons are automatically suppressed.
+>   - `AuthNetworkErrorScreen` — minimal offline screen (red header with centered logo) used when the user is on an `/(auth)` route or is not signed in.
+>   - `NetworkErrorScreen` — rich offline screen (red header mirroring the live NavBar with persona name, avatar, location pill, scroll-driven compression animation, aggregator "Offline" pill) used for all in-app routes.
+>   - Both screens show a 10-second auto-retry countdown and a manual "Retry now" button. Retry probes `GET /api/rates`; network restoration is detected independently by `useNetworkStatus`.
+>   - On reconnect from an `/(auth)` path, the layout restores `/(auth)/phone` if the user was on `phone` or `otp` (OTP is time-limited and cannot be replayed), or restores the exact stored path for other auth screens.
+
+
 ---
 
 ## 0. Local Development (3-Command Rule)

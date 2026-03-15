@@ -20,6 +20,8 @@ import { colors } from '../constants/tokens';
 import SplashAnimation from '../components/SplashAnimation';
 import { useAuthStore } from '../store/authStore';
 
+let hasShownSplashAnimation = false;
+
 export default function IndexScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
@@ -27,7 +29,12 @@ export default function IndexScreen() {
   const name = useAuthStore((s) => s.name);
 
   // Track whether the splash animation has finished
-  const [splashDone, setSplashDone] = useState(false);
+  const [splashDone, setSplashDone] = useState(hasShownSplashAnimation);
+
+  const handleSplashComplete = () => {
+    hasShownSplashAnimation = true;
+    setSplashDone(true);
+  };
 
   // Route once BOTH splash is done AND Clerk has loaded.
   useEffect(() => {
@@ -62,7 +69,7 @@ export default function IndexScreen() {
 
   return (
     <View style={styles.container}>
-      <SplashAnimation onComplete={() => setSplashDone(true)} />
+      {!splashDone && <SplashAnimation onComplete={handleSplashComplete} />}
     </View>
   );
 }

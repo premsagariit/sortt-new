@@ -62,6 +62,11 @@ const MOCK_AGG_NAME = 'Suresh Metals';
 const MOCK_AGG_AREA = 'Madhapur · 3rd Phase';
 const MOCK_AGG_AREA_SHORT = 'Madhapur';
 const MOCK_PENDING_COUNT = '04';
+const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000;
+const MIN_ACCEPTABLE_RATES: Record<string, number> = {
+  metal: 25,
+  paper: 8,
+};
 
 // ── Main Screen ────────────────────────────────────────────────────
 
@@ -69,7 +74,9 @@ export default function AggregatorHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { isOnline, setOnline, earnings, businessName, primaryArea, fetchFeed, error } = useAggregatorStore();
+  const { isOnline, updateOnlineStatus, earnings, businessName, primaryArea, fetchFeed, error } = useAggregatorStore();
+  const lastFeedSyncAt = useAggregatorStore((s) => s.lastFeedSyncAt);
+  const lastFeedError = useAggregatorStore((s) => s.lastFeedError);
   const userType = useAuthStore((s: any) => s.userType);
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
@@ -87,13 +94,13 @@ export default function AggregatorHomeScreen() {
 
   const sendHeartbeat = useCallback(() => {
     // Role check prevents 403 when seller UI is active
-    if (userType !== 'aggregator') return;
+    if (userType !== 'aggregator' || !isOnline) return;
     api.post('/api/aggregators/heartbeat', { is_online: true }).catch(() => {});
-  }, [userType]);
+  }, [userType, isOnline]);
 
   const startHeartbeat = useCallback(() => {
     if (userType !== 'aggregator') return;
-    sendHeartbeat(); // immediate ping
+    // Removed redundant immediate sendHeartbeat() to prevent double logs on toggle
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(sendHeartbeat, 60_000); // 1 min heartbeat
   }, [userType, sendHeartbeat]);
@@ -103,45 +110,48 @@ export default function AggregatorHomeScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (userType === 'aggregator') {
+    if (userType === 'aggregator' && isOnline) {
       api.post('/api/aggregators/heartbeat', { is_online: false }).catch(() => {});
     }
   }, [userType]);
 
   /** Toggle aggregator online/offline status */
-  const handleToggle = useCallback(() => {
-    const next = !isOnline;
-    setOnline(next);
-    api.post('/api/aggregators/heartbeat', { is_online: next }).catch(() => {});
-  }, [isOnline, setOnline]);
+  const handleToggle = useCallback(async () => {
+    try {
+      await updateOnlineStatus(!isOnline);
+    } catch (err: any) {
+      // Error handled by store (reverts state and sets error)
+    }
+  }, [isOnline, updateOnlineStatus]);
 
-  const loadDataAsync = useCallback(async (silent = false) => {
-    if (!silent) setScreenState('loading');
+  const loadDataAsync = useCallback(async (silent = true) => {
+    // Only show loading state if we have no data yet (silent skeleton pattern)
+    const shouldShowLoader = !silent && screenState !== 'populated';
+    if (shouldShowLoader) setScreenState('loading');
+    
     try {
       const [, ratesRes] = await Promise.all([
-        fetchFeed(silent),   // pass silent so no isLoading flash
+        fetchFeed(silent),
         api.get('/api/rates').catch(() => null),
       ]);
       if (ratesRes) {
-        // Convert array → { material_code: rate_per_kg } map for O(1) lookup
         const map: Record<string, number> = {};
         for (const r of (ratesRes.data.rates ?? [])) {
           map[r.material_code] = r.rate_per_kg;
         }
         setLiveRates(map);
       }
-      if (!silent) setScreenState('populated');
-      else setScreenState(prev => prev === 'loading' ? 'populated' : prev); // don't regress
+      setScreenState('populated');
     } catch {
-      if (!silent) setScreenState('error');
+      if (screenState !== 'populated') setScreenState('error');
     }
-  }, [fetchFeed]);
+  }, [fetchFeed, screenState]);
 
   useEffect(() => {
     // Only run heartbeat and polling if aggregator
     if (userType === 'aggregator') {
       startHeartbeat();
-      loadDataAsync();
+      loadDataAsync(false);
 
       // Auto-refresh: poll for new orders every 30s
       pollRef.current = setInterval(() => loadDataAsync(true), 30_000);
@@ -149,7 +159,11 @@ export default function AggregatorHomeScreen() {
 
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') {
-        if (userType === 'aggregator') startHeartbeat();
+        if (userType === 'aggregator') {
+          sendHeartbeat(); // Ping immediately on foreground
+          startHeartbeat();
+          loadDataAsync(true);
+        }
       } else {
         stopHeartbeat();
       }
@@ -160,7 +174,7 @@ export default function AggregatorHomeScreen() {
       if (pollRef.current) clearInterval(pollRef.current);
       sub.remove();
     };
-  }, [userType]);
+  }, [userType, startHeartbeat, stopHeartbeat, loadDataAsync]);
 
   // Re-fetch whenever this tab gains focus (handles switching from other tabs)
   useFocusEffect(
@@ -178,10 +192,42 @@ export default function AggregatorHomeScreen() {
     return 'Good evening,';
   }, []);
 
+  const lastFeedSyncLabel = useMemo(() => {
+    if (!lastFeedSyncAt) return null;
+    return new Date(lastFeedSyncAt).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }, [lastFeedSyncAt]);
+
+  const isInactive = useMemo(() => {
+    if (!lastFeedSyncAt || !isOnline) return false;
+    return (Date.now() - new Date(lastFeedSyncAt).getTime()) > INACTIVITY_THRESHOLD_MS;
+  }, [lastFeedSyncAt, isOnline]);
+
   const FeedCard = ({ item }: { item: NewOrderRequest }) => {
-    const { dismissNewOrder } = useAggregatorStore();
+    const { dismissNewOrder, materials } = useAggregatorStore();
+    
+    // G11.6: Acceptance Threshold logic
+    const isLocked = useMemo(() => {
+      // If any of the order materials are below the minimum acceptable rate in user's profile
+      return item.materials.some(matCode => {
+        const userMat = materials.find(m => m.id === matCode);
+        const minRate = MIN_ACCEPTABLE_RATES[matCode];
+        if (userMat && minRate && userMat.ratePerKg < minRate) return true;
+        return false;
+      });
+    }, [item.materials, materials]);
+
     return (
-      <View style={styles.feedCard}>
+      <View style={[styles.feedCard, isLocked && styles.feedCardLocked]}>
+        {isLocked && (
+          <View style={styles.lockedOverlay}>
+            <View style={styles.lockedBadge}>
+              <Text variant="caption" style={styles.lockedBadgeText}>Locked: Rate too low</Text>
+            </View>
+          </View>
+        )}
         {/* Top row */}
         <View style={styles.feedTop}>
           <View style={styles.feedTopLeft}>
@@ -227,12 +273,21 @@ export default function AggregatorHomeScreen() {
 
         {/* Action buttons */}
         <View style={styles.feedActions}>
-          <Pressable
-            style={[styles.feedBtn, styles.feedBtnAccept]}
-            onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}
-          >
-            <Text variant="button" style={styles.feedBtnAcceptText}>View</Text>
-          </Pressable>
+          {isLocked ? (
+            <Pressable
+              style={styles.feedBtnUpdate}
+              onPress={() => router.push('/(aggregator)/price-index')}
+            >
+              <Text variant="button" style={styles.feedBtnUpdateText}>Update rates to bid</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.feedBtnAccept}
+              onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}
+            >
+              <Text variant="button" style={styles.feedBtnAcceptText}>View</Text>
+            </Pressable>
+          )}
           <View style={styles.feedBtnDivider} />
           <Pressable style={[styles.feedBtn, styles.feedBtnReject]} onPress={() => dismissNewOrder(item.id)}>
             <Text variant="button" style={styles.feedBtnRejectText}>Dismiss</Text>
@@ -333,6 +388,31 @@ export default function AggregatorHomeScreen() {
             <ArrowRight size={14} color={colors.red} weight="bold" />
           </Pressable>
         </View>
+
+        {isInactive && (
+          <Pressable 
+            style={styles.inactivityBanner}
+            onPress={() => loadDataAsync()}
+          >
+            <Text variant="caption" style={styles.inactivityText}>
+              Stale feed? Pull to refresh for latest orders
+            </Text>
+            <View style={styles.refreshIconSmall}>
+              <ArrowRight size={12} color={colors.surface} />
+            </View>
+          </Pressable>
+        )}
+
+        {lastFeedSyncLabel && (
+          <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
+            Updated {lastFeedSyncLabel}
+          </Text>
+        )}
+        {lastFeedError && (
+          <Text variant="caption" style={{ color: colors.red, marginTop: 4 }}>
+            Feed refresh failed. Retrying automatically.
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -381,103 +461,105 @@ export default function AggregatorHomeScreen() {
 
   return (
     <View style={styles.safe}>
-      <StatusBar style="light" backgroundColor={colors.navy} />
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300, backgroundColor: colors.navy }} />
+          <StatusBar style="light" backgroundColor={colors.navy} />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300, backgroundColor: colors.navy }} />
 
-      {/* ── Custom Animated NavBar (Identical to Seller) ── */}
-      <View style={[styles.customNav, { paddingTop: insets.top, height: 56 + insets.top }]}>
+          {/* ── Custom Animated NavBar (Identical to Seller) ── */}
+          <View style={[
+            styles.customNav,
+            { paddingTop: insets.top, height: 56 + insets.top },
+          ]}>
+            {/* UNCOMPRESSED STATE */}
+            <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: titleOpacity, transform: [{ translateY: titleTranslateY }] }]} pointerEvents="none">
+              <View style={styles.uncompressedWrap}>
+                <SorttLogo variant="compact-dark" />
+                <View style={[styles.badgePill, styles.badgeAggregator, { marginTop: 2 }]}>
+                  <View style={[styles.badgeDot, { backgroundColor: colors.amber }]} />
+                  <Text variant="caption" style={[styles.badgeText, { color: colors.amber }]}>AGGREGATOR</Text>
+                </View>
+              </View>
+            </Animated.View>
 
-        {/* UNCOMPRESSED STATE */}
-        <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: titleOpacity, transform: [{ translateY: titleTranslateY }] }]} pointerEvents="none">
-          <View style={styles.uncompressedWrap}>
-            <SorttLogo variant="compact-dark" />
-            <View style={[styles.badgePill, styles.badgeAggregator, { marginTop: 2 }]}>
-              <View style={[styles.badgeDot, { backgroundColor: colors.amber }]} />
-              <Text variant="caption" style={[styles.badgeText, { color: colors.amber }]}>AGGREGATOR</Text>
+            {/* COMPRESSED STATE */}
+            <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
+              <View style={styles.compressedRow}>
+                <View style={styles.navLeft}>
+                  <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
+                  <View style={styles.navMinimizedLoc}>
+                    <View style={[styles.locationDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
+                    <Text variant="caption" style={styles.navMinimizedLocText}>{displayAreaShort}</Text>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* RIGHT ACTIONS */}
+            <View style={[styles.alwaysRight, { top: insets.top }]} pointerEvents="box-none">
+              <Animated.View style={[styles.compressedIndicator, { opacity: minimizedOpacity }]}>
+                <Text variant="caption" style={[styles.compressedIndicatorText, { color: colors.amber }]}>A</Text>
+              </Animated.View>
+
+              <IconButton
+                icon={<Bell size={22} color={colors.surface} />}
+                onPress={handleNotifications}
+                accessibilityLabel="Notifications"
+              />
+              <Pressable onPress={() => router.push('/(aggregator)/profile')} hitSlop={8}>
+                <Avatar
+                  name={displayName}
+                  userType="aggregator"
+                  size="sm"
+                />
+              </Pressable>
             </View>
           </View>
-        </Animated.View>
 
-        {/* COMPRESSED STATE */}
-        <Animated.View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, opacity: minimizedOpacity, transform: [{ translateY: minimizedTranslateY }] }]} pointerEvents="none">
-          <View style={styles.compressedRow}>
-            <View style={styles.navLeft}>
-              <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
-              <View style={styles.navMinimizedLoc}>
-                <View style={[styles.locationDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
-                <Text variant="caption" style={styles.navMinimizedLocText}>{displayAreaShort}</Text>
+          {/* ── FlatList with screenState management ── */}
+          {screenState === 'loading' ? (
+            <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
+              <ActivityIndicator size="large" color={colors.navy} />
+              <Text variant="caption" style={{ marginTop: 12 }}>Loading nearby orders...</Text>
+            </View>
+          ) : screenState === 'error' ? (
+            <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
+              <View style={{ padding: 16, backgroundColor: colors.redLight, borderRadius: 8, borderColor: colors.red, borderWidth: 1, width: '100%' }}>
+                <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
+                  Failed to load feed
+                </Text>
+                <Pressable onPress={() => loadDataAsync()} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
+                  <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
+                </Pressable>
               </View>
             </View>
-          </View>
-        </Animated.View>
-
-        {/* RIGHT ACTIONS */}
-        <View style={[styles.alwaysRight, { top: insets.top }]} pointerEvents="box-none">
-          <Animated.View style={[styles.compressedIndicator, { opacity: minimizedOpacity }]}>
-            <Text variant="caption" style={[styles.compressedIndicatorText, { color: colors.amber }]}>A</Text>
-          </Animated.View>
-
-          <IconButton
-            icon={<Bell size={22} color={colors.surface} />}
-            onPress={handleNotifications}
-            accessibilityLabel="Notifications"
-          />
-          <Pressable onPress={() => router.push('/(aggregator)/profile')} hitSlop={8}>
-            <Avatar
-              name={displayName}
-              userType="aggregator"
-              size="sm"
+          ) : (
+            <Animated.FlatList
+              data={activeFeed.length === 0 ? [] : activeFeed}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              ListHeaderComponent={renderHeader}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                { useNativeDriver: true }
+              )}
+              scrollEventThrottle={16}
+              renderItem={({ item }) => (
+                <View style={styles.cardPad}>
+                  <FeedCard item={item} />
+                </View>
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+              ListFooterComponent={renderFooter}
+              ListEmptyComponent={
+                <View style={styles.cardPad}>
+                  <EmptyState
+                    icon={<House size={48} color={colors.border} weight="thin" />}
+                    heading="No orders nearby"
+                    body="Online status is active. New requests will appear here."
+                  />
+                </View>
+              }
             />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* ── FlatList with screenState management ── */}
-      {screenState === 'loading' ? (
-        <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
-          <ActivityIndicator size="large" color={colors.navy} />
-          <Text variant="caption" style={{ marginTop: 12 }}>Loading nearby orders...</Text>
-        </View>
-      ) : screenState === 'error' ? (
-        <View style={[styles.listContentPad, { alignItems: 'center', marginTop: 40 }]}>
-          <View style={{ padding: 16, backgroundColor: colorExtended.redLight, borderRadius: 8, borderColor: colors.red, borderWidth: 1, width: '100%' }}>
-            <Text variant="body" style={{ color: colors.red, textAlign: 'center' }}>
-              Failed to load feed
-            </Text>
-            <Pressable onPress={() => loadDataAsync()} style={{ marginTop: 8, alignSelf: 'center', backgroundColor: colors.red, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}>
-              <Text variant="caption" style={{ color: colors.surface, fontWeight: 'bold' }}>Retry</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Animated.FlatList
-          data={activeFeed.length === 0 ? [] : activeFeed}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={renderHeader}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
           )}
-          scrollEventThrottle={16}
-          renderItem={({ item }) => (
-            <View style={styles.cardPad}>
-              <FeedCard item={item} />
-            </View>
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={
-            <View style={styles.cardPad}>
-              <EmptyState
-                icon={<House size={48} color={colors.border} weight="thin" />}
-                heading="No orders nearby"
-                body="Online status is active. New requests will appear here."
-              />
-            </View>
-          }
-        />
-      )}
     </View>
   );
 }
@@ -506,7 +588,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
   },
   badgeAggregator: {
-    backgroundColor: colorExtended.amberLight,
+    backgroundColor: colors.amberLight,
   },
   badgeDot: {
     width: 5,
@@ -557,7 +639,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colorExtended.amberLight,
+    backgroundColor: colors.amberLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,
@@ -716,15 +798,37 @@ const styles = StyleSheet.create({
   feedCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.card,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
+  },
+  feedCardLocked: {
+    opacity: 0.85,
+    backgroundColor: colors.surface2,
+  },
+  lockedOverlay: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    zIndex: 10,
+  },
+  lockedBadge: {
+    backgroundColor: colorExtended.redLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.red,
+  },
+  lockedBadgeText: {
+    color: colors.red,
+    fontSize: 10,
+    fontWeight: '700',
   },
   feedTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: spacing.sm,
+    marginBottom: spacing.xs,
   },
   feedTopLeft: {
     flex: 1,
@@ -736,7 +840,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   distanceBadge: {
-    backgroundColor: colorExtended.tealLight,
+    backgroundColor: colors.tealLight,
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 6,
@@ -778,7 +882,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   feedBtnAccept: {
-    backgroundColor: colorExtended.tealLight,
+    backgroundColor: colors.tealLight,
   },
   feedBtnAcceptText: {
     color: colors.teal,
@@ -837,5 +941,41 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
+  },
+  inactivityBanner: {
+    backgroundColor: colors.navy,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: radius.card,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+    gap: 8,
+  },
+  inactivityText: {
+    color: colors.surface,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  refreshIconSmall: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedBtnUpdate: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.amber,
+  },
+  feedBtnUpdateText: {
+    color: colors.surface,
+    fontFamily: 'DMSans-Bold',
+    fontSize: 14,
   },
 });

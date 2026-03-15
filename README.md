@@ -1,6 +1,6 @@
-# Sortt — India's Scrap Marketplace
+# [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** MVP Build (In Progress)  
+> **Status:** MVP Build (In Progress — Day 11 wiring complete, order display-id rollout complete)  
 > **Architecture:** pnpm Monorepo  
 > **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Azure PostgreSQL, Gemini AI.
 
@@ -9,11 +9,11 @@
 ## 🏗 Project Structure
 
 ```text
-Sortt/
+[APP_NAME]/
 ├── apps/
 │   ├── mobile/       # React Native (Expo SDK 54) — User/Aggregator App
 │   ├── web/          # Next.js 15 — Business & Admin Portals
-│   └── admin/        # Admin Dashboard (built into web)
+│   └── admin/        # Admin Dashboard (integrated into web as role-gated routes)
 ├── backend/          # Node.js/Express — Central API & Webhooks
 ├── packages/         # Shared Provider Abstractions (@sortt/*)
 │   ├── auth/         # IAuthProvider (Clerk Auth)
@@ -81,14 +81,32 @@ pnpm dev:backend
 | **Mobile** | React Native, Expo Router, DM Sans/Mono, Zustand, Phosphor Icons |
 | **Web** | Next.js 15, Tailwind CSS, Radix UI |
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
-| **Database** | Azure PostgreSQL, PostGIS, RLS |
+| **Database** | Azure PostgreSQL, RLS, migration-driven schema |
 | **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
+| **Offline Handling** | `useNetworkStatus` (NetInfo), `OfflineAwareNavigator`, `AuthNetworkErrorScreen`, `NetworkErrorScreen` |
 | **AI** | Gemini Flash Vision (Photo Analysis), Gemini Pro (Price Scraping) |
 
 ---
 
-### 🗓 Current Status: Day 10 — Media + Aggregator + Supporting Routes (Complete)
-✅ Order CRUD, address reveal logic, auth refactor, geocoding, media upload, server-derived filtering, caching, and atomic status transitions implemented. All 10-day API MVP goals achieved.
+### 🗓 Current Status (2026-03-16)
+✅ Core API and mobile wiring completed through Day 11 gates.
+
+✅ Human-readable order number rollout completed:
+- `migrations/0018_order_number_per_seller.sql` applied.
+- Backend DTO now emits `order_display_id` (formatted `#000001`) for UI.
+- Mobile stores and screens consume `order_display_id`/`orderNumber` consistently.
+- Execution flow now threads internal route `id` across navigate → weighing → OTP → confirm → receipt.
+
+✅ Network error handling fully wired:
+- `hooks/useNetworkStatus.ts` — `@react-native-community/netinfo` listener emits `isOnline`.
+- `utils/error.ts` — `isNetworkError(e)` classifier for Axios/native errors.
+- `OfflineAwareNavigator` in `app/_layout.tsx` — replaces `<Stack>` with the appropriate offline screen when `isOnline === false`.
+- `AuthNetworkErrorScreen` shown for `(auth)` routes; `NetworkErrorScreen` (with red navbar, persona header) shown for all other in-app routes.
+- TabBar and NavBar are suppressed while offline (offline screens render their own simulated red header).
+- 10-second auto-retry countdown with manual "Retry now" button; background network polling via `api.get('/api/rates')`.
+- On reconnect from an auth path the user is redirected to `/(auth)/phone` (safe reset) rather than replaying a stale OTP screen.
+
+✅ Validation: `pnpm type-check` exits 0 at workspace root.
 
 ---
 
@@ -100,4 +118,4 @@ pnpm dev:backend
 
 ---
 
-*Note: "Sortt" is a placeholder name. See `MEMORY.md` for rebranding instructions.*
+*Note: The product name is still a placeholder. See `MEMORY.md` for rebranding instructions and use `constants/app.ts` as the source of truth.*
