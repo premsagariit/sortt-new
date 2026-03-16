@@ -25,7 +25,7 @@ Sortt
 │   │   │   │   │   ├── confirm.tsx # Pickup confirmation transition state
 │   │   │   │   │   ├── receipt.tsx # Pickup completion receipt
 │   │   │   │   │   ├── otp
-│   │   │   │   │   │   └── [id].tsx # Waiting for seller OTP confirmation
+│   │   │   │   │   │   └── [id].tsx # Aggregator 6-digit OTP confirmation and completion handoff
 │   │   │   │   │   └── weighing
 │   │   │   │   │       └── [id].tsx # Material weighing and camera capture
 │   │   │   │   ├── home.tsx # Nearby orders feed for dealers
@@ -116,7 +116,7 @@ Sortt
 │   │   │   ├── usePhotoCapture.ts # Standardized camera and picker hook
 │   │   │   └── useNetworkStatus.ts # Online/offline network listener
 │   │   ├── store # Zustand state containers
-│   │   │   ├── aggregatorStore.ts # Dealer-side order and session state
+│   │   │   ├── aggregatorStore.ts # Dealer-side order/session state (accept, status, media, OTP verify, active→completed sync)
 │   │   │   ├── authStore.ts # User session, role, and onboarding data
 │   │   │   ├── chatStore.ts # Realtime messaging state and history
 │   │   │   ├── listingStore.ts # Draft state for the selling wizard
@@ -150,7 +150,7 @@ Sortt
 │   │   │   ├── orders/ # CRUD flows for listings
 │   │   │   ├── aggregators.ts # Dealer search and profiles
 │   │   │   ├── auth.ts # OTP and registration
-│   │   │   ├── disputes.ts # Dispute resolution and atomic status updates
+│   │   │   ├── disputes.ts # Dispute resolution and status history transition logging (old_status/new_status)
 │   │   │   ├── messages.ts # In-app chat and phone number filtering
 │   │   │   ├── rates.ts # Public market rates with caching
 │   │   │   ├── ratings.ts # Post-trade review system

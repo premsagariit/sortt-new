@@ -111,9 +111,9 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
                `, [orderId, code, weight]);
         }
 
-        await client.query(`
-               INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-               VALUES ($1, 'created', $2, 'Order created')
+          await client.query(`
+              INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+              VALUES ($1, NULL, 'created', $2, 'Order created')
             `, [orderId, userId]);
 
         await client.query('COMMIT');
@@ -402,6 +402,7 @@ router.post('/:id/media', upload.single('file'), async (req, res) => {
 
           if (redis) {
             await redis.set(`otp:order:${orderId}`, hmac, { ex: 600 });
+            await redis.set(`otp:order_plain:${orderId}`, otp, { ex: 600 });
           }
 
           // [DEV ONLY] Always log the OTP to console so we can test without WhatsApp
@@ -571,6 +572,10 @@ router.get('/:id', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 
     const order = result.rows[0];
+    if (order.seller_id === userId && order.status === 'weighing_in_progress' && redis) {
+      const sellerOtp = await redis.get<string>(`otp:order_plain:${id}`);
+      order.otp = sellerOtp ?? '';
+    }
     return res.json(buildOrderDto(order, userId));
 
   } catch (e) {
@@ -628,9 +633,9 @@ router.patch('/:id/status', async (req, res) => {
         await client.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2', [newStatus, id]);
 
         await client.query(`
-                INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-                VALUES ($1, $2, $3, $4)
-             `, [id, newStatus, userId, stripHtml(note)]);
+          INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+          VALUES ($1, $2, $3, $4, $5)
+             `, [id, currentStatus, newStatus, userId, stripHtml(note)]);
 
         await client.query('COMMIT');
 
@@ -759,9 +764,9 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
         await client.query('UPDATE orders SET status = $1, deleted_at = NOW(), updated_at = NOW() WHERE id = $2', ['cancelled', id]);
 
         await client.query(`
-                INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-                VALUES ($1, 'cancelled', $2, 'Order cancelled by seller')
-             `, [id, userId]);
+          INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+          VALUES ($1, $2, 'cancelled', $3, 'Order cancelled by seller')
+             `, [id, order.status, userId]);
 
         await client.query('COMMIT');
         return res.json({ success: true });
@@ -802,8 +807,8 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     );
 
     await client.query(
-      `INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-       VALUES ($1, 'accepted', $2, 'Aggregator accepted')`,
+      `INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+       VALUES ($1, 'created', 'accepted', $2, 'Aggregator accepted')`,
       [orderId, aggregatorId]
     );
 
@@ -949,9 +954,9 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     );
 
     await client.query(
-      `INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-       VALUES ($1, 'completed', $2, 'OTP verified — order completed')`,
-      [orderId, aggregatorId]
+      `INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+       VALUES ($1, $2, 'completed', $3, 'OTP verified — order completed')`,
+      [orderId, order.status, aggregatorId]
     );
 
     await client.query('COMMIT');
@@ -964,6 +969,7 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     
     if (redis) {
       await redis.del('otp:order:' + orderId); // V-OTP-1: one-time use
+      await redis.del('otp:order_plain:' + orderId);
     }
   }
 

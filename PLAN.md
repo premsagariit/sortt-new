@@ -708,7 +708,7 @@
 > **Rule:** `FOR UPDATE SKIP LOCKED` must be inside the SAME transaction as the UPDATE. No optimistic concurrency. No retry loops.
 
 ### 12.1 First-Accept-Wins Express Route (~60 min)
-- [ ] `POST /api/orders/:orderId/accept` — Clerk JWT, aggregator only:
+- [x] `POST /api/orders/:orderId/accept` — Clerk JWT, aggregator only:
   1. Get dedicated `pool.connect()` connection.
   2. `BEGIN`.
   3. `SET LOCAL app.current_user_id = $aggregatorId`.
@@ -722,7 +722,7 @@
   11. Return HTTP 200 with full post-acceptance order DTO (full address now included — V25 post-accept reveal).
 
 ### 12.2 OTP Verification + Order Completion Route (~60 min)
-- [ ] `POST /api/orders/:orderId/verify-otp` — Clerk JWT, aggregator only:
+- [x] `POST /api/orders/:orderId/verify-otp` — Clerk JWT, aggregator only:
   1. Get dedicated connection.
   2. `BEGIN`.
   3. `SET LOCAL app.current_user_id = $aggregatorId`.
@@ -739,7 +739,7 @@
   14. Return 200.
 
 ### 12.3 Wire Mobile Acceptance + OTP Flow (~30 min)
-- [ ] Aggregator feed: "Accept Order" button → `POST /api/orders/:id/accept` via `api.ts`.
+- [x] Aggregator feed: "Accept Order" button → `POST /api/orders/:id/accept` via `api.ts`.
   - Handle 409: show "Order already taken — just now" bottom sheet. Back to feed.
   - Handle 200: `acceptOrder()` in store → navigate to `execution/navigate` with real order data.
 - [ ] Execution OTP screen: enter 6-digit OTP → `POST /api/orders/:id/verify-otp`.
@@ -747,12 +747,15 @@
   - Handle 200: navigate to receipt screen.
 
 ### 🚦 DAY 12 VERIFICATION GATE
-- [ ] **G12.1** — First-accept-wins: two physical devices accept same order simultaneously (within 100ms) → exactly one HTTP 200, one HTTP 409. Zero duplicate `order_status_history` rows for `accepted`.
-- [ ] **G12.2** — OTP verify: correct OTP → `orders.status = 'completed'` in DB. Wrong OTP → status unchanged.
-- [ ] **G12.3** — OTP one-time use: same OTP submitted twice in quick succession → second attempt returns 400 (Redis key deleted after first success).
-- [ ] **G12.4** — `verify-otp` called with seller's JWT (not the assigned aggregator) → 403 (V8).
-- [ ] **G12.5** — `PATCH /api/orders/:id/status` with `{ status: 'completed' }` → still returns 400 (V13 — direct path blocked).
-- [ ] **G12.6** — Post-acceptance DTO from `accept` route: `pickup_address_text` is now populated (full address revealed — V25 enforced).
+- [x] **G12.1** — First-accept-wins: two physical devices accept same order simultaneously (within 100ms) → exactly one HTTP 200, one HTTP 409. Zero duplicate `order_status_history` rows for `accepted`.
+- [x] **G12.2** — OTP verify: correct OTP → `orders.status = 'completed'` in DB. Wrong OTP → status unchanged.
+- [x] **G12.3** — OTP one-time use: same OTP submitted twice in quick succession → second attempt returns 400 (Redis key deleted after first success).
+- [x] **G12.4** — `verify-otp` called with seller's JWT (not the assigned aggregator) → 403 (V8).
+- [x] **G12.5** — `PATCH /api/orders/:id/status` with `{ status: 'completed' }` → still returns 400 (V13 — direct path blocked).
+- [x] **G12.6** — Post-acceptance DTO from `accept` route: `pickup_address_text` is now populated (full address revealed — V25 enforced).
+- [x] `order_status_history` inserts now include explicit `old_status` for transition routes (`PATCH status`, `accept`, `verify-otp`, `cancel`, `dispute`).
+- [x] Temporary PATCH diagnostic log removed from `PATCH /api/orders/:id/status`.
+- [x] Aggregator OTP success now updates `aggOrders` locally to `completed` immediately and removes the order from active ids; silent re-fetch keeps tabs aligned.
 
 ---
 
@@ -1072,7 +1075,7 @@
 
 ## 📊 STATUS TRACKER
 
-> Last updated: 2026-03-06
+> Last updated: 2026-03-16
 
 ### ✅ Completed (Days 1–3)
 - [x] Day 1 — Foundation & Design System *(2026-02-26)*

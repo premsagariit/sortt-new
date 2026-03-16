@@ -106,6 +106,11 @@ pnpm dev:backend
 - 10-second auto-retry countdown with manual "Retry now" button; background network polling via `api.get('/api/rates')`.
 - On reconnect from an auth path the user is redirected to `/(auth)/phone` (safe reset) rather than replaying a stale OTP screen.
 
+✅ Day 12 stabilization fixes applied:
+- `order_status_history` transition writes now persist explicit `old_status` values across order/dispute transition routes.
+- Temporary PATCH status debug logging removed from production flow.
+- Aggregator OTP success now updates local order state to `completed` immediately and refreshes aggregator orders silently, keeping Active/Completed tabs in sync.
+
 ✅ Validation: `pnpm type-check` exits 0 at workspace root.
 
 ---

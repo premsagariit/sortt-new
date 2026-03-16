@@ -86,9 +86,9 @@ router.post('/', async (req: Request, res: Response) => {
 
                 // 3. INSERT order_status_history (R3 — every transition must be recorded)
                 await client.query(
-                    `INSERT INTO order_status_history (order_id, new_status, changed_by, note)
-                     VALUES ($1, 'disputed', $2, 'Dispute raised')`,
-                    [order_id, userId]
+                    `INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+                     VALUES ($1, $2, 'disputed', $3, 'Dispute raised')`,
+                    [order_id, order.status, userId]
                 );
 
                 await client.query('COMMIT');

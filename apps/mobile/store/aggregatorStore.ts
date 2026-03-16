@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
 import { isNetworkError } from '../utils/error';
+import type { OrderStatus } from './orderStore';
 
 export interface NearbyOrder {
   orderId: string;
@@ -129,6 +130,10 @@ interface AggregatorStoreState {
   updateOnlineStatus: (v: boolean) => Promise<void>;
   /** POST /api/orders/:id/accept */
   acceptOrderApi: (orderId: string) => Promise<void>;
+  /** PATCH /api/orders/:id/status */
+  updateOrderStatusApi: (orderId: string, status: Extract<OrderStatus, 'en_route' | 'arrived' | 'weighing_in_progress'>, note?: string) => Promise<void>;
+  /** POST /api/orders/:id/media */
+  uploadOrderMediaApi: (orderId: string, photoUri: string, mediaType: 'scale_photo' | 'scrap_photo') => Promise<void>;
   /** POST /api/orders/:id/verify-otp */
   verifyOtpApi: (orderId: string, otp: string) => Promise<void>;
 }
@@ -417,6 +422,63 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     }
   },
 
+  // ── Async: PATCH /api/orders/:orderId/status ──────────────────
+  updateOrderStatusApi: async (orderId, status, note) => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.patch(`/api/orders/${orderId}/status`, {
+        status,
+        ...(note ? { note } : {}),
+      });
+
+      const { useOrderStore } = require('./orderStore');
+      useOrderStore.getState().updateOrderStatus(orderId, status);
+
+      set((state) => ({
+        aggOrders: state.aggOrders.map((order) => {
+          const currentOrderId = order.id ?? order.orderId;
+          if (currentOrderId !== orderId) return order;
+
+          return {
+            ...order,
+            status,
+            updated_at: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to update order status', isLoading: false });
+      throw e;
+    }
+  },
+
+  // ── Async: POST /api/orders/:orderId/media ────────────────────
+  uploadOrderMediaApi: async (orderId, photoUri, mediaType) => {
+    set({ isLoading: true, error: null });
+    try {
+      const formData = new FormData();
+      formData.append('media_type', mediaType);
+      formData.append('file', {
+        uri: photoUri,
+        name: `${mediaType}.jpg`,
+        type: 'image/jpeg',
+      } as any);
+
+      await api.post(`/api/orders/${orderId}/media`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      set({ isLoading: false });
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to upload order media', isLoading: false });
+      throw e;
+    }
+  },
+
   // ── Async: POST /api/orders/:orderId/verify-otp ────────────────
   verifyOtpApi: async (orderId, otp) => {
     set({ isLoading: true, error: null });
@@ -426,8 +488,24 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       // Update order store status to completed
       const { useOrderStore } = require('./orderStore');
       useOrderStore.getState().updateOrderStatus(orderId, 'completed');
+
+      set((state) => ({
+        aggOrders: state.aggOrders.map((order) => {
+          const currentOrderId = order.id ?? order.orderId;
+          if (currentOrderId !== orderId) return order;
+
+          return {
+            ...order,
+            status: 'completed',
+            updated_at: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+        activeOrders: state.activeOrders.filter((activeOrderId) => activeOrderId !== orderId),
+        isLoading: false,
+      }));
       
-      set({ isLoading: false });
+      void get().fetchAggregatorOrders(true);
     } catch (e: any) {
       set({ error: e.response?.data?.error ?? e.message ?? 'Failed to verify OTP', isLoading: false });
       throw e;
