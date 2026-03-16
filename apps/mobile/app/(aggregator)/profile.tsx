@@ -11,6 +11,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
+import { useNotificationStore } from '../../store/notificationStore';
 
 const { width } = Dimensions.get('window');
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
@@ -23,9 +24,11 @@ interface MenuItemProps {
   isLast?: boolean;
   isDestructive?: boolean;
   hasVerifiedBadge?: boolean;
+  hasUnread?: boolean;
+  unreadCount?: number;
 }
 
-function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVerifiedBadge }: MenuItemProps) {
+function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVerifiedBadge, hasUnread, unreadCount }: MenuItemProps) {
   return (
     <Pressable
       style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
@@ -37,6 +40,7 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
         ) : (
           icon
         )}
+        {hasUnread && <View style={styles.dotBadge} />}
       </View>
       <View style={styles.menuTextContent}>
         <View style={styles.menuTitleRow}>
@@ -49,6 +53,11 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
         </View>
         {subtitle && <Text variant="caption" color={colors.muted} style={styles.menuSubtitle as any}>{subtitle}</Text>}
       </View>
+      {hasUnread && !!unreadCount && (
+        <View style={styles.countBadge}>
+          <Text variant="caption" style={styles.countText as any}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+        </View>
+      )}
       <CaretRight size={18} color={isDestructive ? colors.red : colors.border} weight="bold" />
     </Pressable>
   );
@@ -59,6 +68,7 @@ export default function AggregatorProfileScreen() {
   const authStore = useAuthStore();
   const { fetchMe, name, locality } = authStore;
   const [heroHeight, setHeroHeight] = useState(300);
+  const unreadNotificationsCount = useNotificationStore(s => s.unreadCount);
 
   React.useEffect(() => {
     fetchMe();
@@ -228,6 +238,8 @@ export default function AggregatorProfileScreen() {
           <MenuItem
             icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates"
             onPress={() => router.push('/(shared)/notifications')}
+            hasUnread={unreadNotificationsCount > 0}
+            unreadCount={unreadNotificationsCount}
           />
           <MenuItem
             icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle="English"
@@ -486,5 +498,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.xl,
     paddingBottom: spacing.xxl,
+  },
+  dotBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colorExtended.surface2,
+  },
+  countBadge: {
+    backgroundColor: colors.red,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginRight: spacing.sm,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countText: {
+    color: colors.surface,
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

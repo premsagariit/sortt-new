@@ -27,6 +27,7 @@ const requireAuthStack = [
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const authHeader = req.headers.authorization;
+            // console.log('TOKEN:', authHeader);
             if (!authHeader?.startsWith('Bearer ')) {
                 return res.status(401).json({ error: 'Unauthorized: No token' });
             }

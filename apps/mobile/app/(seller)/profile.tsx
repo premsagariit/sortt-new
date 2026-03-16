@@ -10,35 +10,7 @@ import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useOrderStore } from '../../store/orderStore';
 import { SorttLogo } from '../../components/ui/SorttLogo';
-
-// Mock data directly in component file per requirements
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
-
-const INDIVIDUAL_DATA = {
-  name: 'Ravi Kumar',
-  earned: 12450,
-  orders: 23,
-  rating: 4.8,
-  location: 'Kondapur, Hyderabad',
-  phone: '+91 98765 ••••••',
-  invoices: '4 GST invoices',
-  language: 'Telugu · English',
-  since: 'January 2026',
-};
-
-const BUSINESS_DATA = {
-  name: 'Apollo Enterprises',
-  earned: 89400,
-  orders: 142,
-  rating: 4.9,
-  location: 'Jubilee Hills, Hyderabad',
-  phone: '+91 99999 ••••••',
-  invoices: '12 ready to download',
-  language: 'English',
-  since: 'Jan 2023',
-  gstin: '22AAAAA0000A1Z5',
-  tradeLicense: 'HYD/TL/2023/8492'
-};
+import { useNotificationStore } from '../../store/notificationStore';
 
 interface InfoRowProps {
   icon: React.ReactNode;
@@ -47,9 +19,10 @@ interface InfoRowProps {
   rowKey: string;
   onPress?: () => void;
   isLast?: boolean;
+  badge?: number;
 }
 
-function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProps) {
+function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast, badge }: InfoRowProps) {
   return (
     <Pressable
       style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
@@ -57,73 +30,85 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast }: InfoRowProp
     >
       <View style={styles.menuIconWrap}>
         {icon}
+        {!!badge && badge > 0 && <View style={styles.dotBadge} />}
       </View>
       <View style={styles.menuTextContent}>
         <Text variant="body" style={styles.menuTitle as any}>{title}</Text>
         {subtitle && <Text variant="caption" color={colors.muted} style={styles.menuSubtitle as any}>{subtitle}</Text>}
       </View>
+      {!!badge && badge > 0 && (
+        <View style={styles.countBadge}>
+          <Text variant="caption" style={styles.countText as any}>{badge > 99 ? '99+' : badge}</Text>
+        </View>
+      )}
       <CaretRight size={18} color={colors.border} weight="bold" />
     </Pressable>
   );
 }
+
+import { useFocusEffect } from 'expo-router';
 
 export default function SellerProfileScreen() {
   const router = useRouter();
   const authStore = useAuthStore();
   const fetchMe = useAuthStore((s) => s.fetchMe);
   const orders = useOrderStore((s) => s.orders);
+  const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isBusinessMode, setIsBusinessMode] = useState(false);
   const [heroHeight, setHeroHeight] = useState(300);
 
-  // Fetch on mount (idempotent — skips if meLoaded)
-  useEffect(() => { fetchMe(); }, []);
+  const unreadNotificationsCount = useNotificationStore(s => s.unreadCount);
+  
+  // Sync profile and orders on mount and focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMe();
+      fetchOrders(true);
+    }, [fetchMe, fetchOrders])
+  );
 
-  const profileData = isBusinessMode ? BUSINESS_DATA : INDIVIDUAL_DATA;
+  const isBusinessMode = authStore.accountType === 'business';
 
-  // Use live store values with fallbacks to existing mock constants
-  const liveName = authStore.name || profileData.name;
-  const liveLocality = authStore.locality || INDIVIDUAL_DATA.location;
-  const liveCity = authStore.city || '';
+  // Computed stats from real store data
+  const completedOrders = orders.filter(o => o.status === 'completed');
+  const totalEarned = completedOrders.reduce((acc, o) => acc + (o.confirmedAmount || o.estimatedAmount || 0), 0);
+  const totalPickups = completedOrders.length;
+
+  const liveName = authStore.name || 'Sortt User';
+  const liveLocation = authStore.locality && authStore.city 
+    ? `${authStore.locality}, ${authStore.city}` 
+    : authStore.locality || authStore.city || 'Location not set';
 
   const scrollY = useRef(new Animated.Value(0)).current;
-  const userType = authStore.session?.userType || 'seller';
-
-  // Computed stats from orderStore
-  const totalEarned = useOrderStore.getState().orders
-    .filter(o => o.status === 'completed')
-    .reduce((acc, o) => acc + (o.confirmedAmount ?? o.estimatedAmount), 0);
-  const totalOrders = orders.length;
-
-
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, heroHeight - 80],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-
-  const compactOpacity = scrollY.interpolate({
-    inputRange: [heroHeight - 100, heroHeight - 60],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  const headerTranslate = scrollY.interpolate({
-    inputRange: [0, heroHeight - 60],
-    outputRange: [0, -40],
-    extrapolate: 'clamp',
-  });
 
   async function handleSignOut() {
     setIsSigningOut(true);
-    await new Promise(r => setTimeout(r, 500));
-    authStore.signOut();
+    await authStore.signOut();
     router.replace('/(auth)/user-type' as any);
   }
 
   function handleToggleRole() {
     router.replace('/(aggregator)/home');
   }
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, Math.max(1, heroHeight - 80)],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const compactOpacity = scrollY.interpolate({
+    inputRange: [Math.max(0, heroHeight - 100), Math.max(1, heroHeight - 60)],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const headerTranslate = scrollY.interpolate({
+    inputRange: [0, Math.max(1, heroHeight - 60)],
+    outputRange: [0, -40],
+    extrapolate: 'clamp',
+  });
 
   return (
     <View style={styles.container}>
@@ -150,10 +135,9 @@ export default function SellerProfileScreen() {
           <View style={styles.hero}>
             <View style={styles.avatarBorder}>
               <Avatar
-                name={profileData.name}
+                name={liveName}
                 userType="seller"
                 size="xl"
-                source={AVATAR_SOURCE}
               />
             </View>
             <Text
@@ -162,33 +146,30 @@ export default function SellerProfileScreen() {
               numberOfLines={1}
               adjustsFontSizeToFit
             >
-              {profileData.name}
+              {liveName}
             </Text>
 
             <View style={styles.badgeRow}>
               <View style={styles.localityPill}>
                 <Text variant="caption" style={styles.localityText}>
-                  <MapPin size={12} color={colors.surface} weight="fill" /> {profileData.location}
+                  <MapPin size={12} color={colors.surface} weight="fill" /> {liveLocation}
                 </Text>
               </View>
             </View>
-
-
-
 
             {/* Injected Stats Bar */}
             <View style={styles.heroStatsContainer}>
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Total earned</Text>
                 <Numeric size={20} color={colors.surface}>
-                  ₹{profileData.earned.toLocaleString('en-IN')}
+                  ₹{(totalEarned || 0).toLocaleString('en-IN')}
                 </Numeric>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Pickups</Text>
                 <Numeric size={20} color={colors.surface}>
-                  {profileData.orders}
+                  {totalPickups || 0}
                 </Numeric>
               </View>
             </View>
@@ -199,30 +180,28 @@ export default function SellerProfileScreen() {
       {/* 
         Compact Header - Fades in on scroll
       */}
-      <Animated.View style={[styles.compactHeader, { opacity: compactOpacity }]} pointerEvents="none">
+      <Animated.View style={[styles.compactHeader, { opacity: compactOpacity || 0 }]} pointerEvents="none">
         <SafeAreaView edges={['top']}>
           <View style={styles.compactContent}>
             <View style={styles.compactAvatar}>
               <Avatar
-                name={profileData.name}
+                name={liveName}
                 userType="seller"
                 size="sm"
-                source={AVATAR_SOURCE}
               />
             </View>
             <View style={styles.compactTextWrap}>
-              <Text variant="body" style={styles.compactName as any}>{profileData.name}</Text>
+              <Text variant="body" style={styles.compactName as any}>{liveName}</Text>
               <View style={styles.compactPill}>
-                <View style={[styles.badgeDot, { backgroundColor: userType === 'seller' ? colors.teal : colors.amber }]} />
+                <View style={[styles.badgeDot, { backgroundColor: colors.teal }]} />
                 <Text variant="caption" style={styles.compactPillText}>
-                  {userType.toUpperCase()}
+                  SELLER
                 </Text>
               </View>
             </View>
           </View>
         </SafeAreaView>
       </Animated.View>
-
       <Animated.ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight }]}
         showsVerticalScrollIndicator={false}
@@ -232,7 +211,6 @@ export default function SellerProfileScreen() {
         )}
         scrollEventThrottle={16}
       >
-
 
         <View style={styles.menuContainer}>
           <InfoRow
@@ -246,17 +224,13 @@ export default function SellerProfileScreen() {
           <InfoRow
             rowKey="settings" icon={<Gear size={22} color={colors.navy} />} title="Account Settings" subtitle="Preferences & privacy" onPress={() => router.push('/(seller)/settings')}
           />
-          {isBusinessMode && (
-            <InfoRow
-              rowKey="gstin" icon={<Receipt size={22} color={colors.navy} />} title="GSTIN Details" subtitle={BUSINESS_DATA.gstin}
-              onPress={() => console.log('GSTIN Details')}
-            />
-          )}
           <InfoRow
-            rowKey="notifications" icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates" onPress={() => router.push('/(shared)/notifications')}
+            rowKey="notifications" icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates" 
+            badge={unreadNotificationsCount}
+            onPress={() => router.push('/(shared)/notifications')}
           />
           <InfoRow
-            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={profileData.language}
+            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle="English"
             onPress={() => router.push('/(shared)/language')}
           />
           <InfoRow
@@ -282,11 +256,6 @@ export default function SellerProfileScreen() {
         {__DEV__ && (
           <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xl, gap: spacing.sm, marginTop: spacing.xl }}>
             <SecondaryButton
-              label={isBusinessMode ? "Dev Toggle: Switch to Individual" : "Dev Toggle: Switch to Business"}
-              color="navy"
-              onPress={() => setIsBusinessMode(!isBusinessMode)}
-            />
-            <SecondaryButton
               label="Dev Toggle: Aggregator View"
               color="navy"
               onPress={handleToggleRole}
@@ -294,6 +263,7 @@ export default function SellerProfileScreen() {
           </View>
         )}
       </Animated.ScrollView>
+
     </View>
   );
 }
@@ -504,6 +474,32 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  dotBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colorExtended.surface2,
+  },
+  countBadge: {
+    backgroundColor: colors.red,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginRight: spacing.sm,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countText: {
+    color: colors.surface,
+    fontSize: 10,
+    fontWeight: '700',
   },
   logoutContainer: {
     paddingHorizontal: spacing.md,

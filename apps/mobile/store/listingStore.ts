@@ -108,7 +108,30 @@ export const useListingStore = create<ListingState>((set, get) => ({
         pickup_preference,
         seller_note: state.notes || undefined,
       });
-      return { success: true, orderId: res.data.order?.id };
+      
+      const orderId = res.data.order?.id;
+
+      if (orderId && state.photoUri) {
+        try {
+          const formData = new FormData();
+          formData.append('media_type', 'scrap_photo');
+          formData.append('file', {
+            uri: state.photoUri,
+            name: 'scrap_photo.jpg',
+            type: 'image/jpeg',
+          } as any);
+
+          await api.post(`/api/orders/${orderId}/media`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+        } catch (err: any) {
+          console.warn('Failed to upload order photo (non-fatal):', err.message);
+        }
+      }
+
+      return { success: true, orderId };
     } catch (e: any) {
       const code = e.response?.data?.error;
       const message = e.response?.data?.message ?? e.message ?? 'Submission failed';

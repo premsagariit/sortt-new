@@ -127,6 +127,10 @@ interface AggregatorStoreState {
   updateRates: (rates: { material_code: string; rate_per_kg: number }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
   updateOnlineStatus: (v: boolean) => Promise<void>;
+  /** POST /api/orders/:id/accept */
+  acceptOrderApi: (orderId: string) => Promise<void>;
+  /** POST /api/orders/:id/verify-otp */
+  verifyOtpApi: (orderId: string, otp: string) => Promise<void>;
 }
 
 const initialMaterials: MaterialConfig[] = [
@@ -381,6 +385,51 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     } catch (e: any) {
       // Revert on failure
       set({ isOnline: !v, error: e.response?.data?.error ?? e.message ?? 'Failed to update status' });
+      throw e;
+    }
+  },
+
+  // ── Async: POST /api/orders/:orderId/accept ───────────────────
+  acceptOrderApi: async (orderId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await api.post(`/api/orders/${orderId}/accept`);
+      
+      // The backend returns the updated full order DTO
+      const completedOrder = res.data.order;
+      
+      // Add or update it in the global order store so the Active tab sees it instantly
+      const { useOrderStore, mapApiOrder } = require('./orderStore');
+      const mappedOrder = mapApiOrder(completedOrder);
+      useOrderStore.getState().addOrder(mappedOrder);
+      
+      // Update local aggregator state arrays, including aggOrders
+      set((state) => ({
+        newOrders: state.newOrders.filter((o) => o.id !== orderId),
+        activeOrders: [...state.activeOrders, orderId],
+        aggOrders: [completedOrder, ...state.aggOrders],
+        lastAcceptedAt: new Date().toISOString(),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to accept order', isLoading: false });
+      throw e;
+    }
+  },
+
+  // ── Async: POST /api/orders/:orderId/verify-otp ────────────────
+  verifyOtpApi: async (orderId, otp) => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.post(`/api/orders/${orderId}/verify-otp`, { otp });
+      
+      // Update order store status to completed
+      const { useOrderStore } = require('./orderStore');
+      useOrderStore.getState().updateOrderStatus(orderId, 'completed');
+      
+      set({ isLoading: false });
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to verify OTP', isLoading: false });
       throw e;
     }
   },

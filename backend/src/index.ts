@@ -17,6 +17,7 @@ import ratesRouter from './routes/rates';
 import messagesRouter from './routes/messages';
 import ratingsRouter from './routes/ratings';
 import disputesRouter from './routes/disputes';
+import notificationsRouter from './routes/notifications';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -57,6 +58,9 @@ app.use('/api/auth', authRouter);
 // Does NOT enforce auth or redirect — your authMiddleware handles enforcement.
 app.use(clerkMiddleware()); // ADD THIS — must come before authMiddleware
 
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
 // Custom authMiddleware: verifies token via createClerkClient().verifyToken(),
 // returns 401 (never redirects), exempts /api/auth/* and /api/rates
 app.use(authMiddleware);
@@ -72,6 +76,7 @@ app.use('/api/rates', ratesRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);
+app.use('/api/notifications', notificationsRouter);
 
 app.use(errorHandler);
 

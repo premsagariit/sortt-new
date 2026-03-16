@@ -42,6 +42,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
 import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';
 import { useAuthStore } from '../store/authStore';
+import { NotificationWatcher } from '../components/ui/NotificationWatcher';
 
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
@@ -193,6 +194,7 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={clerkPublishableKey!} tokenCache={tokenCache}>
       <ApiClientConfigurator>
+        <NotificationWatcher />
         <OfflineAwareNavigator
           isOnline={isOnline}
           isRetrying={isRetrying}

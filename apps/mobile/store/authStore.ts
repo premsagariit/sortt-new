@@ -51,6 +51,7 @@ interface AuthState {
   name: string;
   locality: string;
   city: string;
+  createdAt: string | null;
 
   // ── Actions ────────────────────────────────────────────────────
   setPhoneNumber: (phone: string) => void;
@@ -84,7 +85,7 @@ interface AuthState {
 
 const initialState: Pick<AuthState,
   'phoneNumber' | 'isLoading' | 'session' | 'userId' | 'userType' |
-  'accountType' | 'name' | 'locality' | 'city' | 'meLoaded'
+  'accountType' | 'name' | 'locality' | 'city' | 'createdAt' | 'meLoaded'
 > = {
   phoneNumber: '',
   isLoading: false,
@@ -95,6 +96,7 @@ const initialState: Pick<AuthState,
   name: '',
   locality: '',
   city: '',
+  createdAt: null,
   meLoaded: false,
 };
 // ─── Store ────────────────────────────────────────────────────────
@@ -129,12 +131,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await api.get('/api/users/me');
       const u = res.data;
+      
+      // Determine account type based on profile_type or seller_profile_type
+      const accountType = u.seller_profile_type || u.profile_type || (u.user_type === 'aggregator' ? 'business' : 'individual');
+      
+      // Map locality and city based on user type
+      const locality = u.user_type === 'seller' ? u.seller_locality : u.aggregator_locality;
+      const city = u.user_type === 'seller' ? u.seller_city_code : u.aggregator_city_code;
+      
       set({
         userId: u.id ?? null,
         userType: u.user_type ?? null,
+        accountType: accountType as any,
         name: u.name ?? '',
-        locality: u.locality ?? '',
-        city: u.city ?? '',
+        locality: locality ?? '',
+        city: city ?? '',
+        createdAt: u.created_at ?? null,
         meLoaded: true,
         // Explicitly NOT setting phone_hash or clerk_user_id (V7, V24)
       });

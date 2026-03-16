@@ -10,6 +10,7 @@ import { Globe, Lock, MapPin, Clock, Hash, NavigationArrow, X } from 'phosphor-r
 import { useOrderStore } from '../../store/orderStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { safeBack } from '../../utils/navigation';
+import { Alert } from 'react-native';
 
 /**
  * app/(aggregator)/order-detail.tsx
@@ -184,9 +185,19 @@ export default function AggregatorOrderDetailScreen() {
                     label="Accept"
                     style={styles.acceptBtn}
                     textStyle={styles.btnText}
-                    onPress={() => {
-                        useAggregatorStore.getState().acceptOrder(internalOrderId);
-                        router.replace('/(aggregator)/orders');
+                    onPress={async () => {
+                        try {
+                            const storeInfo = useAggregatorStore.getState();
+                            if (storeInfo.acceptOrderApi) {
+                                await storeInfo.acceptOrderApi(internalOrderId);
+                                storeInfo.fetchAggregatorOrders(true);
+                            } else {
+                                storeInfo.acceptNewOrder(internalOrderId);
+                            }
+                            router.replace('/(aggregator)/orders');
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to accept order');
+                        }
                     }}
                 />
             </View>

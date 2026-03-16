@@ -1,12 +1,14 @@
 import axios, { AxiosError } from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+import { Platform } from 'react-native';
+
 /**
  * Returns the bare host URL — never includes a /api suffix.
  * All route paths passed to api.get/post/patch must include /api themselves.
  * This prevents the double /api/api/ bug when env var or fallback has /api appended.
  */
-const getBaseUrl = (): string => {
+export const getBaseUrl = (): string => {
   const raw =
     process.env.EXPO_PUBLIC_API_URL ||
     (__DEV__ ? 'http://192.168.1.100:8080' : 'https://api.sortt.com');

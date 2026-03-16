@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -16,7 +17,7 @@ type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
-  const { newOrders, aggOrders, dismissNewOrder, acceptNewOrder, cancelOrder, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
+  const { newOrders, aggOrders, dismissNewOrder, acceptOrderApi, cancelOrder, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function AggregatorOrdersScreen() {
   // ── Active, completed, cancelled (from order store aggOrders) ────
   const activeOrders = (aggOrders || []).filter((o: any) =>
     ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) &&
-    (!matKey || o.materials?.includes(matKey as any))
+    (!matKey || o.materials?.includes(matKey as any) || o.material_codes?.includes(matKey as any))
   ).map(mapStoreOrder);
 
   const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').map(mapStoreOrder);
@@ -48,14 +49,14 @@ export default function AggregatorOrdersScreen() {
 
   function mapStoreOrder(o: any) {
     return {
-      id: o.orderId,
-      orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId ?? '').slice(0, 8).toUpperCase()}`,
+      id: o.orderId || o.id,
+      orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
       distance: '—',
-      price: o.confirmedAmount ?? o.estimatedAmount,
-      locality: o.pickupLocality,
-      window: new Date(o.createdAt).toLocaleDateString(),
-      materials: o.materials as MaterialCode[],
-      sellerType: o.sellerType ?? 'Seller',
+      price: o.confirmedAmount ?? o.estimatedAmount ?? (o.estimated_weights ? Object.values(o.estimated_weights as Record<string, number>).reduce((a, b) => a + b, 0) * 10 : 0),
+      locality: o.pickupLocality ?? o.pickup_locality,
+      window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
+      materials: (o.materials || o.material_codes || []) as MaterialCode[],
+      sellerType: o.sellerType ?? o.seller_name ?? 'Seller',
       rating: o.rating ?? 4.5,
       status: o.status as OrderStatus,
     };
@@ -185,9 +186,15 @@ export default function AggregatorOrdersScreen() {
               label="Accept"
               style={styles.acceptBtn}
               textStyle={{ fontSize: 13 }}
-              onPress={() => {
-                acceptNewOrder(order.id);
-                setActiveTab('active');
+              onPress={async () => {
+                try {
+                  await acceptOrderApi(order.id);
+                  // Refresh active list immediately to ensure perfect sync
+                  fetchAggregatorOrders(true);
+                  setActiveTab('active');
+                } catch (e: any) {
+                  Alert.alert('Error', e.message || 'Failed to accept order');
+                }
               }}
             />
             <SecondaryButton
@@ -315,6 +322,7 @@ export default function AggregatorOrdersScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
+      <NavBar title="Order Feed"/>
 
       <>
         {renderTabs()}

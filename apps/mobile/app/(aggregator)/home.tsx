@@ -28,6 +28,8 @@ import { SorttLogo } from '../../components/ui/SorttLogo';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAggregatorStore, NewOrderRequest } from '../../store/aggregatorStore';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import { NotificationBell } from '../../components/ui/NotificationBell';
 import type { MaterialCode } from '../../components/ui/MaterialChip';
 import { api } from '../../lib/api';
 
@@ -499,11 +501,7 @@ export default function AggregatorHomeScreen() {
                 <Text variant="caption" style={[styles.compressedIndicatorText, { color: colors.amber }]}>A</Text>
               </Animated.View>
 
-              <IconButton
-                icon={<Bell size={22} color={colors.surface} />}
-                onPress={handleNotifications}
-                accessibilityLabel="Notifications"
-              />
+              <NotificationBell />
               <Pressable onPress={() => router.push('/(aggregator)/profile')} hitSlop={8}>
                 <Avatar
                   name={displayName}

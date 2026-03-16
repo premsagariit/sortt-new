@@ -1,6 +1,9 @@
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  'accepted':            ['en_route'],
-  'en_route':            ['weighing_in_progress'],
+  'created':              ['accepted'],
+  'accepted':             ['en_route', 'cancelled'],
+  'en_route':             ['arrived', 'cancelled'],
+  'arrived':              ['weighing_in_progress'],
+  'weighing_in_progress': ['completed'],
 };
 
 // These are ALWAYS hard-rejected regardless of current status (V13):

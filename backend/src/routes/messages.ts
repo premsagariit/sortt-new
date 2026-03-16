@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
+import { createNotification } from '../lib/notifications';
 
 const router = Router();
 
@@ -55,6 +56,24 @@ router.post('/', async (req: Request, res: Response) => {
         );
 
         const msg = insertRes.rows[0];
+
+        // --- NEW: Notify the recipient ---
+        setImmediate(async () => {
+            try {
+                const recipientId = senderId === order.seller_id ? order.aggregator_id : order.seller_id;
+                if (recipientId) {
+                    await createNotification(
+                        recipientId,
+                        'New Message',
+                        cleanContent.length > 50 ? cleanContent.substring(0, 47) + '...' : cleanContent,
+                        'message'
+                    );
+                }
+            } catch (err) {
+                console.error('Failed to create notification for message:', err);
+            }
+        });
+
         return res.status(201).json({
             messageId: msg.id,
             content: msg.content,

@@ -25,18 +25,22 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   aggregatorId: string | null;
+  aggregatorName?: string;
+  aggregatorPhone?: string | null;
   otp: string;
   // ── Extended fields from API (may be undefined for list views) ──
   sellerId?: string;
   sellerName?: string;
   sellerType?: string;
+  sellerPhone?: string | null;  // SP1: only non-null post-acceptance, aggregator or seller
   rating?: number;
   window?: string;
   estimatedWeights?: Record<string, number>;
+  history?: any[];
 }
 
 // Maps API response shape → internal Order type
-function mapApiOrder(o: any): Order {
+export function mapApiOrder(o: any): Order {
   // Normalize preferred_pickup_window
   let windowLabel = 'Flexible';
   if (o.preferred_pickup_window) {
@@ -65,13 +69,17 @@ function mapApiOrder(o: any): Order {
     createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
     updatedAt: o.updated_at ?? o.updatedAt ?? new Date().toISOString(),
     aggregatorId: o.aggregator_id ?? o.aggregatorId ?? null,
+    aggregatorName: o.aggregator_name ?? o.aggregatorName,
+    aggregatorPhone: o.aggregator_phone ?? o.aggregatorPhone ?? null,
     otp: o.otp ?? '',
     sellerId: o.seller_id,
     sellerName: typeof o.seller_name === 'string' ? o.seller_name : (typeof o.sellerName === 'string' ? o.sellerName : undefined),
     sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
+    sellerPhone: typeof o.seller_phone === 'string' ? o.seller_phone : (o.sellerPhone ?? null),  // SP1
     rating: typeof o.rating === 'number' ? o.rating : undefined,
     window: windowLabel,
     estimatedWeights: o.estimated_weights ?? o.estimatedWeights ?? {},
+    history: o.history ?? [],
   };
 }
 
@@ -145,8 +153,28 @@ export const useOrderStore = create<OrderStoreState>()(
 
         try {
           const res = await api.get('/api/orders', { params: { role: 'seller' } });
-          const orders: Order[] = (res.data.orders ?? []).map(mapApiOrder);
-          set({ orders, error: null }); // Clear error on successful fetch
+          const incoming: Order[] = (res.data.orders ?? []).map(mapApiOrder);
+          
+          const existing = get().orders;
+          const merged = incoming.map(newOrder => {
+            const old = existing.find(o => o.orderId === newOrder.orderId);
+            if (!old) return newOrder;
+            // Smart Merge: Preserve detail-only fields if missing or shallow in list response
+            return {
+              ...old,
+              ...newOrder,
+              sellerName: newOrder.sellerName || old.sellerName,
+              sellerPhone: newOrder.sellerPhone || old.sellerPhone,
+              aggregatorName: newOrder.aggregatorName || old.aggregatorName,
+              aggregatorPhone: newOrder.aggregatorPhone || old.aggregatorPhone,
+              estimatedWeights: (newOrder.estimatedWeights && Object.keys(newOrder.estimatedWeights).length > 0) 
+                ? newOrder.estimatedWeights 
+                : old.estimatedWeights,
+              history: (newOrder.history && newOrder.history.length > 0) ? newOrder.history : old.history,
+            };
+          });
+
+          set({ orders: merged, error: null }); 
         } catch (e: any) {
           const errorMsg = e.response?.data?.error ?? e.message ?? 'Failed to load orders';
           const errorString = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);

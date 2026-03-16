@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
+import { createNotification } from '../lib/notifications';
 
 const router = Router();
 
@@ -57,9 +58,25 @@ router.post('/', async (req: Request, res: Response) => {
                  RETURNING id, created_at`,
                 [order_id, raterId, ratee_id, score, cleanReview]
             );
+            const rating = result.rows[0];
+
+            // --- NEW: Notify the ratee ---
+            setImmediate(async () => {
+                try {
+                    await createNotification(
+                        ratee_id,
+                        'New Rating',
+                        `You have received a ${score}-star rating.`,
+                        'rating'
+                    );
+                } catch (err) {
+                    console.error('Failed to create notification for rating:', err);
+                }
+            });
+
             return res.status(201).json({
-                ratingId: result.rows[0].id,
-                createdAt: result.rows[0].created_at
+                ratingId: rating.id,
+                createdAt: rating.created_at
             });
         } catch (dbErr: any) {
             // 23505 = unique_violation → duplicate rating

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import crypto from 'crypto';
-import { query, withUser } from '../../lib/db';
+import { query, withUser, pool } from '../../lib/db';
 import { DbOrder, buildOrderDto } from '../../utils/orderDto';
 import { ALLOWED_TRANSITIONS, IMMUTABLE_STATUSES } from '../../utils/orderStateMachine';
 import { mapProvider } from '../../providers/maps';
@@ -13,6 +13,8 @@ import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import axios from 'axios';
 import { UTApi } from 'uploadthing/server';
+import { createClerkClient } from '@clerk/backend';
+import { createNotification } from '../../lib/notifications';
 
 // Multer for media uploads (5MB, images only)
 const upload = multer({
@@ -126,7 +128,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     setImmediate(async () => {
       try {
         const aggRes = await query(`
-              SELECT DISTINCT d.expo_token
+              SELECT DISTINCT d.expo_token, d.user_id
               FROM device_tokens d
               JOIN aggregator_availability a ON d.user_id = a.user_id AND a.is_online = true
               JOIN aggregator_profiles p ON a.user_id = p.user_id AND p.city_code = $1
@@ -153,6 +155,17 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
           await axios.post('https://exp.host/--/api/v2/push/send', messages, { headers }).catch(e => {
             console.error('Push delivery error:', e.response?.data || e.message);
           });
+        }
+
+        // --- NEW: In-app notification for all matching aggregators ---
+        const userIds = aggRes.rows.map(r => r.user_id);
+        for (const uid of userIds) {
+          await createNotification(
+            uid,
+            'New order near you!',
+            'A new scrap listing is available in your area.',
+            'order'
+          );
         }
       } catch (pushErr) {
         console.error('Best effort push failed:', pushErr);
@@ -538,13 +551,22 @@ router.get('/:id', async (req, res) => {
     const result = await query(`
       SELECT o.*,
              u.name as seller_name,
+             u.display_phone as seller_display_phone,
+             agg.name as aggregator_name,
+             agg.display_phone as aggregator_display_phone,
              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-             jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
+             jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights,
+             (
+               SELECT json_agg(h ORDER BY h.created_at ASC)
+               FROM order_status_history h
+               WHERE h.order_id = o.id
+             ) as history
       FROM orders o
-      LEFT JOIN users_public u ON u.id = o.seller_id
+      LEFT JOIN users u ON u.id = o.seller_id
+      LEFT JOIN users agg ON agg.id = o.aggregator_id
       LEFT JOIN order_items oi ON o.id = oi.order_id
       WHERE o.id = $1
-      GROUP BY o.id, u.name
+      GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
     `, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 
@@ -611,6 +633,85 @@ router.patch('/:id/status', async (req, res) => {
              `, [id, newStatus, userId, stripHtml(note)]);
 
         await client.query('COMMIT');
+
+        // --- NEW: Create in-app notification for the other party ---
+        setImmediate(async () => {
+          try {
+            const orderRes = await query('SELECT seller_id, aggregator_id FROM orders WHERE id = $1', [id]);
+            const order = orderRes.rows[0];
+            if (!order) return;
+
+            const otherPartyId = userId === order.seller_id ? order.aggregator_id : order.seller_id;
+            if (otherPartyId) {
+              let title = `Order #${id.slice(0, 8)} updated`;
+              let body = `Status changed to ${newStatus}`;
+
+              if (newStatus === 'accepted') {
+                title = 'Order Accepted!';
+                body = 'An aggregator is coming for your pickup.';
+              } else if (newStatus === 'completed') {
+                title = 'Order Completed';
+                body = 'Pickup successful. Check your balance.';
+              }
+
+              await createNotification(otherPartyId, title, body, 'order');
+            }
+          } catch (err) {
+            console.error('Failed to create notification on status change:', err);
+          }
+        });
+
+        // SP1: On acceptance, cache seller's phone from Clerk into users.display_phone.
+        // Non-fatal — runs after response is sent. Clerk outage cannot block acceptance.
+        if (newStatus === 'accepted') {
+          setImmediate(async () => {
+            try {
+              // Fetch the order's seller_id (not available in currentOrder without a join)
+              const sellerRes = await query(
+                'SELECT seller_id, display_phone FROM orders o JOIN users u ON u.id = o.seller_id WHERE o.id = $1',
+                [id]
+              );
+              if (!sellerRes.rows[0]) return;
+              const { seller_id, display_phone } = sellerRes.rows[0];
+
+              // Early-return guard — already cached, skip Clerk API call
+              if (display_phone) return;
+
+              const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+              if (!clerkSecretKey) {
+                console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller phone');
+                return;
+              }
+
+              // Fetch clerk_user_id for this seller
+              const userRes = await query(
+                'SELECT clerk_user_id FROM users WHERE id = $1',
+                [seller_id]
+              );
+              if (!userRes.rows[0]?.clerk_user_id) return;
+              const clerkUserId = userRes.rows[0].clerk_user_id;
+
+              const clerk = createClerkClient({ secretKey: clerkSecretKey });
+              const clerkUser = await clerk.users.getUser(clerkUserId);
+              const primaryPhoneId = clerkUser.primaryPhoneNumberId;
+              const phoneObj = clerkUser.phoneNumbers.find(p => p.id === primaryPhoneId);
+              const phoneNumber = phoneObj?.phoneNumber ?? null;
+
+              if (phoneNumber) {
+                await query(
+                  'UPDATE users SET display_phone = $1 WHERE id = $2',
+                  [phoneNumber, seller_id]
+                );
+                console.log(`[SP1] Cached seller phone for order ${id}`);
+              }
+            } catch (err) {
+              // Non-fatal: log and swallow. Acceptance response already sent.
+              console.error('[SP1] Failed to cache seller phone — non-fatal:', err);
+              Sentry.captureException(err);
+            }
+          });
+        }
+
         return res.json({ success: true, status: newStatus });
       } catch (e) {
         await client.query('ROLLBACK');
@@ -673,6 +774,205 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
     console.error('DELETE /api/orders/:id error:', e);
     return res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// 6. POST /api/orders/:orderId/accept
+router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) => {
+  const { orderId } = req.params;
+  const aggregatorId = req.user!.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_user_id = '${aggregatorId}'`);
+
+    const lockResult = await client.query(
+      `SELECT id FROM orders WHERE id = $1 AND status = 'created' FOR UPDATE SKIP LOCKED`,
+      [orderId]
+    );
+
+    if (lockResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'order_already_taken' });
+    }
+
+    await client.query(
+      `UPDATE orders SET status = 'accepted', aggregator_id = $1, updated_at = NOW() WHERE id = $2`,
+      [aggregatorId, orderId]
+    );
+
+    await client.query(
+      `INSERT INTO order_status_history (order_id, new_status, changed_by, note)
+       VALUES ($1, 'accepted', $2, 'Aggregator accepted')`,
+      [orderId, aggregatorId]
+    );
+
+    await client.query('COMMIT');
+    // TODO Day 13: publish Ably event — order:{orderId} channel, status_updated
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release(); // ALWAYS — prevents pool exhaustion
+  }
+
+  // Notification (identical pattern to PATCH handler)
+  setImmediate(async () => {
+    try {
+      const orderRes = await query('SELECT seller_id FROM orders WHERE id = $1', [orderId]);
+      const order = orderRes.rows[0];
+      if (!order) return;
+      await createNotification(order.seller_id, 'Order Accepted!', 'An aggregator is coming for your pickup.', 'order');
+    } catch (err) {
+      console.error('Failed to create notification on accept:', err);
+    }
+  });
+
+  // SP1: Cache seller phone — IDENTICAL block to PATCH handler
+  setImmediate(async () => {
+    try {
+      const sellerRes = await query(
+        'SELECT seller_id, display_phone FROM orders o JOIN users u ON u.id = o.seller_id WHERE o.id = $1',
+        [orderId]
+      );
+      if (!sellerRes.rows[0]) return;
+      const { seller_id, display_phone } = sellerRes.rows[0];
+      if (display_phone) return;
+
+      const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+      if (!clerkSecretKey) {
+        console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller phone');
+        return;
+      }
+      const userRes = await query('SELECT clerk_user_id FROM users WHERE id = $1', [seller_id]);
+      if (!userRes.rows[0]?.clerk_user_id) return;
+      
+      const clerk = createClerkClient({ secretKey: clerkSecretKey });
+      const clerkUser = await clerk.users.getUser(userRes.rows[0].clerk_user_id);
+      const phoneObj = clerkUser.phoneNumbers.find(p => p.id === clerkUser.primaryPhoneNumberId);
+      const phoneNumber = phoneObj?.phoneNumber ?? null;
+      if (phoneNumber) {
+        await query('UPDATE users SET display_phone = $1 WHERE id = $2', [phoneNumber, seller_id]);
+        console.log(`[SP1] Cached seller phone for order ${orderId}`);
+      }
+    } catch (err) {
+      console.error('[SP1] Failed to cache seller phone — non-fatal:', err);
+      Sentry.captureException(err);
+    }
+  });
+
+  // Return full post-acceptance DTO
+  const orderRes = await query(`
+    SELECT o.*,
+           u.name as seller_name, u.display_phone as seller_display_phone,
+           agg.name as aggregator_name, agg.display_phone as aggregator_display_phone,
+           COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+           jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.seller_id
+    LEFT JOIN users agg ON agg.id = o.aggregator_id
+    LEFT JOIN order_items oi ON o.id = oi.order_id
+    WHERE o.id = $1
+    GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
+  `, [orderId]);
+
+  return res.status(200).json({ order: buildOrderDto(orderRes.rows[0], aggregatorId) });
+});
+
+// 7. POST /api/orders/:orderId/verify-otp
+router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, res) => {
+  const { orderId } = req.params;
+  const { otp } = req.body;
+  const aggregatorId = req.user!.id;
+
+  if (!otp || typeof otp !== 'string') {
+    return res.status(400).json({ error: 'otp is required' });
+  }
+
+  // Fast-path status check before acquiring lock
+  const preCheck = await query('SELECT status FROM orders WHERE id = $1', [orderId]);
+  if (preCheck.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  if (preCheck.rows[0].status !== 'weighing_in_progress') {
+    return res.status(400).json({ error: 'invalid_order_status' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_user_id = '${aggregatorId}'`);
+
+    const lockRes = await client.query(
+      'SELECT aggregator_id, status FROM orders WHERE id = $1 FOR UPDATE',
+      [orderId]
+    );
+    if (lockRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const order = lockRes.rows[0];
+
+    // V8: only the assigned aggregator can verify OTP
+    if (order.aggregator_id !== aggregatorId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'not_assigned_aggregator' });
+    }
+
+    // Re-check status inside lock (race condition guard)
+    if (order.status !== 'weighing_in_progress') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'invalid_order_status' });
+    }
+
+    // Fetch OTP HMAC from Redis
+    const storedHmac = redis ? await redis.get('otp:order:' + orderId) : null;
+    if (!storedHmac) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'otp_expired' });
+    }
+
+    // Timing-safe OTP comparison
+    const hmacSecret = process.env.OTP_HMAC_SECRET!;
+    const submittedHmac = crypto.createHmac('sha256', hmacSecret).update(otp).digest('hex');
+    const storedBuf = Buffer.from(storedHmac as string, 'hex');
+    const submittedBuf = Buffer.from(submittedHmac, 'hex');
+    if (storedBuf.length !== submittedBuf.length || !crypto.timingSafeEqual(storedBuf, submittedBuf)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'invalid_otp' });
+    }
+
+    // TODO Day 13: validate snapshotHmac binding once weighing screen computes and sends the weight snapshot HMAC.
+
+    await client.query(
+      `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+      [orderId]
+    );
+
+    await client.query(
+      `INSERT INTO order_status_history (order_id, new_status, changed_by, note)
+       VALUES ($1, 'completed', $2, 'OTP verified — order completed')`,
+      [orderId, aggregatorId]
+    );
+
+    await client.query('COMMIT');
+    // TODO Day 13: publish Ably event — order:{orderId} channel, status_updated
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release(); // ALWAYS
+    
+    if (redis) {
+      await redis.del('otp:order:' + orderId); // V-OTP-1: one-time use
+    }
+  }
+
+  // Non-blocking invoice generation placeholder
+  setImmediate(() => {
+    // TODO Day 15: triggerInvoiceGeneration(orderId)
+  });
+
+  return res.status(200).json({ success: true });
 });
 
 export default router;

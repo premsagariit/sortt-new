@@ -2,18 +2,6 @@
  * app/(shared)/order/[id].tsx
  * ──────────────────────────────────────────────────────────────────
  * Order Detail screen — shared between seller and aggregator contexts.
- *
- * V25: Two-phase address reveal enforced.
- *   Pre-acceptance (status='created'):  pickupLocality shown only.
- *   Post-acceptance (all other statuses): pickupAddress shown.
- *   The string `pickupAddress` never reaches the JSX tree for
- *   pre-acceptance orders.
- *
- * Navigation:
- *   - Linked from (seller)/orders.tsx OrderCard onPress
- *   - Back button: router.back()
- *
- * Mock data only. No backend calls.
  * ──────────────────────────────────────────────────────────────────
  */
 
@@ -24,93 +12,87 @@ import {
   StyleSheet,
   Pressable,
   Image,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { Package, ChatCircle, ArrowRight } from 'phosphor-react-native';
+import { 
+  Package, 
+  ChatCircleDots, 
+  Clock, 
+  MapPin, 
+  Phone, 
+  Warning, 
+  CheckCircle, 
+  ArrowRight,
+  NavigationArrow
+} from 'phosphor-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, colorExtended, spacing, radius } from '../../../constants/tokens';
-import { Text } from '../../../components/ui/Typography';
-import { Numeric } from '../../../components/ui/Typography';
+import { colors, spacing, radius } from '../../../constants/tokens';
+import { Text, Numeric } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { StatusChip } from '../../../components/ui/StatusChip';
 import { Avatar } from '../../../components/ui/Avatar';
-import { PrimaryButton } from '../../../components/ui/Button';
-import { SecondaryButton } from '../../../components/ui/Button';
+import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useAuthStore } from '../../../store/authStore';
 import { useOrderStore } from '../../../store/orderStore';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
-import type { OrderStatus } from '../../../components/ui/StatusChip';
-import { MapPin, Phone, CheckCircle, CaretRight, Star, CurrencyInr, ChatCircleDots } from 'phosphor-react-native';
 import { safeBack } from '../../../utils/navigation';
-import { MaterialChip, MATERIAL_LABELS, type MaterialCode } from '../../../components/ui/MaterialChip';
-import { api } from '../../../lib/api';
+import { api, getBaseUrl } from '../../../lib/api';
+import { OrderTimeline } from '../../../components/order/OrderTimeline';
+import { OrderItemList } from '../../../components/order/OrderItemList';
+import { ContactCard } from '../../../components/order/ContactCard';
 
-// Removed mock MOCK_ORDER_DETAIL. Using live store.
-
-// ── Status labels for timeline ─────────────────────────────────────
-const TIMELINE_LABELS: Record<string, string> = {
-  created: 'Order Created',
-  accepted: 'Aggregator Accepted',
-  en_route: 'On the Way · ETA 8 min',
-  arrived: 'Arrived at Location',
-  completed: 'OTP Confirmed & Completed',
-};
-
-// ── Material colour dots ───────────────────────────────────────────
-const MATERIAL_COLORS: Record<string, string> = {
-  metal: colors.material.metal.fg,
-  plastic: colors.material.plastic.fg,
-  paper: colors.material.paper.fg,
-  ewaste: colors.material.ewaste.fg,
-  fabric: colors.material.fabric.fg,
-  glass: colors.material.glass.fg,
-};
-
-const MATERIAL_BG: Record<string, string> = {
-  metal: colors.material.metal.bg,
-  plastic: colors.material.plastic.bg,
-  paper: colors.material.paper.bg,
-  ewaste: colors.material.ewaste.bg,
-  fabric: colors.material.fabric.bg,
-  glass: colors.material.glass.bg,
-};
-
-// ── Component ──────────────────────────────────────────────────────
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userType = useAuthStore((s: any) => s.userType);
-  const authUserId = useAuthStore((s: any) => s.user?.id || 'user-agg-001'); // fallback for mocking
-  const storeOrders = useOrderStore((s: any) => s.orders);
+  const authUserId = useAuthStore((s: any) => s.user?.id);
+  const orders = useOrderStore((s: any) => s.orders);
   const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
+  const isLoading = useOrderStore((s: any) => s.isLoading);
 
-  const [isLoading, setIsLoading] = React.useState(true);
   const [rates, setRates] = React.useState<any[]>([]);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
+  const [ratesLoading, setRatesLoading] = React.useState(true);
+
+  const order = orders.find((o: any) => o.orderId === id);
+
+  const isAggregator = userType === 'aggregator';
+  const isSeller = userType === 'seller';
+  const isPreAcceptance = order && !order.aggregatorId;
+  
+  const hasAggregatorAction = !!(order && isAggregator && (isPreAcceptance || (order.status !== 'arrived' && !['completed', 'cancelled', 'disputed'].includes(order.status))));
+  const hasSellerAction = !!(order && isSeller && order.status === 'weighing_in_progress');
+  const hasBottomAction = hasAggregatorAction || hasSellerAction;
 
   React.useEffect(() => {
     // Fetch rates for estimation calculation
-    api.get('/api/rates').then(res => setRates(res.data.rates || [])).catch(() => {});
+    api.get('/api/rates')
+      .then(res => setRates(res.data.rates || []))
+      .catch(() => {})
+      .finally(() => setRatesLoading(false));
 
-    if (id && typeof id === 'string') {
-      fetchOrder(id).finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
+    if (id) {
+      fetchOrder(id);
     }
   }, [id, fetchOrder]);
 
   // Fetch scrap photo media for this order
   React.useEffect(() => {
-    if (!id || typeof id !== 'string') return;
-    setMediaUrls([]);
+    if (!id) return;
+    // Only clear and fetch if we don't have media or ID changed (though deps handle ID change)
     api.get(`/api/orders/${id}/media`)
       .then(async (res) => {
         const items: any[] = res.data.media ?? [];
         const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
-        // Fetch signed URLs for each scrap photo
+        if (scrapPhotos.length === 0) {
+          setMediaUrls([]);
+          return;
+        }
         const urls = await Promise.all(
           scrapPhotos.map((m: any) =>
             api.get(`/api/orders/${id}/media/${m.id}/url`)
@@ -118,32 +100,17 @@ export default function OrderDetailScreen() {
               .catch(() => null)
           )
         );
-        const resolvedMediaUrls = urls.filter(Boolean) as string[];
-        console.log('[OrderDetail] scrap mediaUrls', resolvedMediaUrls);
-        setMediaUrls(resolvedMediaUrls);
+        setMediaUrls(urls.filter(Boolean) as string[]);
       })
-      .catch((error) => {
-        console.log('[OrderDetail] scrap media fetch failed', error?.message || error);
-      });
+      .catch(() => {});
   }, [id]);
 
-  const order = storeOrders.find((o: any) => o.orderId === id);
-
-  // Move memo up to prevent hook order warning/crash
-  const calculatedEstimate = React.useMemo(() => {
-    if (!order || !order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) return 0;
-    return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
-      const rate = rates.find(r => r.material_code === code)?.rate_per_kg ?? 0;
-      return sum + (rate * (weight as number));
-    }, 0);
-  }, [order, rates]);
-
-  if (isLoading) {
+  if (isLoading && !order) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <NavBar title="Order Details" variant="light" onBack={() => safeBack('/')} />
-        <View style={[styles.scroll, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text variant="body" color={colors.muted}>Loading order details...</Text>
+      <SafeAreaView style={styles.safeArea}>
+        <NavBar title="Loading..." onBack={() => safeBack('/')} />
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.navy} />
         </View>
       </SafeAreaView>
     );
@@ -151,663 +118,308 @@ export default function OrderDetailScreen() {
 
   if (!order) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <NavBar
-          title="Order"
-          variant="light"
-          onBack={() => safeBack('/')}
+      <SafeAreaView style={styles.safeArea}>
+        <NavBar title="Order" onBack={() => safeBack('/')} />
+        <EmptyState
+          icon={<Package size={48} color={colors.muted} weight="thin" />}
+          heading="Order not found"
+          body="This order doesn't exist or may have been removed."
         />
-        <View style={styles.scroll}>
-          <EmptyState
-            icon={<Package size={48} color={colors.muted} weight="thin" />}
-            heading="Order not found"
-            body="This order doesn't exist or may have been removed."
-          />
-        </View>
       </SafeAreaView>
     );
   }
 
-  // V25: full address revealed only post-acceptance
-  // Sellers always see their own full address. V25 only hides address from aggregators pre-acceptance.
-  const displayAddress = userType === 'seller'
-    ? (order.pickupAddress || order.pickupLocality)   // seller always sees full address
-    : order.status === 'created'
-      ? order.pickupLocality          // aggregator pre-acceptance: locality only
-      : (order.pickupAddress || order.pickupLocality); // aggregator post-acceptance: full address
+  const displayAddress = (isAggregator && isPreAcceptance)
+    ? order.pickupLocality
+    : (order.pickupAddress || order.pickupLocality);
 
-  // Derived state flags (must be defined before JSX)
-  const isCompleted = order.status === 'completed';
-  const isActiveRide = ['en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
-  // showAggCard: show aggregator info card when viewing as seller and aggregator is assigned
-  const showAggCard = userType === 'seller' && !!order.aggregatorId && order.status !== 'created';
-  const canCancel = userType === 'seller'
-    ? (order.status === 'created' || order.status === 'accepted')
-    : (order.status === 'accepted' && order.aggregatorId === authUserId);
+  const mappedItems = Object.entries(order.estimatedWeights || {}).map(([code, weight]) => ({
+    material_code: code,
+    weight: weight as number,
+    price_per_kg: rates.find(r => r.material_code === code)?.rate_per_kg,
+  }));
 
-  function handleCancelPress() {
-    setShowCancelSheet(true);
-  }
-
-  // ── Aggregator Actions ──
-  const handleAccept = () => {
-    if (order.orderId) {
-      useAggregatorStore.getState().acceptOrder(order.orderId);
+  const handleAccept = async () => {
+    try {
+      await useAggregatorStore.getState().acceptOrder(order.orderId);
       router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: order.orderId } } as any);
+    } catch (e) {
+      console.error('Failed to accept order', e);
     }
   };
-  const handleEnRoute = () => console.log('Marking en route');
-  const handleArrived = () => console.log('Marking arrived');
-  const handleWeighing = () => router.push(`/(aggregator)/execution/weighing/${order.orderId}` as any);
+
+  const handleStartRide = () => {
+    router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: order.orderId } } as any);
+  };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={[]}>
-      <NavBar
-        title={`Order ${order.orderNumber}`}
-        variant="light"
+    <View style={styles.safeArea}>
+      <NavBar 
+        title={`Order ${order.orderNumber}`} 
         onBack={() => safeBack('/')}
-        // We do not append status text to the title. It goes purely to the rightAction.
         rightAction={<StatusChip status={order.status} />}
       />
 
-      <ScrollView
-        style={styles.scroll}
+      <ScrollView 
+        style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Header Banner (en_route only) ─────────────────────────────────── */}
-        {order.status === 'en_route' && order.aggregatorId && (
-          <View style={{ backgroundColor: colorExtended.amberLight, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderColor: colors.amber }}>
-            <Text variant="label" style={{ color: colors.amber, fontWeight: '700' } as any}>
-              Aggregator is on the way!
-            </Text>
-            <Text variant="caption" style={{ color: colors.amber, marginTop: 2 } as any}>
-              Est. arrival soon
-            </Text>
+        {/* Market Price Mismatch Warning */}
+        {order.status === 'created' && (
+          <View style={styles.warningCard}>
+            <Warning size={20} color={colors.amber} weight="fill" />
+            <View style={styles.warningTextContainer}>
+              <Text variant="label" style={{ color: colors.amber, fontFamily: 'DMSans-SemiBold' }}>
+                Price Variation Notice
+              </Text>
+              <Text variant="caption" color={colors.slate}>
+                Final payout may vary based on market rates at the time of weighing.
+              </Text>
+            </View>
           </View>
         )}
 
-        {/* ── Personnel card (Seller/Aggregator depending on viewer) ─────────── */}
-        {userType === 'seller' ? (
-          showAggCard && order.aggregatorId && (
-            <View style={styles.card}>
-              <View style={styles.aggRow}>
-                <Avatar
-                  name="Assigned Aggregator"
-                  userType="aggregator"
-                  size="lg"
-                />
-                <View style={styles.aggInfo}>
-                  <Text variant="subheading" color={colors.navy}>
-                    Assigned Aggregator
-                  </Text>
-                  <Text variant="caption" color={colors.muted}>
-                    {/* Rating */}
-                    <View style={styles.headerInfoItem}>
-                      <Star size={12} color={colors.amber} weight="fill" />
-                      <Numeric size={12} color={colors.muted}>
-                        {typeof order.rating === 'number' ? order.rating.toFixed(1) : '4.5'}
-                      </Numeric>
-                    </View>
-                    {' · '}
-                    <Numeric size={12} color={colors.muted}>
-                      Verified Partner
-                    </Numeric>
-                  </Text>
-                  <Pressable
-                    style={styles.chatPillBtn}
-                    onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
-                  >
-                    <ChatCircleDots size={14} color={colors.navy} weight="bold" />
-                    <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
-                  </Pressable>
-                </View>
-              </View>
+        <View style={styles.card}>
+          <ContactCard
+            name={isSeller ? (order.aggregatorName || 'Finding Partner...') : (order.sellerName || 'View Order Seller')}
+            phone={!isPreAcceptance ? (isSeller ? order.aggregatorPhone : order.sellerPhone) : null}
+            role={isSeller ? 'Aggregator' : 'Seller'}
+            userType={isSeller ? 'aggregator' : 'seller'}
+            onChat={!isPreAcceptance ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
+          />
+          <View style={styles.cardFooter}>
+            <View style={styles.metaRow}>
+              <Clock size={14} color={colors.muted} />
+              <Text variant="caption" color={colors.muted}>
+                Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </Text>
             </View>
-          )
-        ) : (
-          order.status !== 'created' && order.sellerId && (
-            <View style={styles.card}>
-              <View style={styles.aggRow}>
-                <Avatar
-                  name="Seller"
-                  userType="seller"
-                  size="lg"
-                />
-                <View style={styles.aggInfo}>
-                  <Text variant="subheading" color={colors.navy}>
-                    {typeof order.sellerName === 'string' && order.sellerName.length > 0 ? order.sellerName : 'Seller'}
-                  </Text>
-                  <Text variant="caption" color={colors.muted}>
-                    {/* Rating */}
-                    <View style={styles.headerInfoItem}>
-                      <Star size={12} color={colors.amber} weight="fill" />
-                      <Numeric size={12} color={colors.muted}>
-                        {typeof order.rating === 'number' ? order.rating.toFixed(1) : '4.8'}
-                      </Numeric>
-                    </View>
-                    {' seller rating'}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 4 }}>
-                    <Pressable
-                      style={styles.chatPillBtn}
-                      onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
-                    >
-                      <ChatCircleDots size={14} color={colors.navy} weight="bold" />
-                      <Text variant="caption" style={styles.chatPillText as any}>Chat</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.chatPillBtn, { borderColor: colors.tealLight, backgroundColor: colorExtended.tealLight }]}
-                      onPress={() => router.push(`/(shared)/chat/${order.orderId}` as any)}
-                    >
-                      <ChatCircleDots size={14} color={colors.teal} weight="bold" />
-                      <Text variant="caption" style={[styles.chatPillText, { color: colors.teal }] as any}>Open Chat</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
+            <View style={[styles.metaRow, { marginLeft: spacing.lg }]}>
+              <Package size={14} color={colors.muted} />
+              <Text variant="caption" color={colors.muted}>
+                {order.window || 'Flexible Pickup'}
+              </Text>
             </View>
-          )
-        )}
+          </View>
+        </View>
 
-        {/* ── Scrap photos (render above timeline) ─────────────────────────── */}
+        {/* Location Card */}
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.locationIcon}>
+              <MapPin size={24} color={colors.red} weight="fill" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="label" style={{ fontFamily: 'DMSans-SemiBold' }}>Pickup Location</Text>
+              <Text variant="body" color={colors.slate} numberOfLines={2}>
+                {displayAddress}
+              </Text>
+              {isAggregator && isPreAcceptance && (
+                <Text variant="caption" color={colors.muted} style={{ marginTop: 4 }}>
+                  Exact address visible after you accept the order.
+                </Text>
+              )}
+            </View>
+            {!isPreAcceptance && isAggregator && (
+              <Pressable style={styles.dirBtn} onPress={() => {/* navigation */}}>
+                <NavigationArrow size={20} color={colors.surface} weight="fill" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Items List */}
+        <OrderItemList items={mappedItems} totalAmount={order.estimatedAmount} />
+
+        {/* Timeline */}
+        <OrderTimeline
+          history={order.history || []}
+          currentStatus={order.status}
+        />
+
+        {/* Scrap Photos */}
         {mediaUrls.length > 0 && (
-          <View style={styles.card}>
-            <Text
-              variant="caption"
-              color={colors.navy}
-              style={styles.cardSectionLabel}
-            >
-              SCRAP PHOTO
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+          <View style={styles.photoSection}>
+            <Text variant="subheading" style={{ marginBottom: spacing.sm }}>Scrap Photos</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {mediaUrls.map((url, idx) => (
-                <Image
-                  key={idx}
-                  source={{ uri: url }}
-                  style={{ width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
-                  resizeMode="cover"
+                <Image 
+                  key={idx} 
+                  source={{ uri: url }} 
+                  style={styles.scrapPhoto} 
                 />
               ))}
-            </View>
+            </ScrollView>
           </View>
         )}
 
-        {/* ── Status timeline ─────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text
-            variant="caption"
-            color={colors.navy}
-            style={styles.cardSectionLabel}
+        {/* Cancel Button (Seller/Aggregator accepted state) */}
+        {!['completed', 'cancelled', 'disputed'].includes(order.status) && (
+          <Pressable 
+            style={styles.cancelAction} 
+            onPress={() => setShowCancelSheet(true)}
           >
-            ORDER TIMELINE
-          </Text>
-
-          {(() => {
-            const allStatuses = ['created', 'accepted', 'en_route', 'arrived', 'completed'];
-            let history = [];
-            
-            if (order.status === 'cancelled') {
-              history = [
-                { status: 'created', done: true, active: false },
-                { status: 'cancelled', done: true, active: false }
-              ];
-            } else {
-              let foundCurrent = false;
-              for (const s of allStatuses) {
-                if (s === order.status) {
-                  history.push({ status: s, done: false, active: true });
-                  foundCurrent = true;
-                } else if (!foundCurrent) {
-                  history.push({ status: s, done: true, active: false });
-                } else {
-                  history.push({ status: s, done: false, active: false });
-                }
-              }
-            }
-
-            return history.map((step: any, idx: number) => {
-              const isLast = idx === history.length - 1;
-              const isDone = step.done;
-              const isActive = !!step.active;
-
-              return (
-                <View key={step.status} style={styles.timelineRow}>
-                  {/* Left: circle + connector */}
-                  <View style={styles.timelineLeft}>
-                    {isDone ? (
-                      <View style={[styles.timelineCircle, styles.timelineCircleDone]}>
-                        <Text style={styles.timelineCheck}>✓</Text>
-                      </View>
-                    ) : isActive ? (
-                      <View style={[styles.timelineCircle, styles.timelineCircleActive]}>
-                        <Text style={styles.timelineArrow}>→</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.timelineCircle, styles.timelineCirclePending]} />
-                    )}
-                    {!isLast && (
-                      <View
-                        style={[
-                          styles.timelineConnector,
-                          isDone && styles.timelineConnectorDone,
-                        ]}
-                      />
-                    )}
-                  </View>
-                  {/* Right: label + time */}
-                  <View style={styles.timelineContent}>
-                    <Text
-                      variant="caption"
-                      color={
-                        isActive ? colors.amber :
-                          isDone ? colors.navy :
-                            colors.muted
-                      }
-                      style={isActive ? styles.timelineLabelActive : undefined}
-                    >
-                      {TIMELINE_LABELS[step.status] ?? step.status}
-                    </Text>
-                    {step.time && (
-                      <Numeric size={11} color={colors.muted}>
-                        {step.time}
-                      </Numeric>
-                    )}
-                  </View>
-                </View>
-              );
-            });
-          })()}
-        </View>
-
-        {/* ── Order summary ───────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text
-            variant="caption"
-            color={colors.navy}
-            style={styles.cardSectionLabel}
-          >
-            ORDER SUMMARY
-          </Text>
-          <View style={styles.metaPillRow}>
-            {(order.materials || []).map((mat: string) => {
-              const weight = order.estimatedWeights?.[mat] || 0;
-              return (
-                <View key={mat} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <MaterialChip
-                    material={mat as MaterialCode}
-                    label={MATERIAL_LABELS[mat as MaterialCode]}
-                  />
-                  <Numeric size={12} color={colors.slate}>
-                    {weight} kg
-                  </Numeric>
-                </View>
-              );
-            })}
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryValueRow}>
-            <Text variant="caption" color={colors.muted}>Estimated value</Text>
-            <Numeric size={18} color={colors.navy}>
-              {'~₹'}
-              {calculatedEstimate.toFixed(0)}
-            </Numeric>
-          </View>
-        </View>
-
-        {/* ── Address section ─────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text
-            variant="caption"
-            color={colors.navy}
-            style={styles.cardSectionLabel}
-          >
-            PICKUP LOCATION
-          </Text>
-          {/* V25: full address revealed only post-acceptance */}
-          <Text variant="label" color={colors.slate}>
-            {displayAddress}
-          </Text>
-          <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
-            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-          </Text>
-        </View>
-
-        {/* ── OTP instruction (seller, weighing_in_progress) ─────────────────── */}
-        {userType === 'seller' && order.status === 'weighing_in_progress' && (
-          <View style={[styles.card, styles.otpCard]}>
-            <Text variant="caption" color={colors.navy} style={styles.cardSectionLabel}>
-              PICKUP CONFIRMATION CODE
-            </Text>
-            <Text variant="caption" color={colors.slate}>
-              Check your WhatsApp for the confirmation code to give the aggregator.
-            </Text>
-          </View>
+            <Text variant="label" color={colors.red}>Cancel Order</Text>
+          </Pressable>
         )}
 
-        {/* ── Action bar ──────────────────────────────────────── */}
-        {isCompleted ? (
-          <SecondaryButton
-            label="View Receipt"
-            onPress={() => router.push(`/(shared)/receipt/${order.orderId}`)}
-          />
-        ) : (
-          <>
-            {/* Removed SecondaryButton Chat as it is inside the card now */}
-          </>
-        )}
-
-        {isActiveRide && userType === 'seller' && (
-          <View style={{ marginTop: spacing.sm }}>
-            <PrimaryButton
-              label="Track Live"
-              onPress={() => console.log('track live pressed')}
-            />
-          </View>
-        )}
-
-        {/* Aggregator Context Actions */}
-        {userType === 'aggregator' && (
-          <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
-            {order.status === 'created' && (
-              <PrimaryButton label="Accept Order" onPress={handleAccept} />
-            )}
-            {order.status === 'accepted' && (
-              <PrimaryButton label="I'm On The Way!" onPress={handleEnRoute} />
-            )}
-            {order.status === 'en_route' && (
-              <View style={{ gap: spacing.sm }}>
-                <PrimaryButton label="I've Arrived" style={{ backgroundColor: colors.teal }} onPress={handleArrived} />
-                <SecondaryButton label="Get Directions" onPress={() => console.log('Map directions')} />
-              </View>
-            )}
-            {order.status === 'arrived' && (
-              <PrimaryButton label="Start Weighing" onPress={handleWeighing} />
-            )}
-          </View>
-        )}
-
-        {/* Cancel link — visible only for created or accepted orders */}
-        {canCancel && (
-          <Text
-            variant="caption"
-            color={colors.red}
-            style={styles.cancelLink}
-            onPress={handleCancelPress}
-          >
-            Cancel Order
-          </Text>
-        )}
-
-        {order.status === 'en_route' && order.aggregatorId && (
-          <View style={{ backgroundColor: colorExtended.tealLight, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderColor: colors.teal, marginTop: spacing.md }}>
-            <Text variant="caption" style={{ color: colors.teal, fontWeight: '500' } as any}>
-              💡 When the aggregator arrives, they will visually inspect your scrap and weigh it in front of you. Once the final value is determined, you will confirm with OTP and receive instant payment.
-            </Text>
-          </View>
-        )}
+        {hasBottomAction && <View style={{ height: 100 }} />}
       </ScrollView>
 
-      {/* ── Two-tap cancel confirmation sheet ───────────────────── */}
-      {/* Two-tap cancel: first tap shows sheet, second tap confirms — per PLAN.md §2.6 */}
+      {/* Sticky Bottom Actions */}
+      {hasBottomAction && (
+        <View style={styles.floatingFooter}>
+          {hasAggregatorAction && isPreAcceptance && (
+            <PrimaryButton 
+              label="Accept Order" 
+              onPress={handleAccept} 
+              style={{ flex: 1 }}
+            />
+          )}
+          {hasAggregatorAction && !isPreAcceptance && (
+            <PrimaryButton 
+              label={order.status === 'accepted' ? 'Start Ride' : 'Continue Ride'} 
+              onPress={handleStartRide} 
+              style={{ flex: 1 }}
+            />
+          )}
+          {hasSellerAction && (
+            <View style={styles.otpBanner}>
+              <Text variant="label" style={{ color: colors.surface }}>Give OTP to partner: </Text>
+              <Numeric size={18} color={colors.surface}>{order.otp}</Numeric>
+            </View>
+          )}
+        </View>
+      )}
+
       {showCancelSheet && (
-        <CancelOrderModal
-          orderId={order.orderId}
-          onClose={() => setShowCancelSheet(false)}
+        <CancelOrderModal 
+          orderId={order.orderId} 
+          onClose={() => setShowCancelSheet(false)} 
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-  scroll: {
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: spacing.md,
-    gap: spacing.sm,
-    paddingBottom: spacing.xl,
   },
-
-  // Map placeholder
-  mapPlaceholder: {
-    height: 140,
-    backgroundColor: colors.bg,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    position: 'relative',
-  },
-  mapEmoji: {
-    fontSize: 28,
-  },
-  mapPinIcon: {
-    marginBottom: spacing.xs,
-  },
-  mapDistBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-
-  // Card base
   card: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
     padding: spacing.md,
-    gap: spacing.sm,
-  },
-  cardSectionLabel: {
-    fontSize: 12,
-    fontFamily: 'DMSans-Bold',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: spacing.xs,
-  },
-
-  // Aggregator card
-  aggRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  aggInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  headerInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  chatPillBtn: {
-    borderRadius: 16,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 4,
+    marginBottom: spacing.sm,
   },
-  chatPillText: {
-    color: colors.navy,
-    fontWeight: '600',
-  },
-
-  // Timeline
-  timelineRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'flex-start',
-  },
-  timelineLeft: {
-    alignItems: 'center',
-    width: 20,
-  },
-  timelineCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timelineCircleDone: {
-    backgroundColor: colors.teal,
-  },
-  timelineCircleActive: {
-    backgroundColor: colors.amber,
-  },
-  timelineCirclePending: {
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colorExtended.surface2,
-  },
-  locationText: {
-    color: colors.surface,
-    fontSize: 12,
-  },
-  headerInfo: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: 4,
-  },
-  timelineCheck: {
-    color: colors.surface,
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  timelineArrow: {
-    color: colors.surface,
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  timelineConnector: {
-    width: 2,
-    height: 28,
-    backgroundColor: colors.border,
-  },
-  timelineConnectorDone: {
-    backgroundColor: colors.teal,
-    opacity: 0.3,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingBottom: spacing.md,
-    gap: 2,
-  },
-  timelineLabelActive: {
-    fontFamily: 'DMSans-Bold',
-  },
-
-  // Order summary
-  metaPillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  metaPill: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: colorExtended.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
-  metaDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  summaryValueRow: {
+  cardFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  actionBar: {
-    marginTop: spacing.sm,
-  },
-  cancelLink: {
-    textAlign: 'center',
     marginTop: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 40,           // touch target
-    lineHeight: 40,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.bg,
   },
-
-  // Cancel sheet modal
-  modalOuter: {
-    ...StyleSheet.absoluteFillObject,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.black, // black base — opacity below controls transparency
-    opacity: 0.5,               // no hardcoded rgba — opacity on plain black View
+  actionButtons: {
+    flexDirection: 'row',
   },
-  cancelSheet: {
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warningCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.amberLight,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.amberLargeLight,
+    marginBottom: spacing.md,
+    alignItems: 'center',
+  },
+  warningTextContainer: {
+    marginLeft: spacing.sm,
+    flex: 1,
+  },
+  locationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.redLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  dirBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.navy,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
+  },
+  photoSection: {
+    marginTop: spacing.md,
+  },
+  scrapPhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    marginRight: spacing.sm,
+    backgroundColor: colors.skeleton,
+  },
+  cancelAction: {
+    alignSelf: 'center',
+    marginTop: spacing.xl,
+    padding: spacing.md,
+  },
+  floatingFooter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.card,
-    borderTopRightRadius: radius.card,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: 'row',
   },
-  // OTP Card
-  otpCard: {
-    backgroundColor: colorExtended.surface2,
-    borderColor: colors.navy,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-  },
-  otpCodeRow: {
+  otpBanner: {
+    flex: 1,
+    backgroundColor: colors.navy,
+    padding: spacing.md,
+    borderRadius: 14,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.sm,
-    marginVertical: spacing.sm,
-  },
-  otpDigitBox: {
-    width: 50,
-    height: 60,
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  otpDigitText: {
-    color: colors.navy,
-    fontFamily: 'DMMono-Bold',
-    fontSize: 28,
   },
 });

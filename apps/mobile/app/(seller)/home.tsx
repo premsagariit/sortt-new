@@ -28,6 +28,7 @@ import { IconButton } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Avatar } from '../../components/ui/Avatar';
 import { SorttLogo } from '../../components/ui/SorttLogo';
+import { NotificationBell } from '../../components/ui/NotificationBell';
 import { router } from 'expo-router';
 
 // ── Rate shape from GET /api/rates ───────────────────────────────────
@@ -312,11 +313,7 @@ export default function SellerHomeScreen() {
 
         {/* RIGHT ACTIONS */}
         <View style={[styles.alwaysRight, { top: insets.top }]} pointerEvents="box-none">
-          <IconButton
-            icon={<Bell size={22} color={colors.surface} />}
-            onPress={handleNotifications}
-            accessibilityLabel="Notifications"
-          />
+          <NotificationBell />
           <Pressable onPress={() => router.push('/(seller)/profile')} hitSlop={8}>
             <Avatar
               name={displayName}

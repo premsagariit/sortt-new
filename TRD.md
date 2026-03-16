@@ -1793,5 +1793,27 @@ export interface IMapProvider {
 
 ---
 
+## 13. Security & Privacy Patches
+
+### SP1 — Seller Phone Reveal (2026-03-16)
+
+**Summary:** Expose the seller's phone number to the assigned aggregator (and the seller themselves) only after the order reaches `accepted` status or beyond.
+
+**Decisions implemented:**
+
+| Rule | Detail |
+|---|---|
+| SP1-1 | Raw phone number **never** stored on `orders`. One copy only: `users.display_phone` (VARCHAR 20, nullable). |
+| SP1-2 | `display_phone` is populated **at acceptance time** via a non-fatal `setImmediate` Clerk API call inside `PATCH /:id/status`. Early-return guard prevents redundant Clerk calls if already cached. |
+| SP1-3 | `buildOrderDto` exposes `seller_phone` only when `status ∉ {created, cancelled}` AND `requestingUserId ∈ {seller_id, aggregator_id}`. All other requests receive `null`. |
+| SP1-4 | `seller_display_phone` (raw DB field) is always stripped from the DTO `return` object — clients never receive the raw column name. |
+| SP1-5 | `phone_hash` and `clerk_user_id` continue to be stripped (V24 unchanged). |
+| SP1-6 | UI: tap-to-call pill (`Phone` icon + `Linking.openURL('tel:...')`) rendered in aggregator's seller card only when `sellerPhone !== null`. Seller view never shows a call-yourself button (`userType === 'aggregator'` gate). |
+| SP1-7 | DPDP compliance: one phone copy in `users.display_phone` — erasure request requires only a single `UPDATE users SET display_phone = NULL WHERE id = $1`. |
+
+**Files changed:** `migrations/0019_users_display_phone.sql` · `backend/src/routes/orders/index.ts` · `backend/src/utils/orderDto.ts` · `apps/mobile/store/orderStore.ts` · `apps/mobile/app/(shared)/order/[id].tsx`
+
+---
+
 *— End of [APP_NAME] TRD v4.0 —*
 *Supersedes TRD v3.2. Reason for major version bump: complete removal of Supabase dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Clerk + Ably + Uploadthing + Express on Azure App Service.*

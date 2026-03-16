@@ -17,40 +17,32 @@ import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialChip } from '../../components/ui/MaterialChip';
 
-// Mock transaction data
-const TRANSACTIONS = [
-  {
-    id: 'TXN-92841',
-    date: '1 Mar 2026',
-    amount: 1450,
-    materials: ['metal', 'plastic', 'paper'],
-    aggregator: 'Ramesh Scrap Dealers',
-  },
-  {
-    id: 'TXN-91723',
-    date: '24 Feb 2026',
-    amount: 820,
-    materials: ['plastic', 'ewaste'],
-    aggregator: 'Green India Recyclers',
-  },
-  {
-    id: 'TXN-90412',
-    date: '18 Feb 2026',
-    amount: 2150,
-    materials: ['metal', 'fabric'],
-    aggregator: 'Hyderabad Metals',
-  },
-  {
-    id: 'TXN-89210',
-    date: '12 Feb 2026',
-    amount: 640,
-    materials: ['glass', 'paper'],
-    aggregator: 'Eco Solutions',
-  },
-];
+import { useFocusEffect } from 'expo-router';
+import { useAuthStore } from '../../store/authStore';
+import { useOrderStore } from '../../store/orderStore';
 
 export default function EarningsSummary() {
   const router = useRouter();
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+  const orders = useOrderStore((s) => s.orders);
+  const fetchOrders = useOrderStore((s) => s.fetchOrders);
+
+  // Sync data on focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMe();
+      fetchOrders(true);
+    }, [fetchMe, fetchOrders])
+  );
+
+  // Derived data
+  const completedOrders = orders
+    .filter(o => o.status === 'completed')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const totalEarned = completedOrders.reduce((acc, o) => acc + (o.confirmedAmount || o.estimatedAmount || 0), 0);
+  const pickupsCount = completedOrders.length;
+  const avgPerOrder = pickupsCount > 0 ? Math.round(totalEarned / pickupsCount) : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -69,17 +61,17 @@ export default function EarningsSummary() {
         <View style={styles.summaryStrip}>
           <View style={styles.statBox}>
             <Text variant="caption" color={colors.muted}>Total Earned</Text>
-            <Numeric size={20} color={colors.navy}>₹5,060</Numeric>
+            <Numeric size={20} color={colors.navy}>₹{totalEarned.toLocaleString('en-IN')}</Numeric>
           </View>
           <View style={styles.divider} />
           <View style={styles.statBox}>
             <Text variant="caption" color={colors.muted}>Pickups</Text>
-            <Numeric size={20} color={colors.navy}>12</Numeric>
+            <Numeric size={20} color={colors.navy}>{pickupsCount}</Numeric>
           </View>
           <View style={styles.divider} />
           <View style={styles.statBox}>
             <Text variant="caption" color={colors.muted}>Avg. per Order</Text>
-            <Numeric size={20} color={colors.navy}>₹421</Numeric>
+            <Numeric size={20} color={colors.navy}>₹{avgPerOrder.toLocaleString('en-IN')}</Numeric>
           </View>
         </View>
 
@@ -88,33 +80,54 @@ export default function EarningsSummary() {
           <Text variant="subheading">Transaction History</Text>
         </View>
 
-        {TRANSACTIONS.map((txn) => (
-          <View key={txn.id} style={styles.txnCard}>
-            <View style={styles.txnTealBar} />
-            <View style={styles.txnContent}>
-              <View style={styles.txnTop}>
-                <View>
-                  <Numeric size={14} color={colors.navy}>#{txn.id}</Numeric>
-                  <Text variant="caption" color={colors.muted}>{txn.date}</Text>
-                </View>
-                <Numeric size={20} color={colors.teal}>₹{txn.amount}</Numeric>
-              </View>
-
-              <View style={styles.aggregatorRow}>
-                <Text variant="label" color={colors.slate}>Paid by {txn.aggregator}</Text>
-              </View>
-
-              <View style={styles.materialsRow}>
-                {txn.materials.map((m: any) => (
-                  <MaterialChip key={m} material={m} variant="chip" />
-                ))}
-              </View>
-            </View>
+        {completedOrders.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text variant="body" color={colors.muted} style={styles.emptyText as any}>
+              No completed transactions found yet.
+            </Text>
           </View>
-        ))}
+        ) : (
+          completedOrders.map((txn) => {
+            const dateStr = new Date(txn.createdAt).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            });
+            const amount = txn.confirmedAmount || txn.estimatedAmount || 0;
+
+            return (
+              <View key={txn.orderId} style={styles.txnCard}>
+                <View style={styles.txnTealBar} />
+                <View style={styles.txnContent}>
+                  <View style={styles.txnTop}>
+                    <View>
+                      <Numeric size={14} color={colors.navy}>{txn.orderNumber}</Numeric>
+                      <Text variant="caption" color={colors.muted}>{dateStr}</Text>
+                    </View>
+                    <Numeric size={20} color={colors.teal}>₹{amount.toLocaleString('en-IN')}</Numeric>
+                  </View>
+
+                  <View style={styles.aggregatorRow}>
+                    <Text variant="label" color={colors.slate}>
+                      Paid by {txn.aggregatorName || 'Authorized Aggregator'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.materialsRow}>
+                    {txn.materials.map((m: any) => (
+                      <MaterialChip key={m} material={m} variant="chip" />
+                    ))}
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
 
         <View style={styles.listFooter}>
-          <Text variant="caption" color={colors.muted}>Viewing last 30 days of history</Text>
+          <Text variant="caption" color={colors.muted}>
+            {completedOrders.length > 0 ? 'Viewing your complete transaction history' : ''}
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -189,5 +202,20 @@ const styles = StyleSheet.create({
   listFooter: {
     alignItems: 'center',
     paddingVertical: 24,
+  },
+  emptyContainer: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    marginTop: spacing.md,
+  },
+  emptyText: {
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

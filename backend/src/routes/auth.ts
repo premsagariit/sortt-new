@@ -186,12 +186,14 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         const requestedUserType = user_type || 'seller';
 
         const upsertResult = await query(
-            `INSERT INTO users (clerk_user_id, phone_hash, phone_last4, user_type, name)
-            VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO users (clerk_user_id, phone_hash, phone_last4, user_type, name, display_phone)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (clerk_user_id)
-            DO UPDATE SET phone_last4 = EXCLUDED.phone_last4
-            RETURNING id, user_type, is_active, name`,
-            [clerkUserId, phoneHmac, phoneLast4, requestedUserType === 'dealer' ? 'aggregator' : requestedUserType, '']
+            DO UPDATE SET 
+                phone_last4 = EXCLUDED.phone_last4,
+                display_phone = COALESCE(users.display_phone, EXCLUDED.display_phone)
+            RETURNING id, user_type, is_active, name, display_phone`,
+            [clerkUserId, phoneHmac, phoneLast4, requestedUserType === 'dealer' ? 'aggregator' : requestedUserType, `User ${phoneLast4}`, phone]
         );
 
         const userRecord = upsertResult.rows[0];

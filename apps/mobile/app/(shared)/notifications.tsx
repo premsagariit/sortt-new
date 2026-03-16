@@ -1,71 +1,20 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Pressable, Animated, PanResponder, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { View, StyleSheet, FlatList, Pressable, Animated, PanResponder, Dimensions, RefreshControl } from 'react-native';
 import { Bell, Trash } from 'phosphor-react-native';
+import { formatDistanceToNow } from 'date-fns';
 
-import { colors, spacing, radius } from '../../constants/tokens';
+import { colors, spacing } from '../../constants/tokens';
 import { safeBack } from '../../utils/navigation';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { useNotificationStore, NotificationItem } from '../../store/notificationStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = -80;
 
-type NotificationItem = {
-    id: string;
-    title: string;
-    body: string;
-    timestamp: string;
-    isRead: boolean;
-    type: 'order' | 'message' | 'payment' | 'rate' | 'review';
-};
-
-const MOCK_NOTIFICATIONS: NotificationItem[] = [
-    {
-        id: 'n1',
-        type: 'order',
-        isRead: false,
-        title: "New order near you!",
-        body: "A seller in Banjara Hills just posted. Metal + paper. Tap to view.",
-        timestamp: "Just now"
-    },
-    {
-        id: 'n2',
-        type: 'order',
-        isRead: false,
-        title: "Order completed",
-        body: "Order was successful. ₹1,240 added to your balance.",
-        timestamp: "2h ago"
-    },
-    {
-        id: 'n3',
-        type: 'rate',
-        isRead: true,
-        title: "Price drop alert",
-        body: "Iron rates dropped by ₹2/kg. Check updated rate card.",
-        timestamp: "5h ago"
-    },
-    {
-        id: 'n4',
-        type: 'message',
-        isRead: true,
-        title: "Support message",
-        body: "Your document verification is complete. Happy trading!",
-        timestamp: "Yesterday"
-    },
-    {
-        id: 'n5',
-        type: 'payment',
-        isRead: true,
-        title: "Payment processed",
-        body: "Payout of ₹4,500 settled to your linked bank account.",
-        timestamp: "2 days ago"
-    }
-];
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Custom SwipeableRow using PanResponder (since guesture-handler is missing)
+// Custom SwipeableRow using PanResponder
 // ─────────────────────────────────────────────────────────────────────────────
 function SwipeableRow({ item, onDelete, onMarkRead, children }: {
     item: NotificationItem,
@@ -75,29 +24,40 @@ function SwipeableRow({ item, onDelete, onMarkRead, children }: {
 }) {
     const scrollX = useRef(new Animated.Value(0)).current;
 
+    const currentOffset = useRef(0);
+
     const panResponder = useRef(
         PanResponder.create({
             onMoveShouldSetPanResponder: (_, gestureState) => {
-                // Only trigger for horizontal swipes
                 return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
             },
+            onPanResponderGrant: () => {
+                scrollX.setOffset(currentOffset.current);
+                scrollX.setValue(0);
+            },
             onPanResponderMove: (_, gestureState) => {
-                const dx = Math.min(0, gestureState.dx); // Only allow swiping left
-                scrollX.setValue(dx);
+                let newDx = gestureState.dx;
+                if (currentOffset.current + newDx > 0) {
+                    newDx = -currentOffset.current;
+                }
+                scrollX.setValue(newDx);
             },
             onPanResponderRelease: (_, gestureState) => {
-                if (gestureState.dx < SWIPE_THRESHOLD) {
-                    // Open delete action
+                scrollX.flattenOffset();
+                const totalDx = currentOffset.current + gestureState.dx;
+                
+                if (totalDx < SWIPE_THRESHOLD) {
                     Animated.spring(scrollX, {
                         toValue: SWIPE_THRESHOLD,
                         useNativeDriver: true,
                     }).start();
+                    currentOffset.current = SWIPE_THRESHOLD;
                 } else {
-                    // Close back
                     Animated.spring(scrollX, {
                         toValue: 0,
                         useNativeDriver: true,
                     }).start();
+                    currentOffset.current = 0;
                 }
             },
         })
@@ -134,28 +94,27 @@ function SwipeableRow({ item, onDelete, onMarkRead, children }: {
 }
 
 export default function NotificationsScreen() {
-    const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+    const { 
+        notifications, 
+        loading, 
+        fetchNotifications, 
+        markAsRead, 
+        markAllRead, 
+        deleteNotification 
+    } = useNotificationStore();
 
-    const markAllRead = useCallback(() => {
-        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    }, []);
-
-    const deleteNotification = useCallback((id: string) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-    }, []);
-
-    const markRead = useCallback((id: string) => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-    }, []);
+    useEffect(() => {
+        fetchNotifications();
+    }, [fetchNotifications]);
 
     const renderItem = ({ item }: { item: NotificationItem }) => (
         <SwipeableRow
             item={item}
             onDelete={deleteNotification}
-            onMarkRead={markRead}
+            onMarkRead={markAsRead}
         >
             <View style={styles.unreadIndicatorContainer}>
-                {!item.isRead && <View style={styles.unreadDot} />}
+                {!item.is_read && <View style={styles.unreadDot} />}
             </View>
             <View style={styles.textContainer}>
                 <Text
@@ -163,8 +122,8 @@ export default function NotificationsScreen() {
                     style={[
                         styles.title,
                         {
-                            color: item.isRead ? colors.slate : colors.navy,
-                            fontFamily: item.isRead ? 'DMSans-Medium' : 'DMSans-Bold'
+                            color: item.is_read ? colors.slate : colors.navy,
+                            fontFamily: item.is_read ? 'DMSans-Medium' : 'DMSans-Bold'
                         }
                     ]}
                 >
@@ -173,7 +132,7 @@ export default function NotificationsScreen() {
                 <Text
                     variant="caption"
                     numberOfLines={2}
-                    color={item.isRead ? colors.muted : colors.slate}
+                    color={item.is_read ? colors.muted : colors.slate}
                     style={styles.body}
                 >
                     {item.body}
@@ -183,7 +142,7 @@ export default function NotificationsScreen() {
                     color={colors.muted}
                     style={styles.timestamp}
                 >
-                    {item.timestamp}
+                    {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                 </Numeric>
             </View>
         </SwipeableRow>
@@ -196,7 +155,7 @@ export default function NotificationsScreen() {
                 variant="light"
                 onBack={() => safeBack()}
                 rightAction={
-                    notifications.length > 0 && notifications.some(n => !n.isRead) ? (
+                    notifications.length > 0 && notifications.some(n => !n.is_read) ? (
                         <Pressable
                             onPress={markAllRead}
                             style={styles.markReadButton}
@@ -218,16 +177,20 @@ export default function NotificationsScreen() {
                     styles.listContent,
                     notifications.length === 0 && styles.emptyList
                 ]}
+                refreshControl={
+                    <RefreshControl refreshing={loading} onRefresh={fetchNotifications} />
+                }
                 ListEmptyComponent={
-                    <EmptyState
-                        icon={<Bell size={64} color={colors.border} weight="thin" />}
-                        heading="All caught up!"
-                        body="You have no new notifications right now."
-                    />
+                    !loading ? (
+                        <EmptyState
+                            icon={<Bell size={48} color={colors.border} weight="thin" />}
+                            heading="All caught up!"
+                            body="You have no new notifications right now."
+                        />
+                    ) : null
                 }
                 showsVerticalScrollIndicator={false}
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
-                contentOffset={{ x: 0, y: 0 }}
             />
         </View>
     );
@@ -305,3 +268,4 @@ const styles = StyleSheet.create({
         fontSize: 13,
     },
 });
+

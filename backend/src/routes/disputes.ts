@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
-import { withUser } from '../lib/db';
+import { withUser, query } from '../lib/db';
+import { createNotification } from '../lib/notifications';
 
 const router = Router();
 
@@ -91,6 +92,24 @@ router.post('/', async (req: Request, res: Response) => {
                 );
 
                 await client.query('COMMIT');
+
+                // --- NEW: Notify the other party ---
+                setImmediate(async () => {
+                    try {
+                        const otherPartyId = userId === order.seller_id ? order.aggregator_id : order.seller_id;
+                        if (otherPartyId) {
+                            await createNotification(
+                                otherPartyId,
+                                'Order Disputed',
+                                `A dispute has been raised for order #${order_id.slice(0, 8)}.`,
+                                'dispute'
+                            );
+                        }
+                    } catch (err) {
+                        console.error('Failed to create notification for dispute:', err);
+                    }
+                });
+
                 res.status(201).json({ disputeId, createdAt: disputeRes.rows[0].created_at });
             } catch (e) {
                 await client.query('ROLLBACK');
