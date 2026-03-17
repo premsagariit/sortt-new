@@ -68,7 +68,7 @@ export default function KycDocumentsScreen() {
 
     const handlePick = async (id: string) => {
         setActiveDocId(id);
-        await capture.pickPhoto();
+        await capture.capturePhoto();
     };
 
     const handleRemove = (id: string) => {

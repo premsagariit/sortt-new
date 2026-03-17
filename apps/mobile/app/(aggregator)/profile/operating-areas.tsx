@@ -9,6 +9,7 @@ import { NavBar } from '../../../components/ui/NavBar';
 import { ZoneChip } from '../../../components/ui/ZoneChip';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { safeBack } from '../../../utils/navigation';
+import { useAggregatorStore } from '../../../store/aggregatorStore';
 
 const ALL_ZONES = [
     'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'Kondapur', 'Madhapur',
@@ -18,9 +19,14 @@ const ALL_ZONES = [
 
 export default function OperatingAreasScreen() {
     const router = useRouter();
-    const [selectedZones, setSelectedZones] = useState<string[]>(['Banjara Hills', 'Jubilee Hills']);
+    const { operatingAreas, setOperatingAreas, updateProfile } = useAggregatorStore();
+    const [selectedZones, setSelectedZones] = useState<string[]>(operatingAreas);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+
+    React.useEffect(() => {
+        setSelectedZones(operatingAreas);
+    }, [operatingAreas]);
 
     const filteredZones = useMemo(() => {
         return ALL_ZONES.filter(z =>
@@ -36,9 +42,14 @@ export default function OperatingAreasScreen() {
 
     const handleSave = async () => {
         setIsSaving(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setIsSaving(false);
-        safeBack('/(aggregator)/profile');
+        try {
+            setOperatingAreas(selectedZones);
+            await updateProfile({ operating_area: selectedZones.join(', ') });
+            setIsSaving(false);
+            safeBack('/(aggregator)/profile');
+        } catch {
+            setIsSaving(false);
+        }
     };
 
     return (

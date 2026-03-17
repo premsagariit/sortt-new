@@ -26,11 +26,21 @@ const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 export default function AggregatorEditProfileScreen() {
     const router = useRouter();
     const { name, locality, city, setName, setLocality } = useAuthStore();
+    const { profile, fetchAggregatorProfile } = useAggregatorStore();
 
-    const [newName, setNewName] = useState(name);
-    const [newLocality, setNewLocality] = useState(locality);
+    const [newName, setNewName] = useState(profile?.businessName || name);
+    const [newLocality, setNewLocality] = useState(profile?.operatingArea || locality);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        void fetchAggregatorProfile();
+    }, [fetchAggregatorProfile]);
+
+    React.useEffect(() => {
+        setNewName(profile?.businessName || name);
+        setNewLocality(profile?.operatingArea || locality);
+    }, [profile, name, locality]);
 
     const handleSave = async () => {
         const trimmedName = newName.trim();

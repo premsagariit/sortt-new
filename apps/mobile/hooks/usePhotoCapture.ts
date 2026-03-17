@@ -22,7 +22,7 @@ export interface UsePhotoCaptureOptions {
 
 export interface UsePhotoCaptureResult {
     photoUri: string | null;
-    pickPhoto: () => Promise<void>;
+    capturePhoto: () => Promise<string | null>;
     permissionDenied: boolean;
     isLoading: boolean;
     reset: () => void;
@@ -33,7 +33,7 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
     const [permissionDenied, setPermissionDenied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const pickPhoto = useCallback(async () => {
+    const capturePhoto = useCallback(async () => {
         setIsLoading(true);
         setPermissionDenied(false);
 
@@ -43,7 +43,7 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
             if (cameraResult.status !== ImagePicker.PermissionStatus.GRANTED) {
                 setPermissionDenied(true);
                 setIsLoading(false);
-                return;
+                return null;
             }
 
             // Launch the camera — never the gallery (Day 8 adds gallery as separate option)
@@ -55,9 +55,12 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
             });
 
             if (!result.canceled && result.assets.length > 0) {
+                const uri = result.assets[0].uri;
                 // Store only the local URI — no upload, no EXIF processing (V18: Day 8)
-                setPhotoUri(result.assets[0].uri);
+                setPhotoUri(uri);
+                return uri;
             }
+            return null;
         } finally {
             setIsLoading(false);
         }
@@ -68,5 +71,5 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
         setPermissionDenied(false);
     }, []);
 
-    return { photoUri, pickPhoto, permissionDenied, isLoading, reset };
+    return { photoUri, capturePhoto, permissionDenied, isLoading, reset };
 }

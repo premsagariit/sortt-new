@@ -12,6 +12,7 @@ declare global {
                 name: string;
                 locality: string;
                 city_code: string;
+                clerk_user_id: string;
             };
         }
     }
@@ -47,7 +48,7 @@ const requireAuthStack = [
             }
 
             const result = await query(
-                `SELECT u.id, u.user_type, u.is_active, u.name,
+                `SELECT u.id, u.user_type, u.is_active, u.name, u.clerk_user_id,
                         COALESCE(s.locality, a.operating_area) as locality,
                         COALESCE(s.city_code, a.city_code) as city_code
                  FROM users u

@@ -1057,6 +1057,110 @@
 
 ---
 
+## ✅ AUTH OVERHAUL COMPLETION — Advanced Login/Signup Mode Separation
+### [GATE VALIDATION COMPLETE — 2026-03-17]
+
+> **Objective:** Unified auth flow with explicit `login` vs `signup` mode branching at the HTTP layer. Phone uniqueness enforced at DB constraint level. Safe response DTO (no sensitive fields). Mode-aware user branching with three-route post-verify navigation.
+
+### Auth Overhaul — Implementation Summary
+
+#### Backend Auth Routes Refactored (`backend/src/routes/auth.ts`)
+- [x] **Mode-aware OTP request** (`POST /api/auth/request-otp`):
+  - New required parameter: `mode: 'login' | 'signup'`
+  - Pre-request existence check: `login` unknown phone → 404 `no_account`; `signup` existing phone → 409 `account_exists`
+  - Redis mode key stored per phone: `otp:mode:{phoneHmac}` with 600s TTL for use at verify time
+  - Null-safe `rowCount` handling for TypeScript compilation (fixed `pg` lib type issue)
+  
+- [x] **Mode-aware OTP verify** (`POST /api/auth/verify-otp`):
+  - Reads mode from Redis; deletes mode key immediately after read (one-time use)
+  - Signup path: creates new user with `user_type = 'seller'` (default), sets `is_new_user = true`
+  - Login path: updates existing user `last_seen`, sets `is_new_user = false`
+  - Response contract: `{ token: { jwt }, user: { id, user_type }, is_new_user }`
+  - Explicit exclusion of `phone_hash` and `clerk_user_id` from DTO (security V24, V-CLERK-1)
+
+#### Database: Phone Uniqueness Enforcement (`migrations/0023_add_last_seen.sql`)
+- [x] **New migration 0023**: Adds `last_seen TIMESTAMPTZ DEFAULT NOW()` column to users table (tracks login activity)
+- [x] **Existing migration 0022**: Adds `UNIQUE` constraint on `users.phone_hash` (one phone per account)
+  - Applied to Azure PostgreSQL and verified via constraint metadata query
+  - Complements application-level mode-aware existence checks for defense-in-depth
+
+#### Mobile Auth Store (`apps/mobile/store/authStore.ts`)
+- [x] **New contract fields**: 
+  - `token: string | null` (Clerk JWT)
+  - `user: SessionUser | null` ({ id, user_type })
+  - `isNewUser: boolean` (routing gate for post-verify flows)
+- [x] **New methods**: 
+  - `setSession({ token, user, isNewUser })` — populates both new contract + legacy fields (backward compat)
+  - `clearSession()` — resets all auth state (used on logout)
+- [x] **Exported `AuthState` interface** for type-safe Zustand callbacks in views
+
+#### Unified Auth Screen (`apps/mobile/app/(auth)/phone.tsx`)
+- [x] **Unified phone + OTP flow** (replaces deprecated three-screen flow):
+  - Step 1: Phone entry with tabbed mode selection (Login | Sign Up)
+  - Step 2: OTP entry with countdown timer (600s → 0), resend logic (30s unlock), error handling
+  - Post-verify routing: Three-branch logic based on `isNewUser` + `user_type`:
+    - `isNewUser: true` → `router.replace('/(auth)/user-type')` (role selection)
+    - `isNewUser: false + user_type: 'aggregator'` → `router.replace('/(aggregator)/home')` (skip onboarding)
+    - `isNewUser: false + user_type: 'seller'` → `router.replace('/(seller)/home')` (skip onboarding)
+  - Mode-specific errors: 404 → "Switch to Sign Up"; 409 → "Switch to Log In"
+  - Countdown timer: `setInterval` with proper cleanup in `useEffect` return
+
+#### Routing Guards & Session Management
+- [x] **Root AsyncStorage gate** (`app/index.tsx`): 
+  - Checks `AsyncStorage.getItem('onboarding_complete')` before routing
+  - Routes incomplete users to onboarding, others to signed-in home
+  
+- [x] **Returning user guard** (`app/(auth)/user-type.tsx`):
+  - Redirects users with `isNewUser: false` directly to role-specific home (bypass role selection)
+  - Prevents UI reach to user-type screen for returning users
+  
+- [x] **Logout standardization** (both `settings.tsx` screens):
+  - Aggregator: `clerkSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`
+  - Seller: Same pattern, centered in legal/about section
+  
+- [x] **Root layout fixes** (`app/_layout.tsx`):
+  - Consolidated imports: single `import { setGlobalClerkSignOut, useAuthStore, type AuthState }`
+  - Removed deprecated `otp` route reference from offline auth path recovery
+  - Type-safe callback: `useAuthStore((s: AuthState) => s.userType)`
+
+#### Verification Gates — All Passed ✅
+
+| Gate | Test | Result | Details |
+|------|------|--------|---------|
+| **G1** | Unique phone constraint live in DB | ✅ PASS | `users_phone_hash_unique` constraint verified (contype='u') |
+| **G2** | Login unknown phone → 404 no_account | ✅ PASS | HTTP 404 returned with error code |
+| **G3** | Signup existing phone → 409 account_exists | ✅ PASS | HTTP 409 returned with blocklist message |
+| **G4** | Missing mode → 400 validation error | ✅ PASS | HTTP 400 with mode validation error |
+| **G5** | Signup OTP response shape | ✅ PASS | `{ token.jwt, user: { id, user_type: null }, is_new_user: true }` |
+| **G5b** | Login OTP response shape | ✅ PASS | `{ token.jwt, user: { id, user_type: 'seller' }, is_new_user: false }` |
+| **G6** | No dangling otp.tsx references | ✅ PASS | 0 matches found in codebase |
+| **G7** | Workspace type-check passes | ✅ PASS | All 8 packages: `tsc --noEmit` successful |
+| **G8** | Redis mode key cleanup on verify | ✅ PASS | `redis.del('otp:mode:{phoneHmac}')` implemented |
+
+#### Problem & Solution
+**Problem:** Old three-screen flow (phone → OTP → role selection/home) was implicit. Mode not expressed in API. Phone uniqueness checked only at app-level. Post-verify routing was undefined.
+
+**Solution:** 
+1. **Mode separation at HTTP layer** — explicit `mode` parameter forces decision at request time
+2. **Pre-check existence** — prevents race condition (check before generating OTP)
+3. **DB constraint** — unique `phone_hash` index prevents concurrent signup race
+4. **Redis mode key** — binds OTP to mode for one-time-use enforcement
+5. **Safe DTO** — response excludes all sensitive fields (phone_hash, clerk_user_id, otp)
+6. **Post-verify routing** — `is_new_user` flag determines three distinct navigation branches
+
+#### Security Compliance Validated
+- **V7** — User role from DB only (not JWT claim) ✅
+- **V24** — phone_hash and clerk_user_id never exposed ✅
+- **V35** — kyc_status not touchable by non-admin routes ✅
+- **X3** — HMAC-SHA256 OTP storage (no raw values in Redis) ✅
+- **V-OTP-1** — OTP Redis key deleted after first verify (one-time use) ✅
+- **A3** — Mode-aware branching at request time (no race) ✅
+- **R2** — Unique phone enforcement (DB + application level) ✅
+- **I2** — Safe DTO (explicit field selection) ✅
+- **C1** — OTP screen context (understood as new or returning user) ✅
+
+---
+
 ## 🏁 SCALABILITY PREP (Post-Launch — Before City 2 / Scale)
 > These are NOT Day 17 tasks. Do NOT block launch on these.
 

@@ -1,95 +1,74 @@
-/**
- * store/authStore.ts
- * ──────────────────────────────────────────────────────────────────
- * Zustand auth store — Day 2 §2.1 scaffold.
- *
- * Currently stores only local UI state (no backend session yet).
- * Live auth integration happens on Day 5 when the backend is wired.
- *
- * Fields:
- *   phoneNumber  — the E.164-formatted number entered on PhoneScreen
- *                  (without the +91 prefix — stored as 10-digit string)
- *   isLoading    — true while OTP is being sent (simulated in §2.2;
- *                  real network call in §5.4)
- *   session      — null until Clerk session established (Day 7)
- *
- * Future stores to add alongside this one (PLAN.md §2.1):
- *   orderStore.ts, aggregatorStore.ts, chatStore.ts, uiStore.ts
- * ──────────────────────────────────────────────────────────────────
- */
-
 import { create } from 'zustand';
 import { api } from '../lib/api';
 
-// ── Global Clerk Hooks ────────────────────────────────────────────
 let globalClerkSignOut: (() => Promise<void>) | null = null;
 
 export const setGlobalClerkSignOut = (fn: () => Promise<void>) => {
   globalClerkSignOut = fn;
 };
 
-// ─── Session type (populated on Day 7 with real session) ──
-export interface AuthSession {
+type UserType = 'seller' | 'aggregator' | null;
+
+interface SessionUser {
+  id: string;
+  user_type: UserType;
+}
+
+interface LegacyAuthSession {
   userId: string;
   userType: 'seller' | 'aggregator';
   accessToken: string;
 }
 
-// ─── Store shape ──────────────────────────────────────────────────
-interface AuthState {
-  /** 10-digit phone number (no country code prefix) */
-  phoneNumber: string;
-  /** True while OTP send is in-flight */
-  isLoading: boolean;
-  /** Null until Day 5 live auth */
-  session: AuthSession | null;
+export interface AuthState {
+  token: string | null;
+  user: SessionUser | null;
+  isNewUser: boolean;
 
-  // ── Onboarding & Mock State ───────────────────────────────────────────
+  phoneNumber: string;
+  isLoading: boolean;
+  session: LegacyAuthSession | null;
+
   userId: string | null;
-  userType: 'seller' | 'aggregator' | null;
+  userType: UserType;
   accountType: 'individual' | 'business' | null;
   name: string;
   locality: string;
   city: string;
   createdAt: string | null;
+  meLoaded: boolean;
 
-  // ── Actions ────────────────────────────────────────────────────
+  setSession: (data: { token: string; user: SessionUser; isNewUser: boolean }) => void;
+  clearSession: () => void;
+
   setPhoneNumber: (phone: string) => void;
   setIsLoading: (loading: boolean) => void;
-  setSession: (session: AuthSession | null) => void;
+  setLegacySession: (session: LegacyAuthSession | null) => void;
 
-  requestOtp: (phone: string) => Promise<{ success: boolean; error?: string }>;
-  verifyOtp: (phone: string, otp: string, userType?: string) => Promise<{ success: boolean; token?: string; error?: string }>;
+  requestOtp: (phone: string, mode: 'login' | 'signup') => Promise<{ success: boolean; error?: string }>;
+  verifyOtp: (phone: string, otp: string) => Promise<{ success: boolean; data?: any; error?: string }>;
 
   setUserId: (id: string | null) => void;
-  setUserType: (type: 'seller' | 'aggregator' | null) => void;
+  setUserType: (type: UserType) => void;
   setAccountType: (type: 'individual' | 'business' | null) => void;
   setName: (name: string) => void;
   setLocality: (locality: string) => void;
   setCity: (city: string) => void;
 
-  /** Reset to initial state — kept as low-level utility */
   reset: () => void;
-  /**
-   * Sign out the current user and clear all local auth state.
-   * Invokes the injected clerk.signOut() to invalidate the JWT.
-   */
   signOut: () => Promise<void>;
-
-  // ── API actions ──
-  /** True once fetchMe has successfully populated profile data */
-  meLoaded: boolean;
-  /** Fetch current user profile from GET /api/users/me. Never stores phone_hash or clerk_user_id (V7, V24) */
   fetchMe: () => Promise<void>;
 }
 
-const initialState: Pick<AuthState,
-  'phoneNumber' | 'isLoading' | 'session' | 'userId' | 'userType' |
-  'accountType' | 'name' | 'locality' | 'city' | 'createdAt' | 'meLoaded'
-> = {
+const initialState = {
+  token: null,
+  user: null,
+  isNewUser: false,
+
   phoneNumber: '',
   isLoading: false,
   session: null,
+
   userId: null,
   userType: null,
   accountType: null,
@@ -99,121 +78,100 @@ const initialState: Pick<AuthState,
   createdAt: null,
   meLoaded: false,
 };
-// ─── Store ────────────────────────────────────────────────────────
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...initialState,
 
+  setSession: ({ token, user, isNewUser }) => {
+    set({
+      token,
+      user,
+      isNewUser,
+      userId: user.id,
+      userType: user.user_type,
+    });
+  },
+
+  clearSession: () => {
+    set({
+      token: null,
+      user: null,
+      isNewUser: false,
+      userId: null,
+      userType: null,
+      meLoaded: false,
+    });
+  },
+
   setPhoneNumber: (phone) => set({ phoneNumber: phone }),
   setIsLoading: (loading) => set({ isLoading: loading }),
-  setSession: (session) => set({ session }),
+  setLegacySession: (session) => set({ session }),
+
+  requestOtp: async (phone, mode) => {
+    set({ isLoading: true });
+    try {
+      await api.post('/api/auth/request-otp', { phone: `+91${phone}`, mode });
+      set({ isLoading: false });
+      return { success: true };
+    } catch (err: any) {
+      set({ isLoading: false });
+      return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Failed to request OTP' };
+    }
+  },
+
+  verifyOtp: async (phone, otp) => {
+    set({ isLoading: true });
+    try {
+      const res = await api.post('/api/auth/verify-otp', { phone: `+91${phone}`, otp });
+      set({ isLoading: false });
+      return { success: true, data: res.data };
+    } catch (err: any) {
+      set({ isLoading: false });
+      return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Verification failed' };
+    }
+  },
+
   setUserId: (id) => set({ userId: id }),
   setUserType: (type) => set({ userType: type }),
   setAccountType: (type) => set({ accountType: type }),
   setName: (name) => set({ name }),
   setLocality: (locality) => set({ locality }),
   setCity: (city) => set({ city }),
+
   reset: () => set(initialState),
 
   signOut: async () => {
     if (globalClerkSignOut) {
       try {
         await globalClerkSignOut();
-      } catch (err) {
-        console.error('Clerk root sign out failed:', err);
+      } catch {
       }
     }
     set(initialState);
   },
 
-  // ── GET /api/users/me — never reads phone_hash or clerk_user_id (V7, V24) ──
   fetchMe: async () => {
-    if (get().meLoaded) return; // already hydrated this session
+    if (get().meLoaded) return;
     try {
       const res = await api.get('/api/users/me');
       const u = res.data;
-      
-      // Determine account type based on profile_type or seller_profile_type
+
       const accountType = u.seller_profile_type || u.profile_type || (u.user_type === 'aggregator' ? 'business' : 'individual');
-      
-      // Map locality and city based on user type
       const locality = u.user_type === 'seller' ? u.seller_locality : u.aggregator_locality;
       const city = u.user_type === 'seller' ? u.seller_city_code : u.aggregator_city_code;
-      
+
       set({
         userId: u.id ?? null,
         userType: u.user_type ?? null,
+        user: u.id ? { id: u.id, user_type: u.user_type ?? null } : null,
         accountType: accountType as any,
         name: u.name ?? '',
         locality: locality ?? '',
         city: city ?? '',
         createdAt: u.created_at ?? null,
         meLoaded: true,
-        // Explicitly NOT setting phone_hash or clerk_user_id (V7, V24)
       });
-    } catch (e: any) {
-      // Non-fatal: screen will fall back to whatever is already in store
-      console.warn('[authStore] fetchMe failed:', e?.response?.data?.error ?? e.message);
-    }
-  },
-
-  requestOtp: async (phone: string) => {
-    set({ isLoading: true });
-    try {
-      const rawUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-      const apiUrl = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl}/api`;
-      console.log(`[DIAG] requestOtp calling: ${apiUrl}/auth/request-otp`);
-      const response = await fetch(`${apiUrl}/auth/request-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: `+91${phone}` }),
-      });
-      if (!response.ok) {
-        // Parse the actual error from backend (rate limit, invalid phone, etc.)
-        let errorMsg = "Failed to request OTP";
-        try {
-          const errBody = await response.json();
-          errorMsg = errBody?.error || errorMsg;
-        } catch { }
-        throw new Error(errorMsg);
-      }
-      set({ isLoading: false });
-      return { success: true };
-    } catch (err: any) {
-      set({ isLoading: false });
-      return { success: false, error: err.message };
-    }
-  },
-
-  verifyOtp: async (phone: string, otp: string, userType?: string) => {
-    set({ isLoading: true });
-    try {
-      const rawUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-      const apiUrl = rawUrl.endsWith('/api') ? rawUrl : `${rawUrl}/api`;
-      console.log(`[DIAG] verifyOtp calling: ${apiUrl}/auth/verify-otp`);
-      const response = await fetch(`${apiUrl}/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: `+91${phone}`, otp, user_type: userType }),
-      });
-      if (!response.ok) {
-        let errorMsg = "Invalid OTP";
-        try {
-          const errBody = await response.json();
-          errorMsg = errBody?.error || errorMsg;
-        } catch { }
-        throw new Error(errorMsg);
-      }
-      const data = await response.json();
-      set({
-        userId: data.user?.id || null,
-        userType: data.user?.user_type || null,
-        name: data.user?.name || '',
-        isLoading: false,
-      });
-      return { success: true, token: data.token }; // Note: Component uses this token for Clerk
-    } catch (err: any) {
-      set({ isLoading: false });
-      return { success: false, error: err.message };
+    } catch {
     }
   },
 }));

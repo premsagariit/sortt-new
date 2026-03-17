@@ -285,7 +285,7 @@ export default function AggregatorHomeScreen() {
           ) : (
             <Pressable
               style={styles.feedBtnAccept}
-              onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: item.id } })}
+              onPress={() => router.push({ pathname: '/(aggregator)/order/[id]', params: { id: item.id } } as any)}
             >
               <Text variant="button" style={styles.feedBtnAcceptText}>View</Text>
             </Pressable>

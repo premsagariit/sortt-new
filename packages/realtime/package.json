@@ -6,6 +6,9 @@
                     "type-check":  "tsc --noEmit",
                     "build":  "tsc --project tsconfig.json"
                 },
+    "dependencies": {
+                        "ably": "^2.0.0"
+                    },
     "devDependencies":  {
                             "typescript":  "^5.5.3"
                         },

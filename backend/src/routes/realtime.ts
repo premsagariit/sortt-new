@@ -1,0 +1,60 @@
+import express from 'express';
+import { verifyToken } from '@clerk/backend';
+import { getChannelHmacPrefix } from '../utils/channelHelper';
+import { ablyRest } from '../providers/ablyProvider';
+
+const router = express.Router();
+
+// GET /api/realtime/ably-token
+// Endpoint used by mobile client to retrieve short-lived Ably tokens
+router.get('/ably-token', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or malformed Authorization header' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Token missing' });
+    }
+
+    // Verify token manually using Clerk client to extract user securely
+    let verified;
+    try {
+      verified = await verifyToken(token, {
+        secretKey: process.env.CLERK_SECRET_KEY!,
+        authorizedParties: []
+      });
+    } catch (e: any) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const clerkUserId = verified.sub;
+    if (!clerkUserId) {
+      return res.status(401).json({ error: 'No subject in token' });
+    }
+
+    if (!ablyRest) {
+      return res.status(500).json({ error: 'Realtime is not configured on this server' });
+    }
+
+    // Generate secure prefix constraint
+    const hmacPrefix = getChannelHmacPrefix(clerkUserId);
+
+    // Request token bounded to exact channels this user can access
+    const tokenRequest = await ablyRest.auth.createTokenRequest({
+      clientId: clerkUserId,
+      capability: {
+        [`${hmacPrefix}:*`]: ['subscribe', 'publish', 'presence']
+      }
+    });
+
+    return res.status(200).json(tokenRequest);
+  } catch (error: any) {
+    console.error('[realtime] Token generation error:', error);
+    return res.status(500).json({ error: 'Failed to generate realtime token' });
+  }
+});
+
+export default router;

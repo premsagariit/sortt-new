@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { colors } from '../constants/tokens';
 import SplashAnimation from '../components/SplashAnimation';
@@ -30,15 +31,41 @@ export default function IndexScreen() {
 
   // Track whether the splash animation has finished
   const [splashDone, setSplashDone] = useState(hasShownSplashAnimation);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
 
   const handleSplashComplete = () => {
     hasShownSplashAnimation = true;
     setSplashDone(true);
   };
 
-  // Route once BOTH splash is done AND Clerk has loaded.
   useEffect(() => {
-    if (!splashDone || !isLoaded) return;
+    let mounted = true;
+    AsyncStorage.getItem('onboarding_complete')
+      .then((value) => {
+        if (!mounted) return;
+        setOnboardingComplete(value === 'true');
+        setOnboardingChecked(true);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setOnboardingComplete(false);
+        setOnboardingChecked(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Route once splash, Clerk, and onboarding gate are resolved.
+  useEffect(() => {
+    if (!splashDone || !isLoaded || !onboardingChecked) return;
+
+    if (!onboardingComplete) {
+      router.replace('/(auth)/onboarding' as any);
+      return;
+    }
 
     if (isSignedIn) {
       // If name is set, user is fully onboarded — go to home
@@ -65,7 +92,7 @@ export default function IndexScreen() {
       // Not signed in — go to phone entry
       router.replace('/(auth)/phone' as any);
     }
-  }, [splashDone, isLoaded, isSignedIn, userType, name, router]);
+  }, [splashDone, isLoaded, onboardingChecked, onboardingComplete, isSignedIn, userType, name, router]);
 
   return (
     <View style={styles.container}>

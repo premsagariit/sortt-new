@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
@@ -8,12 +8,13 @@ import { MaterialChip } from '../../components/ui/MaterialChip';
 import {
     CheckCircle, XCircle, MapPin, Clock, Package,
     Hash, CalendarBlank, ChatsCircle, Star, ArrowLeft,
-    Camera, Scales,
+    Camera, Scales, Image,
 } from 'phosphor-react-native';
 import { PrimaryButton } from '../../components/ui/Button';
 import { useOrderStore } from '../../store/orderStore';
 import { safeBack } from '../../utils/navigation';
 import { Avatar } from '../../components/ui/Avatar';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 /**
  * app/(aggregator)/order-history-detail.tsx
@@ -40,34 +41,18 @@ interface MaterialDetail {
     rate: number;
 }
 
-// Mock material detail with weights (would come from backend post-weighing)
-const MOCK_MATERIAL_DETAILS: Record<string, MaterialDetail[]> = {
-    'COMP-001': [
-        { material: 'Metal', weight: 18, rate: 28 },
-        { material: 'E-Waste', weight: 4, rate: 60 },
-    ],
-    default_completed: [
-        { material: 'Metal', weight: 18, actualWeight: 17.2, rate: 28 },
-        { material: 'E-Waste', weight: 4, actualWeight: 4.5, rate: 60 },
-    ],
-    default_cancelled: [
-        { material: 'Plastic', weight: 8, rate: 8 },
-        { material: 'Glass', weight: 5, rate: 3 },
-    ],
-};
-
-// Mock order photos (placeholder colors mimicking real scrap photos)
-const MOCK_ORDER_PHOTO = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80';
-
-const MOCK_SELLER_NAME = 'Seller';
-const MOCK_RATING = 4.8;
-
 export default function OrderHistoryDetailScreen() {
     const router = useRouter();
     const { id, status } = useLocalSearchParams<{ id: string; status: string }>();
-    const { orders } = useOrderStore();
+    const { orders, fetchOrder } = useOrderStore();
 
     const order = orders.find(o => o.orderId === id);
+
+    React.useEffect(() => {
+        if (id && !order) {
+            void fetchOrder(id, true);
+        }
+    }, [id, order, fetchOrder]);
     const resolvedStatus = (status ?? order?.status) as string;
     const isCancelled = resolvedStatus === 'cancelled';
     const isCompleted = resolvedStatus === 'completed';
@@ -93,21 +78,29 @@ export default function OrderHistoryDetailScreen() {
                 day: 'numeric', month: 'short', year: 'numeric'
             }),
             otp: order.otp,
+            sellerName: order.sellerName ?? 'Seller',
+            rating: Number(order.rating ?? 0),
         }
         : {
             id: id ?? '—',
             orderNumber: `#${String(id ?? '').slice(0, 8).toUpperCase()}`,
             status: resolvedStatus ?? 'completed',
-            locality: isCancelled ? 'Kukatpally area' : 'Gachibowli area',
-            address: isCancelled ? '—' : 'Road No. 5, Near Metro Station',
-            materials: isCancelled ? (['plastic', 'glass'] as const) : (['metal', 'ewaste'] as const),
-            amount: isCancelled ? 580 : 1250,
-            date: isCancelled ? '2 days ago' : 'Yesterday',
-            otp: isCompleted ? '4821' : '—',
+            locality: '—',
+            address: '—',
+            materials: [],
+            amount: 0,
+            date: '—',
+            otp: isCompleted ? '482193' : '—',
+            sellerName: 'Seller',
+            rating: 0,
         };
 
-    const materialDetails = MOCK_MATERIAL_DETAILS[displayOrder.id] ??
-        (isCancelled ? MOCK_MATERIAL_DETAILS.default_cancelled : MOCK_MATERIAL_DETAILS.default_completed);
+    const materialDetails: MaterialDetail[] = Object.entries(order?.estimatedWeights ?? {}).map(([material, value]) => ({
+        material: material.charAt(0).toUpperCase() + material.slice(1),
+        weight: Number(value ?? 0),
+        actualWeight: Number(value ?? 0),
+        rate: 0,
+    }));
 
     const subTotal = materialDetails.reduce((sum, d) => sum + (d.actualWeight ?? d.weight) * d.rate, 0);
     const serviceFee = isCompleted ? Math.round(subTotal * 0.05) : 0;
@@ -212,19 +205,11 @@ export default function OrderHistoryDetailScreen() {
                             <Camera size={16} color={colors.navy} />
                             <Text variant="label" color={colors.slate} style={styles.cardTitle}>ORDER PHOTO</Text>
                         </View>
-                        <View style={styles.photoContainer}>
-                            <Image
-                                source={{ uri: MOCK_ORDER_PHOTO }}
-                                style={styles.orderPhoto}
-                                resizeMode="cover"
-                            />
-                            <View style={styles.photoOverlay}>
-                                <View style={styles.photoBadge}>
-                                    <Camera size={12} color="#FFFFFF" weight="fill" />
-                                    <Text variant="caption" style={styles.photoBadgeText}>Captured at pickup</Text>
-                                </View>
-                            </View>
-                        </View>
+                        <EmptyState
+                          icon={<Image size={48} color={colors.muted} weight="thin" />}
+                          heading="No media attached"
+                          body="Order photos are not available for this order."
+                        />
                     </View>
                 )}
 
@@ -326,12 +311,12 @@ export default function OrderHistoryDetailScreen() {
                             <Text variant="label" color={colors.slate} style={styles.cardTitle}>SELLER</Text>
                         </View>
                         <View style={styles.sellerRow}>
-                            <Avatar name={MOCK_SELLER_NAME} userType="seller" size="sm" />
+                            <Avatar name={displayOrder.sellerName} userType="seller" size="sm" />
                             <View style={styles.sellerInfo}>
-                                <Text variant="label" color={colors.navy}>{MOCK_SELLER_NAME}</Text>
+                                <Text variant="label" color={colors.navy}>{displayOrder.sellerName}</Text>
                                 <View style={styles.ratingRow}>
                                     <Star size={11} color={colors.amber} weight="fill" />
-                                    <Text variant="caption" color={colors.muted}>{MOCK_RATING} · rated seller</Text>
+                                    <Text variant="caption" color={colors.muted}>{displayOrder.rating.toFixed(1)} · rated seller</Text>
                                 </View>
                             </View>
                         </View>

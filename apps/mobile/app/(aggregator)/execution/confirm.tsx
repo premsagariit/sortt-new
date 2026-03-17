@@ -9,6 +9,7 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
 import { useOrderStore } from '../../../store/orderStore';
+import { useAggregatorStore } from '../../../store/aggregatorStore';
 
 type ConfirmState = 'waiting' | 'verified';
 
@@ -18,7 +19,9 @@ export default function ConfirmScreen() {
     const pulseAnim = new Animated.Value(1);
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
+    const { executionDraftByOrderId } = useAggregatorStore();
     const order = orders.find((o) => o.orderId === id);
+    const draft = id ? executionDraftByOrderId[id] : undefined;
 
     useEffect(() => {
         if (id && !order) {
@@ -28,6 +31,9 @@ export default function ConfirmScreen() {
 
     const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
     const displayOrderNumber = order?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
+    const totalWeight = draft?.totalWeight ?? (order?.lineItems?.reduce((sum, item) => sum + Number(item.weightKg || 0), 0) ?? 0);
+    const totalAmount = draft?.totalAmount ?? Number(order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedAmount ?? 0);
+    const itemCount = draft?.lineItems?.length ?? order?.materials?.length ?? 0;
 
     // Block back button
     useEffect(() => {
@@ -96,15 +102,15 @@ export default function ConfirmScreen() {
                         <BaseCard style={styles.summaryCard}>
                             <View style={styles.summaryRow}>
                                 <Text variant="label" color={colors.muted}>Items Collected</Text>
-                                <Numeric size={13} style={styles.monoText}>2 Items</Numeric>
+                                <Numeric size={13} style={styles.monoText}>{itemCount} Items</Numeric>
                             </View>
                             <View style={styles.summaryRow}>
                                 <Text variant="label" color={colors.muted}>Total Weight</Text>
-                                <Numeric size={13} style={styles.monoText}>16.70 <Text variant="caption" style={{ color: colors.amber }}>kg</Text></Numeric>
+                                <Numeric size={13} style={styles.monoText}>{totalWeight.toFixed(2)} <Text variant="caption" style={{ color: colors.amber }}>kg</Text></Numeric>
                             </View>
                             <View style={[styles.summaryRow, styles.totalRow]}>
                                 <Text variant="subheading" style={{ color: colors.navy }}>Payload Value</Text>
-                                <Numeric size={17} style={{ color: colors.amber, fontFamily: 'DMMono-Bold' }}>₹896.50</Numeric>
+                                <Numeric size={17} style={{ color: colors.amber, fontFamily: 'DMMono-Bold' }}>₹{totalAmount.toFixed(0)}</Numeric>
                             </View>
                         </BaseCard>
                     </View>
@@ -123,11 +129,11 @@ export default function ConfirmScreen() {
                         <BaseCard style={[styles.summaryCard, { borderColor: colors.teal, backgroundColor: colorExtended.tealLight + '20' }] as any}>
                             <View style={styles.summaryRow}>
                                 <Text variant="label" color={colors.muted}>Final Weight</Text>
-                                <Numeric size={13} style={styles.monoText}>16.70 kg</Numeric>
+                                <Numeric size={13} style={styles.monoText}>{totalWeight.toFixed(2)} kg</Numeric>
                             </View>
                             <View style={[styles.summaryRow, styles.totalRow]}>
                                 <Text variant="subheading" style={{ color: colors.navy }}>Total Payment</Text>
-                                <Numeric size={17} style={{ color: colors.amber, fontFamily: 'DMMono-Bold' }}>₹896.50</Numeric>
+                                <Numeric size={17} style={{ color: colors.amber, fontFamily: 'DMMono-Bold' }}>₹{totalAmount.toFixed(0)}</Numeric>
                             </View>
                         </BaseCard>
                     </View>

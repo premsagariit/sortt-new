@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Globe, Phone, ChatCenteredText, MapTrifold, CaretLeft } from 'phosphor-react-native';
+import { Globe, Phone, ChatCenteredText, MapTrifold, CaretLeft, MapPin } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
@@ -10,14 +10,16 @@ import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
 import { safeBack } from '../../../utils/navigation';
 import { useOrderStore } from '../../../store/orderStore';
-
-type NavigateState = 'accepted' | 'enroute';
+import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { EmptyState } from '../../../components/ui/EmptyState';
 
 export default function NavigateScreen() {
-    const [executionState, setExecutionState] = useState<NavigateState>('accepted');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const insets = useSafeAreaInsets();
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
+    const { updateOrderStatusApi } = useAggregatorStore();
     const order = orders.find((o) => o.orderId === id);
 
     React.useEffect(() => {
@@ -33,14 +35,34 @@ export default function NavigateScreen() {
         safeBack('/(aggregator)/orders');
     };
 
-    const handleNextState = () => {
-        if (executionState === 'accepted') {
-            setExecutionState('enroute');
-        } else {
-            // Updated to point to the new persistent weighing screen within the execution stack
-            router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
+    const handleNextState = async () => {
+        const currentStatus = order?.status === 'en_route' ? 'en_route' : 'accepted';
+        const nextStatus = currentStatus === 'accepted' ? 'en_route' : 'arrived';
+
+        setIsSubmitting(true);
+        setErrorMsg(null);
+
+        try {
+            await updateOrderStatusApi(internalOrderId, nextStatus);
+
+            if (nextStatus === 'arrived') {
+                router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
+            }
+        } catch (err: any) {
+            console.error('Failed to update execution status:', err);
+            setErrorMsg(err?.response?.data?.error ?? err?.message ?? 'Failed to update order status');
+        } finally {
+            setIsSubmitting(false);
         }
     };
+
+    const isEnRoute = order?.status === 'en_route';
+    const displaySeller = order?.sellerName ?? 'Seller';
+    const displayPhone = order?.sellerPhone ?? 'Phone unavailable';
+    const displayAddress = order?.pickupAddress ?? 'Address unavailable';
+    const displayCoords = order?.pickupLat != null && order?.pickupLng != null
+        ? `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`
+        : null;
 
     return (
         <View style={styles.container}>
@@ -53,13 +75,22 @@ export default function NavigateScreen() {
 
             {/* Map View Placeholder */}
             <View style={styles.mapContainer}>
-                <View style={styles.mapGrid}>
-                    {/* Centered Globe icon (40% opacity) */}
-                    <Globe size={120} color={colors.navy} weight="thin" style={{ opacity: 0.1 }} />
-                    <Numeric size={13} color={colors.muted} style={styles.mapText}>
-                        Map Live Preview
-                    </Numeric>
-                </View>
+                {displayCoords ? (
+                    <View style={styles.mapGrid}>
+                        <Globe size={120} color={colors.navy} weight="thin" style={{ opacity: 0.1 }} />
+                        <Numeric size={13} color={colors.muted} style={styles.mapText}>
+                            {displayCoords}
+                        </Numeric>
+                    </View>
+                ) : (
+                    <View style={styles.mapGrid}>
+                        <EmptyState
+                          icon={<MapPin size={48} color={colors.muted} weight="thin" />}
+                          heading="Location unavailable"
+                          body="Pickup coordinates are not available for this order yet."
+                        />
+                    </View>
+                )}
             </View>
 
             {/* Location Card Overlay */}
@@ -68,10 +99,13 @@ export default function NavigateScreen() {
                     <View style={styles.cardHeader}>
                         <View style={styles.locationInfo}>
                             <Text variant="subheading" style={styles.sellerName}>
-                                Priya ••••6721
+                                {displaySeller}
                             </Text>
                             <Text variant="body" style={styles.addressText}>
-                                No. 24, 7th Cross, 3rd Main Road, HSR Layout, Sector 2, Hyderabad - 500102
+                                {displayAddress}
+                            </Text>
+                            <Text variant="caption" color={colors.muted} style={{ marginTop: 4 }}>
+                                {displayPhone}
                             </Text>
                         </View>
                         <TouchableOpacity style={styles.callButton}>
@@ -83,18 +117,26 @@ export default function NavigateScreen() {
 
             {/* Fixed Bottom Action Bar */}
             <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-                {executionState === 'accepted' ? (
+                {errorMsg && (
+                    <Text variant="caption" color={colors.red} style={styles.errorText}>
+                        {errorMsg}
+                    </Text>
+                )}
+
+                {!isEnRoute ? (
                     <View style={styles.dualActions}>
                         <SecondaryButton
                             label="Chat"
                             onPress={() => router.push(`/(shared)/chat/${internalOrderId}` as any)}
                             style={styles.chatButton}
                             icon={<ChatCenteredText size={20} color={colors.navy} />}
+                            disabled={isSubmitting}
                         />
                         <PrimaryButton
                             label="Mark On The Way!"
                             onPress={handleNextState}
                             style={styles.enRouteButton}
+                            loading={isSubmitting}
                         />
                     </View>
                 ) : (
@@ -102,6 +144,7 @@ export default function NavigateScreen() {
                         label="✓ I've Arrived"
                         onPress={handleNextState}
                         style={[styles.arrivedButton, { backgroundColor: colors.teal }]}
+                        loading={isSubmitting}
                     />
                 )}
             </View>
@@ -182,6 +225,10 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         borderTopWidth: 1,
         borderTopColor: colors.border,
+    },
+    errorText: {
+        marginBottom: spacing.sm,
+        textAlign: 'center',
     },
     dualActions: {
         flexDirection: 'row',

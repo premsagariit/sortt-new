@@ -19,7 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { House, MapPin, Calendar, Bell, ArrowRight, Wallet, ArrowUp, Tray } from 'phosphor-react-native';
 import { APP_NAME } from '../../constants/app';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
-import { useOrderStore } from '../../store/orderStore';
+import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../lib/api';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -58,7 +58,7 @@ export default function SellerHomeScreen() {
   const totalEarned = useMemo(() => {
     const sum = orders
       .filter(o => o.status === 'completed')
-      .reduce((acc, o) => acc + (o.confirmedAmount ?? o.estimatedAmount), 0);
+      .reduce((acc, o) => acc + getOrderDisplayAmount(o), 0);
     return sum > 0 ? `₹${sum.toLocaleString('en-IN')}` : '₹0';
   }, [orders]);
   const ordersCount = String(orders.length).padStart(2, '0');
@@ -111,22 +111,7 @@ export default function SellerHomeScreen() {
     }, [fetchOrders, fetchRates])
   );
 
-  const calculateEstimate = useCallback((order: any) => {
-    if (!order) return 0;
-    if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
-      if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
-      return 0;
-    }
-    try {
-      return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
-        const rate = (rates && Array.isArray(rates)) ? (rates.find(r => r.material_code === code)?.rate_per_kg ?? 0) : 0;
-        return sum + (rate * (Number(weight) || 0));
-      }, 0);
-    } catch (e) {
-      console.warn('[SellerHome] Error in calculateEstimate', e);
-      return order.estimatedAmount || 0;
-    }
-  }, [rates]);
+  const calculateEstimate = useCallback((order: any) => getOrderDisplayAmount(order), []);
 
 
   const titleOpacity = scrollY.interpolate({
@@ -337,7 +322,7 @@ export default function SellerHomeScreen() {
         scrollEventThrottle={16}
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => router.push(`/(shared)/order/${item.orderId}` as any)}
+            onPress={() => router.push(`/(seller)/order/${item.orderId}` as any)}
             style={styles.cardPad}
           >
             <OrderCard

@@ -18,7 +18,11 @@ import {
     FileText,
     Dress,
     Wine,
-    Cube
+    Cube,
+    X,
+    Check,
+    CaretDown,
+    CurrencyInr,
 } from 'phosphor-react-native';
 
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
@@ -26,6 +30,9 @@ import { Text, Numeric } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
 import { PrimaryButton } from '../../../components/ui/Button';
+import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { useFocusEffect } from 'expo-router';
+import { EmptyState } from '../../../components/ui/EmptyState';
 
 interface MaterialRate {
     id: MaterialCode;
@@ -35,17 +42,6 @@ interface MaterialRate {
     isActive: boolean;
     type: string;
 }
-
-const INITIAL_RATES: MaterialRate[] = [
-    { id: 'metal', label: 'Metal (Iron)', marketRate: 28, userRate: '29', isActive: true, type: 'Iron' },
-    { id: 'metal', label: 'Metal (Copper)', marketRate: 480, userRate: '480', isActive: true, type: 'Copper' },
-    { id: 'paper', label: 'Paper', marketRate: 12, userRate: '12', isActive: true, type: 'General' },
-    { id: 'paper', label: 'Cardboard', marketRate: 8, userRate: '7', isActive: true, type: 'General' },
-    { id: 'fabric', label: 'Fabric', marketRate: 6, userRate: '6', isActive: true, type: 'General' },
-    { id: 'plastic', label: 'Plastic', marketRate: 15, userRate: '15', isActive: false, type: 'General' },
-    { id: 'ewaste', label: 'E-Waste', marketRate: 50, userRate: '50', isActive: false, type: 'General' },
-    { id: 'glass', label: 'Glass', marketRate: 5, userRate: '5', isActive: false, type: 'General' },
-];
 
 const MATERIAL_ICONS: Record<string, any> = {
     'Metal (Iron)': Gear,
@@ -64,8 +60,30 @@ function Package(props: any) {
 
 export default function BuyRatesScreen() {
     const router = useRouter();
-    const [rates, setRates] = useState<MaterialRate[]>(INITIAL_RATES);
+    const { materialRates, fetchAggregatorRates, updateRates, ratesError } = useAggregatorStore();
+    const [rates, setRates] = useState<MaterialRate[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            void fetchAggregatorRates();
+        }, [fetchAggregatorRates])
+    );
+
+    React.useEffect(() => {
+        const mapped = materialRates.map((row) => {
+            const code = row.material_code as MaterialCode;
+            return {
+                id: code,
+                label: code.charAt(0).toUpperCase() + code.slice(1),
+                marketRate: Number(row.rate_per_kg ?? 0),
+                userRate: String(Number(row.rate_per_kg ?? 0)),
+                isActive: Number(row.rate_per_kg ?? 0) > 0,
+                type: 'General',
+            } as MaterialRate;
+        });
+        setRates(mapped);
+    }, [materialRates]);
 
     const activeRates = rates.filter(r => r.isActive);
     const inactiveRates = rates.filter(r => !r.isActive);
@@ -80,9 +98,20 @@ export default function BuyRatesScreen() {
 
     const handleSave = async () => {
         setIsSaving(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setIsSaving(false);
-        router.back();
+        try {
+            await updateRates(
+                rates
+                    .filter((rate) => rate.isActive)
+                    .map((rate) => ({
+                        material_code: rate.id,
+                        rate_per_kg: Number(rate.userRate || 0),
+                    }))
+            );
+            setIsSaving(false);
+            router.back();
+        } catch {
+            setIsSaving(false);
+        }
     };
 
     const getComparison = (user: number, market: number) => {
@@ -111,8 +140,22 @@ export default function BuyRatesScreen() {
 
                 <View style={styles.timestampRow}>
                     <Text variant="label" style={styles.updateLabel}>Last updated: </Text>
-                    <Text variant="label" style={styles.timestamp}>Today, 9:12 AM</Text>
+                    <Text variant="label" style={styles.timestamp}>Live</Text>
                 </View>
+
+                {rates.length === 0 && (
+                    <EmptyState
+                      icon={<CurrencyInr size={48} color={colors.muted} weight="thin" />}
+                      heading="No material rates configured"
+                      body="Set your rates to start receiving matching orders."
+                    />
+                )}
+
+                {ratesError && (
+                    <Text variant="caption" color={colors.red} style={{ marginBottom: spacing.md }}>
+                        {ratesError}
+                    </Text>
+                )}
 
                 {/* Active Rates Section */}
                 <View style={styles.cardContainer}>

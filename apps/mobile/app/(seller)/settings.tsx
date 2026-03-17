@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Switch, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Bell, Globe, Moon, Article, ShieldCheck, CaretRight } from 'phosphor-react-native';
 
@@ -8,6 +9,7 @@ import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { safeBack } from '../../utils/navigation';
 import { Text } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
+import { useAuthStore } from '../../store/authStore';
 
 interface SettingRowProps {
   icon: React.ReactNode;
@@ -50,8 +52,18 @@ function SettingRow({ icon, title, subtitle, hasToggle, toggleState, onToggle, o
 }
 
 export default function SettingsScreen() {
+  const { signOut: clerkSignOut } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+
+  async function handleLogout() {
+    try {
+      await clerkSignOut();
+    } catch {
+    }
+    useAuthStore.getState().clearSession();
+    router.replace('/(auth)/phone');
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={[]}>
@@ -115,6 +127,13 @@ export default function SettingsScreen() {
             icon={<ShieldCheck size={20} color={colors.navy} />}
             title="Privacy Policy"
             onPress={() => router.push('/(shared)/privacy-policy')}
+          />
+          <View style={styles.divider} />
+          <SettingRow
+            icon={<User size={20} color={colors.red} />}
+            title="Log Out"
+            subtitle="Sign out of this device"
+            onPress={() => { void handleLogout(); }}
           />
         </View>
 

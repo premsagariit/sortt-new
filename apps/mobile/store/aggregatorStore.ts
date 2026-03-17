@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import type { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
 import { isNetworkError } from '../utils/error';
-import type { OrderStatus } from './orderStore';
+import { mapApiOrder, type OrderStatus } from './orderStore';
 
 export interface NearbyOrder {
   orderId: string;
@@ -20,6 +20,44 @@ export interface AggregatorEarnings {
   todayPickups: number;
   weekAmount: number;
   weekPickups: number;
+}
+
+export interface AggregatorProfile {
+  businessName: string | null;
+  operatingArea: string | null;
+  operatingHours: any | null;
+  kycStatus: string | null;
+  cityCode: string | null;
+}
+
+export interface AggregatorRate {
+  material_code: string;
+  rate_per_kg: number;
+  updated_at?: string;
+}
+
+export interface AggregatorEarningsPayload {
+  total_earned: number;
+  orders_completed: number;
+  avg_rating?: number | null;
+  total_weight_kg?: number;
+  material_breakdown?: Array<{ material_code: string; amount: number; weight_kg?: number }>;
+  daily_series?: Array<{ date: string; amount: number }>;
+}
+
+export interface ExecutionDraftItem {
+  materialCode: string;
+  label: string;
+  weightKg: number;
+  ratePerKg: number;
+  amount: number;
+}
+
+export interface ExecutionDraft {
+  lineItems: ExecutionDraftItem[];
+  totalAmount: number;
+  totalWeight: number;
+  capturedAt: string;
 }
 
 export interface MaterialConfig {
@@ -73,6 +111,16 @@ interface AggregatorStoreState {
   activeOrders: string[];             // Accepted order IDs (legacy compat)
   dismissedOrderIds: string[];
   earnings: AggregatorEarnings;
+  profile: AggregatorProfile | null;
+  materialRates: AggregatorRate[];
+  earningsByPeriod: Record<'today' | 'week' | 'month', AggregatorEarningsPayload | null>;
+  executionDraftByOrderId: Record<string, ExecutionDraft>;
+  isProfileLoading: boolean;
+  isRatesLoading: boolean;
+  isEarningsLoading: boolean;
+  profileError: string | null;
+  ratesError: string | null;
+  earningsError: string | null;
   isOnline: boolean;
   isLoading: boolean;
   feedError: string | null;
@@ -115,6 +163,8 @@ interface AggregatorStoreState {
   setKycSelfieUri: (uri: string | null) => void;
   setKycShopPhotoUri: (uri: string | null) => void;
   setKycVehiclePhotoUri: (uri: string | null) => void;
+  setExecutionDraft: (orderId: string, draft: ExecutionDraft) => void;
+  clearExecutionDraft: (orderId: string) => void;
   reset: () => void;
 
   // ── Async API Actions ──────────────────────────────────────────
@@ -122,8 +172,14 @@ interface AggregatorStoreState {
   fetchFeed: (silent?: boolean) => Promise<void>;
   /** GET /api/orders?role=aggregator — populates aggOrders for Active/Completed/Cancelled tabs */
   fetchAggregatorOrders: (silent?: boolean) => Promise<void>;
+  /** GET /api/aggregators/me or fallback /api/users/me */
+  fetchAggregatorProfile: () => Promise<void>;
+  /** GET /api/aggregators/rates or fallback /api/rates */
+  fetchAggregatorRates: () => Promise<void>;
+  /** GET /api/aggregators/earnings?period=... */
+  fetchAggregatorEarnings: (period: 'today' | 'week' | 'month') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates business_name, operating_area */
-  updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: string }) => Promise<void>;
+  updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates */
   updateRates: (rates: { material_code: string; rate_per_kg: number }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -132,6 +188,11 @@ interface AggregatorStoreState {
   acceptOrderApi: (orderId: string) => Promise<void>;
   /** PATCH /api/orders/:id/status */
   updateOrderStatusApi: (orderId: string, status: Extract<OrderStatus, 'en_route' | 'arrived' | 'weighing_in_progress'>, note?: string) => Promise<void>;
+  /** POST /api/orders/:id/finalize-weighing */
+  finalizeWeighingApi: (
+    orderId: string,
+    lineItems: Array<{ materialCode: string; weightKg: number; ratePerKg: number }>
+  ) => Promise<void>;
   /** POST /api/orders/:id/media */
   uploadOrderMediaApi: (orderId: string, photoUri: string, mediaType: 'scale_photo' | 'scrap_photo') => Promise<void>;
   /** POST /api/orders/:id/verify-otp */
@@ -139,12 +200,12 @@ interface AggregatorStoreState {
 }
 
 const initialMaterials: MaterialConfig[] = [
-  { id: 'metal', name: 'Metal', selected: true, ratePerKg: 28, avgRateHint: 28, bgToken: 'metalBg' },
-  { id: 'paper', name: 'Paper', selected: true, ratePerKg: 12, avgRateHint: 12, bgToken: 'paperBg' },
-  { id: 'plastic', name: 'Plastic', selected: false, ratePerKg: 8, avgRateHint: 8, bgToken: 'plasticBg' },
-  { id: 'ewaste', name: 'E-Waste', selected: false, ratePerKg: 60, avgRateHint: 60, bgToken: 'ewasteBg' },
-  { id: 'fabric', name: 'Fabric', selected: false, ratePerKg: 6, avgRateHint: 6, bgToken: 'fabricBg' },
-  { id: 'glass', name: 'Glass', selected: false, ratePerKg: 5, avgRateHint: 5, bgToken: 'glassBg' },
+  { id: 'metal', name: 'Metal', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'metalBg' },
+  { id: 'paper', name: 'Paper', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'paperBg' },
+  { id: 'plastic', name: 'Plastic', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'plasticBg' },
+  { id: 'ewaste', name: 'E-Waste', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'ewasteBg' },
+  { id: 'fabric', name: 'Fabric', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'fabricBg' },
+  { id: 'glass', name: 'Glass', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'glassBg' },
 ];
 
 const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
@@ -208,6 +269,16 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   activeOrders: [],
   dismissedOrderIds: [],
   earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
+  profile: null,
+  materialRates: [],
+  earningsByPeriod: { today: null, week: null, month: null },
+  executionDraftByOrderId: {},
+  isProfileLoading: false,
+  isRatesLoading: false,
+  isEarningsLoading: false,
+  profileError: null,
+  ratesError: null,
+  earningsError: null,
   isOnline: false,
   isLoading: false,
   feedError: null,
@@ -292,6 +363,17 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   setKycSelfieUri: (uri) => set({ kycSelfieUri: uri }),
   setKycShopPhotoUri: (uri) => set({ kycShopPhotoUri: uri }),
   setKycVehiclePhotoUri: (uri) => set({ kycVehiclePhotoUri: uri }),
+  setExecutionDraft: (orderId, draft) => set((state) => ({
+    executionDraftByOrderId: {
+      ...state.executionDraftByOrderId,
+      [orderId]: draft,
+    },
+  })),
+  clearExecutionDraft: (orderId) => set((state) => {
+    const next = { ...state.executionDraftByOrderId };
+    delete next[orderId];
+    return { executionDraftByOrderId: next };
+  }),
 
   reset: () => set({
     fullName: '', businessName: '', aggregatorType: null, primaryArea: '',
@@ -302,6 +384,16 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     materials: initialMaterials,
     nearbyOrders: [], newOrders: [], aggOrders: [], activeOrders: [], dismissedOrderIds: [],
     earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
+    profile: null,
+    materialRates: [],
+    earningsByPeriod: { today: null, week: null, month: null },
+    executionDraftByOrderId: {},
+    isProfileLoading: false,
+    isRatesLoading: false,
+    isEarningsLoading: false,
+    profileError: null,
+    ratesError: null,
+    earningsError: null,
     isOnline: false, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: null, lastAcceptedAt: null, error: null,
     isNetworkError: false,
     scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
@@ -311,8 +403,9 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   // ── Async: GET /api/orders/feed ────────────────────────────────
   fetchFeed: async (silent = false) => {
     // Preserve existing feedError if it exists until we succeed
+    // When silent=true: skip setting isLoading to avoid triggering a UI spinner on background polls
     if (!silent && !get().feedError) set({ isLoading: true, feedError: null, lastFeedError: null, isNetworkError: false });
-    else set({ isLoading: true, isNetworkError: false });
+    else if (!silent) set({ isLoading: true, isNetworkError: false });
 
     try {
       const res = await api.get('/api/orders/feed');
@@ -332,8 +425,9 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
   // ── Async: GET /api/orders?role=aggregator ─────────────────────
   fetchAggregatorOrders: async (silent = false) => {
+    // When silent=true: skip setting isLoading so background polls don't flash the spinner
     if (!silent && !get().error) set({ isLoading: true, error: null, isNetworkError: false });
-    else set({ isLoading: true, isNetworkError: false });
+    else if (!silent) set({ isLoading: true, isNetworkError: false });
 
     try {
       const res = await api.get('/api/orders', { params: { role: 'aggregator' } });
@@ -346,6 +440,109 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       } else {
         set({ isLoading: false });
       }
+    }
+  },
+
+  fetchAggregatorProfile: async () => {
+    set({ isProfileLoading: true, profileError: null });
+    try {
+      let profileRes: any;
+      try {
+        profileRes = await api.get('/api/aggregators/me');
+      } catch {
+        profileRes = await api.get('/api/users/me');
+      }
+
+      const payload = profileRes.data ?? {};
+      const operatingHours = payload.operating_hours ?? payload.aggregator_operating_hours ?? null;
+      const operatingArea = payload.operating_area ?? payload.aggregator_locality ?? null;
+      const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
+      const cityCode = payload.city_code ?? payload.aggregator_city_code ?? null;
+      const kycStatus = payload.kyc_status ?? payload.aggregator_kyc_status ?? null;
+
+      const parsedSchedule = Array.isArray(operatingHours?.days)
+        ? operatingHours.days
+        : get().weeklySchedule;
+
+      set({
+        profile: {
+          businessName,
+          operatingArea,
+          operatingHours,
+          kycStatus,
+          cityCode,
+        },
+        businessName: businessName ?? '',
+        primaryArea: operatingArea ?? '',
+        weeklySchedule: parsedSchedule,
+        isProfileLoading: false,
+        profileError: null,
+      });
+    } catch (e: any) {
+      set({
+        isProfileLoading: false,
+        profileError: e.response?.data?.error ?? e.message ?? 'Failed to load profile',
+      });
+    }
+  },
+
+  fetchAggregatorRates: async () => {
+    set({ isRatesLoading: true, ratesError: null });
+    try {
+      let ratesRes: any;
+      try {
+        ratesRes = await api.get('/api/aggregators/rates');
+      } catch {
+        ratesRes = await api.get('/api/rates');
+      }
+
+      const incoming = (ratesRes.data?.rates ?? []) as AggregatorRate[];
+      const ratesMap = new Map(incoming.map((item) => [item.material_code, item.rate_per_kg]));
+      set((state) => ({
+        materialRates: incoming,
+        materials: state.materials.map((material) => {
+          const nextRate = ratesMap.get(material.id) ?? material.ratePerKg;
+          return {
+            ...material,
+            ratePerKg: Number(nextRate || 0),
+            selected: ratesMap.has(material.id),
+          };
+        }),
+        isRatesLoading: false,
+        ratesError: null,
+      }));
+    } catch (e: any) {
+      set({
+        isRatesLoading: false,
+        ratesError: e.response?.data?.error ?? e.message ?? 'Failed to load rates',
+      });
+    }
+  },
+
+  fetchAggregatorEarnings: async (period) => {
+    set({ isEarningsLoading: true, earningsError: null });
+    try {
+      const res = await api.get('/api/aggregators/earnings', { params: { period } });
+      const payload = (res.data ?? {}) as AggregatorEarningsPayload;
+      set((state) => ({
+        earningsByPeriod: {
+          ...state.earningsByPeriod,
+          [period]: payload,
+        },
+        earnings: {
+          todayAmount: period === 'today' ? Number(payload.total_earned ?? 0) : state.earnings.todayAmount,
+          todayPickups: period === 'today' ? Number(payload.orders_completed ?? 0) : state.earnings.todayPickups,
+          weekAmount: period === 'week' ? Number(payload.total_earned ?? 0) : state.earnings.weekAmount,
+          weekPickups: period === 'week' ? Number(payload.orders_completed ?? 0) : state.earnings.weekPickups,
+        },
+        isEarningsLoading: false,
+        earningsError: null,
+      }));
+    } catch (e: any) {
+      set({
+        isEarningsLoading: false,
+        earningsError: e.response?.data?.error ?? e.message ?? 'Failed to load earnings',
+      });
     }
   },
 
@@ -362,6 +559,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       if (payload.operating_area !== undefined) {
         set({ primaryArea: payload.operating_area });
       }
+      await get().fetchAggregatorProfile();
       set({ isLoading: false });
     } catch (e: any) {
       set({ error: e.response?.data?.error ?? e.message ?? 'Failed to save profile', isLoading: false });
@@ -371,12 +569,31 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
   // ── Async: PATCH /api/aggregators/rates ─────────────────────────
   updateRates: async (rates) => {
-    set({ isLoading: true, error: null });
+    const previousRates = get().materialRates;
+    set((state) => ({
+      isLoading: true,
+      error: null,
+      materialRates: rates,
+      materials: state.materials.map((material) => {
+        const incoming = rates.find((r) => r.material_code === material.id);
+        if (!incoming) return material;
+        return {
+          ...material,
+          ratePerKg: Number(incoming.rate_per_kg || 0),
+          selected: true,
+        };
+      }),
+    }));
     try {
       await api.patch('/api/aggregators/rates', { rates });
+      await get().fetchAggregatorRates();
       set({ isLoading: false });
     } catch (e: any) {
-      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to update rates', isLoading: false });
+      set({
+        error: e.response?.data?.error ?? e.message ?? 'Failed to update rates',
+        isLoading: false,
+        materialRates: previousRates,
+      });
       throw e;
     }
   },
@@ -450,6 +667,42 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       }));
     } catch (e: any) {
       set({ error: e.response?.data?.error ?? e.message ?? 'Failed to update order status', isLoading: false });
+      throw e;
+    }
+  },
+
+  // ── Async: POST /api/orders/:orderId/media ────────────────────
+  finalizeWeighingApi: async (orderId, lineItems) => {
+    set({ isLoading: true, error: null });
+    try {
+      const payload = {
+        line_items: lineItems.map((item) => ({
+          material_code: item.materialCode,
+          confirmed_weight_kg: item.weightKg,
+          rate_per_kg: item.ratePerKg,
+        })),
+      };
+
+      const res = await api.post(`/api/orders/${orderId}/finalize-weighing`, payload);
+      const updatedOrder = res.data?.order;
+
+      const { useOrderStore } = require('./orderStore');
+      if (updatedOrder) {
+        useOrderStore.getState().addOrder(mapApiOrder(updatedOrder));
+      } else {
+        await useOrderStore.getState().fetchOrder(orderId, true);
+      }
+
+      set((state) => ({
+        aggOrders: state.aggOrders.map((order) => {
+          const currentOrderId = order.id ?? order.orderId;
+          if (currentOrderId !== orderId) return order;
+          return updatedOrder ? { ...order, ...updatedOrder } : order;
+        }),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to finalize weighing', isLoading: false });
       throw e;
     }
   },

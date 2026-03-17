@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Recycle, Storefront, Info, Check, ArrowRight } from 'phosphor-react-native';
+
 import { NavBar } from '../../components/ui/NavBar';
 import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
@@ -11,27 +12,38 @@ import { useAuthStore } from '../../store/authStore';
 import { APP_NAME } from '../../constants/app';
 
 export default function UserTypeScreen() {
+  const isNewUser = useAuthStore((s) => s.isNewUser);
   const setUserType = useAuthStore((s) => s.setUserType);
-  // 'seller' for "Sell my scrap", 'dealer' for "I'm a scrap dealer"
-  const [selectedType, setSelectedType] = useState<'seller' | 'dealer'>('seller');
+
+  const [selectedType, setSelectedType] = useState<'seller' | 'aggregator'>('seller');
+
+  useEffect(() => {
+    if (!isNewUser) {
+      const userType = useAuthStore.getState().user?.user_type;
+      if (userType === 'aggregator') {
+        router.replace('/(aggregator)/home');
+      } else {
+        router.replace('/(seller)/home');
+      }
+    }
+  }, [isNewUser]);
 
   const handleContinue = () => {
-    // Persist choice to store
-    setUserType(selectedType === 'seller' ? 'seller' : 'aggregator');
-    router.push('/(auth)/phone');
+    setUserType(selectedType);
+    if (selectedType === 'seller') {
+      router.replace('/(auth)/seller/account-type');
+    } else {
+      router.replace('/(auth)/aggregator/profile-setup');
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar
-        logoVariant="compact-light"
-        variant="light"
-        onBack={() => router.replace('/(auth)/onboarding')}
-      />
+      <NavBar logoVariant="compact-light" variant="light" onBack={() => router.replace('/(auth)/phone')} />
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text variant="heading" style={styles.title}>I want toâ€¦</Text>
+          <Text variant="heading" style={styles.title}>I want to…</Text>
           <Text variant="body" style={styles.subtitle}>Tell us how you'll use {APP_NAME}</Text>
         </View>
 
@@ -45,7 +57,7 @@ export default function UserTypeScreen() {
               <Recycle size={24} color={colors.red} weight="fill" />
             </View>
             <View style={styles.cardContent}>
-              <Text variant="subheading" style={styles.cardTitle}>Sell The scrap</Text>
+              <Text variant="subheading" style={styles.cardTitle}>Sell The Scrap</Text>
               <Text variant="caption" style={styles.cardDesc}>Household, office, or business looking to sell scrap at fair rates</Text>
               <View style={styles.pillRow}>
                 <View style={styles.pill}><Text style={styles.pillText}>Household</Text></View>
@@ -58,8 +70,8 @@ export default function UserTypeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.typeCard, selectedType === 'dealer' && styles.typeCardSelected]}
-            onPress={() => setSelectedType('dealer')}
+            style={[styles.typeCard, selectedType === 'aggregator' && styles.typeCardSelected]}
+            onPress={() => setSelectedType('aggregator')}
             activeOpacity={0.8}
           >
             <View style={[styles.iconWrap, { backgroundColor: colors.tealLight }]}>
@@ -73,8 +85,8 @@ export default function UserTypeScreen() {
                 <View style={styles.pill}><Text style={styles.pillText}>Mobile</Text></View>
               </View>
             </View>
-            <View style={[styles.radioMarker, selectedType === 'dealer' && styles.radioMarkerSelected]}>
-              {selectedType === 'dealer' && <Check size={12} color={colors.surface} weight="bold" />}
+            <View style={[styles.radioMarker, selectedType === 'aggregator' && styles.radioMarkerSelected]}>
+              {selectedType === 'aggregator' && <Check size={12} color={colors.surface} weight="bold" />}
             </View>
           </TouchableOpacity>
         </View>
@@ -88,7 +100,7 @@ export default function UserTypeScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={selectedType === 'seller' ? "Continue as Seller" : "Continue as Dealer"}
+            label={selectedType === 'seller' ? 'Continue as Seller' : 'Continue as Aggregator'}
             icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             onPress={handleContinue}
           />
@@ -129,7 +141,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radius.card, // 16px
+    borderRadius: radius.card,
     padding: 20,
     gap: 16,
     alignItems: 'flex-start',
@@ -189,7 +201,7 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.material.plastic.bg, // blueish
+    backgroundColor: colors.material.plastic.bg,
     borderRadius: 12,
     padding: 12,
     marginTop: spacing.xl,
@@ -202,5 +214,5 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 'auto',
-  }
+  },
 });

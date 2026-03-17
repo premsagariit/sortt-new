@@ -3,6 +3,8 @@ import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { createNotification } from '../lib/notifications';
+import { ablyRest } from '../providers/ablyProvider';
+import { channelName } from '../utils/channelHelper';
 
 const router = Router();
 
@@ -32,10 +34,13 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         // Verify sender is a party to the order (seller or assigned aggregator)
-        const orderRes = await query(
-            'SELECT seller_id, aggregator_id FROM orders WHERE id = $1 AND deleted_at IS NULL',
-            [order_id]
-        );
+        const orderRes = await query(`
+            SELECT o.seller_id, o.aggregator_id, s.clerk_user_id as seller_clerk, a.clerk_user_id as agg_clerk
+            FROM orders o
+            LEFT JOIN users s ON s.id = o.seller_id
+            LEFT JOIN users a ON a.id = o.aggregator_id
+            WHERE o.id = $1 AND o.deleted_at IS NULL
+        `, [order_id]);
         if (orderRes.rows.length === 0) {
             return res.status(404).json({ error: 'Order not found' });
         }
@@ -61,6 +66,30 @@ router.post('/', async (req: Request, res: Response) => {
         setImmediate(async () => {
             try {
                 const recipientId = senderId === order.seller_id ? order.aggregator_id : order.seller_id;
+                
+        // Publish to both seller and aggregator Ably channels if Ably is configured
+                // WARN 2: Lock event name to 'message' (no 'new_message' alternatives)
+                if (ablyRest) {
+                    try {
+                        const sellerChannel = channelName(order.seller_clerk, 'chat', order_id);
+                        const payload = {
+                            id: msg.id,
+                            order_id,
+                            sender_id: senderId,
+                            content: cleanContent,
+                            created_at: msg.created_at
+                        };
+                        ablyRest.channels.get(sellerChannel).publish('message', payload);
+                        
+                        if (order.aggregator_id && order.agg_clerk) {
+                            const aggChannel = channelName(order.agg_clerk, 'chat', order_id);
+                            ablyRest.channels.get(aggChannel).publish('message', payload);
+                        }
+                    } catch (ablyErr) {
+                        console.error('Ably message publish failed:', ablyErr);
+                    }
+                }
+
                 if (recipientId) {
                     await createNotification(
                         recipientId,

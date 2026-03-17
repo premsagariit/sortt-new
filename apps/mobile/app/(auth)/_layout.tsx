@@ -8,8 +8,8 @@
  * using the design system component (per MEMORY.md §2).
  *
  * Screens in this group:
- *   phone.tsx  — phone number entry (placeholder for §2.1; full UI §2.2)
- *   otp.tsx    — OTP verification  (§2.2)
+ *   phone.tsx     — unified phone + OTP flow
+ *   onboarding.tsx, user-type.tsx, seller/*, aggregator/*
  * ──────────────────────────────────────────────────────────────────
  */
 

@@ -8,6 +8,7 @@ import { BaseCard } from '../../components/ui/Card';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { MapPin, Clock, Hash, NavigationArrow, CheckCircle } from 'phosphor-react-native';
 import { useOrderStore } from '../../store/orderStore';
+import { getOrderDisplayAmount } from '../../store/orderStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { safeBack } from '../../utils/navigation';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
@@ -53,7 +54,7 @@ export default function ActiveOrderDetailScreen() {
             { material: 'Paper', weight: 15, rate: 12, yourRate: 14 },
             { material: 'Plastic', weight: 8, rate: 8, yourRate: 9 },
         ],
-        totalEst: storeOrder?.estimatedAmount ?? 620,
+        totalEst: storeOrder ? getOrderDisplayAmount(storeOrder as any) : 0,
     };
 
     const statusLabel =
@@ -65,6 +66,28 @@ export default function ActiveOrderDetailScreen() {
     const statusColor =
         MOCK_ORDER.status === 'arrived' || MOCK_ORDER.status === 'weighing_in_progress'
             ? colors.teal : colors.navy;
+
+    const routeToExecutionStage = () => {
+        if (!internalOrderId) return;
+
+        if (MOCK_ORDER.status === 'weighing_in_progress') {
+            router.push({
+                pathname: '/(aggregator)/execution/otp/[id]',
+                params: { id: internalOrderId },
+            } as any);
+            return;
+        }
+
+        if (MOCK_ORDER.status === 'arrived') {
+            router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
+            return;
+        }
+
+        router.push({
+            pathname: '/(aggregator)/execution/navigate',
+            params: { id: internalOrderId },
+        } as any);
+    };
 
     // ── Summary strip ──────────────────────────────────────────────
     const renderSummaryStrip = () => (
@@ -218,10 +241,16 @@ export default function ActiveOrderDetailScreen() {
                     onPress={() => setShowCancelModal(true)}
                 />
                 <PrimaryButton
-                    label="Navigate"
+                    label={
+                        MOCK_ORDER.status === 'weighing_in_progress'
+                            ? 'Continue OTP'
+                            : MOCK_ORDER.status === 'arrived'
+                                ? 'Start Weighing'
+                                : 'Navigate'
+                    }
                     style={styles.navigateBtn}
                     textStyle={styles.btnText}
-                    onPress={() => router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: internalOrderId } } as any)}
+                    onPress={routeToExecutionStage}
                 />
             </View>
 

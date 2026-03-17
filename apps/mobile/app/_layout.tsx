@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import { AppState, AppStateStatus } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,
@@ -37,12 +38,12 @@ import {
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
 import { api, setApiTokenGetter } from '../lib/api';
-import { setGlobalClerkSignOut } from '../store/authStore';
+import { setGlobalClerkSignOut, useAuthStore, type AuthState } from '../store/authStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
 import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';
-import { useAuthStore } from '../store/authStore';
 import { NotificationWatcher } from '../components/ui/NotificationWatcher';
+import { getMobileRealtimeProvider } from '../lib/realtime';
 
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
@@ -93,7 +94,7 @@ export default function RootLayout() {
   const pathname = usePathname();
   const segments = useSegments();
   const rootGroup = segments[0];
-  const storedUserType = useAuthStore((s) => s.userType);
+  const storedUserType = useAuthStore((s: AuthState) => s.userType);
   const [isRetrying, setIsRetrying] = useState(false);
   const [lastRole, setLastRole] = useState<'seller' | 'aggregator'>('seller');
   const prevOnlineRef = useRef(isOnline);
@@ -152,10 +153,7 @@ export default function RootLayout() {
     const cameBackOnline = prevOnlineRef.current === false && isOnline === true;
     if (cameBackOnline && offlineAuthPathRef.current) {
       const previousAuthPath = offlineAuthPathRef.current;
-      const targetPath =
-        previousAuthPath === '/(auth)/phone' || previousAuthPath === '/(auth)/otp'
-          ? '/(auth)/phone'
-          : previousAuthPath;
+      const targetPath = previousAuthPath === '/(auth)/phone' ? '/(auth)/phone' : previousAuthPath;
 
       offlineAuthPathRef.current = null;
       if (pathname !== targetPath) {
@@ -178,6 +176,25 @@ export default function RootLayout() {
       setIsRetrying(false);
     }
   }, [isRetrying]);
+
+  // WARN 3 + BLOCK: AppState listener for realtime cleanup on background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        try {
+          const provider = getMobileRealtimeProvider();
+          provider.removeAllChannels();
+          console.log('[AppState] Removed all Ably channels on app background');
+        } catch (err) {
+          console.warn('[AppState] Failed to cleanup realtime channels:', err);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   // Hold the tree until fonts are ready to prevent a flash of unstyled text.
   if (!fontsReady) {

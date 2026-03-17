@@ -225,7 +225,192 @@ Client Apps (Mobile / Web)
 > 2. Receive the Clerk JWT from the Express response
 > 3. Use Clerk's Expo SDK to set the session token programmatically (not via Clerk's own OTP flow)
 >
-> The Clerk Expo SDK stores the JWT in secure storage — **not** AsyncStorage directly. `// REWRITE REQUIRED` comments must be placed at the top of `(auth)/otp.tsx` by Day 8.
+> The Clerk Expo SDK stores the JWT in secure storage — **not** AsyncStorage directly.
+
+---
+
+## 3A. Authentication Flow — WhatsApp OTP + Mode-Aware Branching
+
+> **Status:** COMPLETE (Gates G1–G8 PASS) | **Date Implemented:** 2026-03-17
+
+### 3A.1 High-Level Flow
+
+1. **Phone Entry Screen** → User enters phone + selects mode (Login or Sign Up)
+2. **OTP Request** → App calls `POST /api/auth/request-otp` with `{ phone, mode }`
+3. **Backend Validation** → Mode-aware existence check (login: ensure phone exists; signup: ensure phone doesn't exist)
+4. **OTP Generation & Storage** → Backend generates OTP, stores in Redis with HMAC-SHA256, and stores mode key
+5. **OTP Entry Screen** → User enters 6-digit code + countdown timer (600s)
+6. **OTP Verify** → App calls `POST /api/auth/verify-otp` with `{ phone, otp }`
+7. **Backend Verify & Response** → Mode read from Redis, user created / updated based on mode, mode key deleted (one-time use)
+8. **Post-Verify Routing** → Three-branch navigation based on `is_new_user` + `user_type`:
+   - New user → Role selection screen (user-type)
+   - Returning seller → Seller home (/(seller)/home)
+   - Returning aggregator → Aggregator home (/(aggregator)/home)
+
+### 3A.2 Backend Routes — Mode-Aware OTP
+
+#### `POST /api/auth/request-otp`
+**Request:**
+```json
+{
+  "phone": "+919876543210",
+  "mode": "login" | "signup"
+}
+```
+
+**Response:**
+```json
+{
+  "otp_length": 6,
+  "expires_in_seconds": 600
+}
+```
+
+**Validation:**
+- `mode` is required and must be `'login'` or `'signup'`
+- Phone is normalized and HMAC'd to `phone_hash`
+- **If mode = `login`:** Check if phone exists in DB. If NOT found → HTTP 404 `{ "error": "no_account", "message": "Phone not registered. Set to Sign Up to create an account." }`
+- **If mode = `signup`:** Check if phone exists in DB. If found → HTTP 409 `{ "error": "account_exists", "message": "Account already exists with this phone. Use Log In instead." }`
+- On success: Generate 6-digit OTP, store in Redis with HMAC-SHA256. Store mode key `otp:mode:{phoneHmac}` with 600s TTL. Return `otp_length` and `expires_in_seconds`.
+
+#### `POST /api/auth/verify-otp`
+**Request:**
+```json
+{
+  "phone": "+919876543210",
+  "otp": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "token": {
+    "jwt": "eyJhbGc..."
+  },
+  "user": {
+    "id": "user_uuid",
+    "user_type": "seller" | "aggregator" | null
+  },
+  "is_new_user": true | false
+}
+```
+
+**Logic:**
+1. Normalize phone, compute `phone_hash`
+2. Look up OTP in Redis. If not found or expired → HTTP 400 `{ "error": "invalid_otp", "message": "..." }`
+3. Read `otp:mode:{phoneHmac}` from Redis and delete immediately (one-time use enforcement)
+4. If mode = `'signup'`:
+   - Create new user in DB with `phone_hash`, `user_type = 'seller'` (default), `last_seen = NOW()`
+   - Delete OTP from Redis
+   - Create Clerk user account via Clerk SDK (if needed for session)
+   - Return `{ token: { jwt }, user: { id, user_type: 'seller' }, is_new_user: true }`
+5. If mode = `'login'`:
+   - Update existing user: set `last_seen = NOW()`
+   - Delete OTP from Redis
+   - Retrieve user's `user_type` from DB
+   - Return `{ token: { jwt }, user: { id, user_type }, is_new_user: false }`
+6. **Never** include `phone`, `phone_hash`, or `clerk_user_id` in response (Security V24 — safe DTO)
+
+### 3A.3 Database Constraints & Lifecycle
+
+- **Migration 0022:** `UNIQUE(phone_hash)` on users table — prevents concurrent signup races
+- **Migration 0023:** Add `last_seen TIMESTAMPTZ DEFAULT NOW()` column to users table for activity tracking
+- **OTP Storage Key Lifecycle:**
+  - Creation: `redis.set('otp:HMAC-SHA256(phone)', otp_code, 'EX', 600)`
+  - Storage of mode: `redis.set('otp:mode:HMAC-SHA256(phone)', mode, 'EX', 600)`
+  - Deletion on success: Both keys deleted after verify
+  - Deletion on failure: Keys expire naturally after 600s
+
+### 3A.4 Mobile Auth Store — Zustand Contract
+
+```typescript
+export interface AuthState {
+  // New contract (as of Day 7/8)
+  token: string | null;                    // Clerk JWT
+  user: SessionUser | null;                // { id, user_type }
+  isNewUser: boolean;                      // Determines post-verify routing
+  
+  // Methods
+  setSession(payload: { token: string; user: SessionUser; isNewUser: boolean }): void;
+  clearSession(): void;
+  requestOtp(phone: string, mode: 'login' | 'signup'): Promise<{ otp_length: 6; expires_in_seconds: 600 }>;
+  verifyOtp(phone: string, otp: string): Promise<{ token: { jwt }; user: { id; user_type }; is_new_user }>;
+}
+```
+
+**Key Points:**
+- `setSession()` updates both new contract fields and legacy compatibility fields atomically
+- `clearSession()` resets all state to null/false for logout
+- Methods handle API calls to `/api/auth/request-otp` and `/api/auth/verify-otp`
+
+### 3A.5 Mobile UI — Unified Phone + OTP Screen
+
+**Route:** `/(auth)/phone.tsx`
+
+**Flow:**
+1. **Step 1: Phone Entry** (mode selection via tabs)
+   - Two-tab layout: "Log In" tab | "Sign Up" tab
+   - Single phone input field below tabs
+   - "Send OTP" button (enabled only when phone length = 10 and all numeric)
+   - On button press: Call `requestOtp(phone, mode)`. Show error if HTTP 404 or 409 (mode-specific error messages).
+
+2. **Step 2: OTP Entry**
+   - 6-digit code input (numeric only, masked)
+   - Countdown timer displaying remaining time (600s → 0), e.g., "Expires in MM:SS"
+   - "Verify" button (enabled only when OTP length = 6)
+   - "Resend OTP" button (available only after 30s since last send)
+   - Error message if HTTP 400 (invalid OTP)
+
+3. **Post-Verify Routing** (on `verifyOtp` success):
+   ```typescript
+   if (isNewUser) {
+     router.replace('/(auth)/user-type');  // Role selection
+   } else if (userType === 'aggregator') {
+     router.replace('/(aggregator)/home'); // Skip onboarding
+   } else {
+     router.replace('/(seller)/home');     // Skip onboarding
+   }
+   ```
+
+**Error Handling:**
+- **HTTP 404 on request:** Show inline error "Switch to Sign Up to create an account"
+- **HTTP 409 on request:** Show inline error "Switch to Log In to continue"
+- **HTTP 400 on verify:** Show inline error "Invalid or expired OTP. Try again."
+
+**Effect Cleanup:**
+- Countdown timer must use `useEffect` with `setInterval` and proper `clearInterval` in return (prevent memory leaks)
+- Dependencies: `[]` (run once on mount)
+
+### 3A.6 Routing Guards & Session Management
+
+**Root AsyncStorage Onboarding Gate** (`app/index.tsx`):
+- Check `AsyncStorage.getItem('onboarding_complete')`
+- If null/false: Route to `/(auth)/onboarding`
+- If true: Route to signed-in home (or `/(auth)/phone` if not authenticated)
+
+**Returning User Redirect Guard** (`app/(auth)/user-type.tsx`):
+- If `isNewUser === false`: Immediately redirect to role-specific home via `router.replace`
+- Pattern: `useEffect(() => { if (!isNewUser) { router.replace(...); } }, [isNewUser])`
+- Prevents UI reach to role selection for returning users
+
+**Logout Standardization:**
+- Both Seller and Aggregator home screens call: `clerkSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`
+- Use `router.replace` (not `push`) to prevent back navigation to signed-in screens
+- Consolidate logic in a helper function (e.g., `performLogout()` in authStore)
+
+### 3A.7 Security & Compliance
+
+| Requirement | Implementation | Status |
+|---|---|---|
+| **V7** — User role from DB only | query `SELECT user_type FROM users WHERE id = ?` at verify time; never use JWT claims | ✅ PASS |
+| **V24** — Safe DTO | Response excludes phone, phone_hash, clerk_user_id | ✅ PASS |
+| **X3** — HMAC-SHA256 OTP storage | `redis.set('otp:HMAC-SHA256(phone)', code)` | ✅ PASS |
+| **V-OTP-1** — One-time use enforcement | Mode key deleted immediately after read; OTP key deleted after first successful verify | ✅ PASS |
+| **A3** — Mode-aware pre-request check | Existence check enforced before OTP generation (no late mode detection) | ✅ PASS |
+| **R2** — Unique phone enforcement | DB UNIQUE constraint + application-level mode validation | ✅ PASS |
+| **I2** — Explicit field selection in DTO | Response DTO hardcodes fields (token.jwt, user.id, user.user_type, is_new_user) | ✅ PASS |
+| **C1** — OTP screen context | Screen shows mode selection (logged-in users cannot see `/(auth)/phone`) | ✅ PASS |
 
 ---
 
@@ -1795,23 +1980,24 @@ export interface IMapProvider {
 
 ## 13. Security & Privacy Patches
 
-### SP1 — Seller Phone Reveal (2026-03-16)
+### SP1 — Bidirectional Seller & Aggregator Phone Exposure (2026-03-17, BLOCK Revision)
 
-**Summary:** Expose the seller's phone number to the assigned aggregator (and the seller themselves) only after the order reaches `accepted` status or beyond.
+**Summary:** Expose both seller and aggregator phone numbers to order parties only after the order reaches `accepted` status or beyond. Fetch from Clerk at acceptance time, cache in `users.display_phone`, and expose bidirectionally via DTO.
 
 **Decisions implemented:**
 
 | Rule | Detail |
 |---|---|
-| SP1-1 | Raw phone number **never** stored on `orders`. One copy only: `users.display_phone` (VARCHAR 20, nullable). |
-| SP1-2 | `display_phone` is populated **at acceptance time** via a non-fatal `setImmediate` Clerk API call inside `PATCH /:id/status`. Early-return guard prevents redundant Clerk calls if already cached. |
-| SP1-3 | `buildOrderDto` exposes `seller_phone` only when `status ∉ {created, cancelled}` AND `requestingUserId ∈ {seller_id, aggregator_id}`. All other requests receive `null`. |
-| SP1-4 | `seller_display_phone` (raw DB field) is always stripped from the DTO `return` object — clients never receive the raw column name. |
-| SP1-5 | `phone_hash` and `clerk_user_id` continue to be stripped (V24 unchanged). |
-| SP1-6 | UI: tap-to-call pill (`Phone` icon + `Linking.openURL('tel:...')`) rendered in aggregator's seller card only when `sellerPhone !== null`. Seller view never shows a call-yourself button (`userType === 'aggregator'` gate). |
-| SP1-7 | DPDP compliance: one phone copy in `users.display_phone` — erasure request requires only a single `UPDATE users SET display_phone = NULL WHERE id = $1`. |
+| SP1-1 | Raw phone numbers **never** stored on `orders`. One copy per user: `users.display_phone` (VARCHAR 20, nullable). Both seller and aggregator have their own row. |
+| SP1-2 | **WARN 1 (synchronous):** Both `display_phone` values are populated **at acceptance time BEFORE COMMIT** via synchronous Clerk API calls in the accept route transaction. Non-fatal — if Clerk returns no phone for either party, that party's `display_phone` remains NULL. |
+| SP1-3 | **canSeePhone guard:** `buildOrderDto` exposes both `seller_phone` and `aggregator_phone` only when `status ∉ {created, cancelled}` AND `requestingUserId ∈ {seller_id, aggregator_id}`. All other requests receive both fields as `null`. |
+| SP1-4 | **Asymmetric visibility:** Aggregator sees `seller_phone` (their counterparty's phone). Seller sees `aggregator_phone` (their counterparty's phone). Neither sees their own phone exposed in the DTO. |
+| SP1-5 | Database fields `seller_display_phone` and `aggregator_display_phone` are always stripped from the DTO `return` object — clients never receive raw column names. |
+| SP1-6 | `phone_hash` and `clerk_user_id` continue to be stripped (V24 unchanged). |
+| SP1-7 | **BLOCK revision - UI bidirectional:** `PhoneCall` icon + `Linking.openURL('tel:...')` rendered in both order detail screens post-acceptance: aggregator's seller card shows `seller_phone`, seller's aggregator card shows `aggregator_phone`. Icon completely absent (not disabled) if phone is `null`. |
+| SP1-8 | DPDP compliance: two phone copies in `users.display_phone` (one per user) — erasure request requires two UPDATEs: `UPDATE users SET display_phone = NULL WHERE id = seller_id; UPDATE users SET display_phone = NULL WHERE id = aggregator_id`. |
 
-**Files changed:** `migrations/0019_users_display_phone.sql` · `backend/src/routes/orders/index.ts` · `backend/src/utils/orderDto.ts` · `apps/mobile/store/orderStore.ts` · `apps/mobile/app/(shared)/order/[id].tsx`
+**Files changed:** `migrations/0019_users_display_phone.sql` · `backend/src/routes/orders/index.ts` · `backend/src/utils/orderDto.ts` · `apps/mobile/store/orderStore.ts` · `apps/mobile/components/order/ContactCard.tsx` · `apps/mobile/app/(seller)/order/[id].tsx` · `apps/mobile/app/(aggregator)/order/[id].tsx`
 
 ---
 

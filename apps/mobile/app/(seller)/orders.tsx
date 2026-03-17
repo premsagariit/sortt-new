@@ -7,7 +7,7 @@ import { Text } from '../../components/ui/Typography';
 import { OrderCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ClipboardText, CaretRight, WarningCircle, ArrowClockwise } from 'phosphor-react-native';
-import { useOrderStore } from '../../store/orderStore';
+import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
 import { api } from '../../lib/api';
 
 const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
@@ -85,22 +85,7 @@ export default function SellerOrdersScreen() {
   const hasActiveOrder = activeOrders.length > 0;
   const firstActive = activeOrders[0];
 
-  const calculateEstimate = useCallback((order: any) => {
-    if (!order) return 0;
-    if (!order.estimatedWeights || Object.keys(order.estimatedWeights).length === 0) {
-      if (order.estimatedAmount && order.estimatedAmount > 0) return order.estimatedAmount;
-      return 0;
-    }
-    try {
-      return Object.entries(order.estimatedWeights).reduce((sum, [code, weight]) => {
-        const rate = (rates && Array.isArray(rates)) ? (rates.find(r => r.material_code === code)?.rate_per_kg ?? 0) : 0;
-        return sum + (rate * (Number(weight) || 0));
-      }, 0);
-    } catch (e) {
-      console.warn('[SellerOrders] Error in calculateEstimate', e);
-      return order.estimatedAmount || 0;
-    }
-  }, [rates]);
+  const calculateEstimate = useCallback((order: any) => getOrderDisplayAmount(order), []);
 
   // Format date string from ISO
   const formatDate = (iso: string) => {
@@ -150,7 +135,7 @@ export default function SellerOrdersScreen() {
       {hasActiveOrder && firstActive && (
         <Pressable
           style={styles.activeBanner}
-          onPress={() => router.push(`/(shared)/order/${firstActive.orderId}` as any)}
+          onPress={() => router.push(`/(seller)/order/${firstActive.orderId}` as any)}
           accessible
           accessibilityRole="button"
           accessibilityLabel="Track active order"
@@ -207,7 +192,7 @@ export default function SellerOrdersScreen() {
           displayOrders.map(order => (
             <Pressable
               key={order.orderId}
-              onPress={() => router.push(`/(shared)/order/${order.orderId}` as any)}
+              onPress={() => router.push(`/(seller)/order/${order.orderId}` as any)}
               accessible
               accessibilityRole="button"
               accessibilityLabel={`Order ${order.orderId}, status ${order.status}`}

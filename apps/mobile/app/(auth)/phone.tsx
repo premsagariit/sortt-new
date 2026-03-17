@@ -1,331 +1,369 @@
-/**
- * app/(auth)/phone.tsx
- * ──────────────────────────────────────────────────────────────────
- * Phone Entry Screen — Day 2 §2.2
- *
- * First screen after splash. Collects an Indian mobile number (+91)
- * and simulates sending an OTP when the number is valid.
- *
- * Rules enforced:
- *   - Zero hardcoded hex values — all from constants/tokens.ts
- *   - APP_NAME from constants/app.ts — never the string "Sortt"
- *   - No raw <Text> — Typography <Text variant> only
- *   - DM Mono for the +91 prefix and the phone number TextInput
- *   - Validation fires only after first submit attempt (hasSubmitted gate)
- *   - PrimaryButton loading prop used — no custom spinner
- *   - No backend calls — setTimeout simulation only
- *   - All touch targets ≥ 48dp (WCAG AA)
- *   - phoneNumber persisted to authStore (for OTP screen §2.3)
- *
- * Navigation:
- *   router.push('/(auth)/otp') — OTP screen does not exist yet (§2.3)
- *   The push will land on an unmatched-route screen, which is expected.
- * ──────────────────────────────────────────────────────────────────
- */
-
-import React, { useCallback, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useAuth, useSignIn } from '@clerk/clerk-expo';
 
 import { APP_NAME } from '../../constants/app';
-import { colors, radius, spacing, colorExtended, materialBg } from '../../constants/tokens';
-import { NavBar } from '../../components/ui/NavBar';
+import { colors, radius, spacing } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
+import { Input } from '../../components/ui/Input';
 import { PrimaryButton } from '../../components/ui/Button';
-import { ChatCircleDots, Globe } from 'phosphor-react-native';
+import { NavBar } from '../../components/ui/NavBar';
+import { safeBack } from '../../utils/navigation';
+import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 
-// ── Indian mobile number validation ──────────────────────────────
-// Must be exactly 10 digits, first digit 6–9 (TRAI numbering plan)
-const INDIAN_MOBILE_REGEX = /^[6-9]\d{9}$/;
+type Step = 'phone' | 'otp';
+type Mode = 'login' | 'signup';
 
-function isValidIndianMobile(number: string): boolean {
-  return INDIAN_MOBILE_REGEX.test(number);
-}
+const OTP_SECONDS = 600;
 
-// ── Error copy (single source — avoids duplication) ───────────────
-const ERROR_COPY = 'Please enter a valid 10-digit Indian mobile number';
-const OTP_SIMULATE_MS = 1500;
+const formatTime = (seconds: number) => {
+  const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const ss = (seconds % 60).toString().padStart(2, '0');
+  return `${mm}:${ss}`;
+};
 
-// ─────────────────────────────────────────────────────────────────
-// PhoneScreen
-// ─────────────────────────────────────────────────────────────────
 export default function PhoneScreen() {
   const router = useRouter();
+  const { signOut } = useAuth();
+  const { signIn, setActive } = useSignIn();
 
-  // ── Local UI state ─────────────────────────────────────────────
-  const [phoneDigits, setPhoneDigits] = useState('');
-  const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const inputRef = useRef<TextInput>(null);
+  const setSession = useAuthStore((s) => s.setSession);
 
-  // ── Zustand ────────────────────────────────────────────────────
-  const isLoading = useAuthStore((s) => s.isLoading);
-  const setPhoneNumber = useAuthStore((s) => s.setPhoneNumber);
-  const requestOtp = useAuthStore((s) => s.requestOtp);
+  const [step, setStep] = useState<Step>('phone');
+  const [mode, setMode] = useState<Mode>('login');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(OTP_SECONDS);
+  const [canResend, setCanResend] = useState(false);
 
-  // ── Derived validation state ───────────────────────────────────
-  const isValid = isValidIndianMobile(phoneDigits);
-  // Only show error after first submit attempt (never on first keystroke)
-  const showError = hasSubmitted && !isValid;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resendUnlockRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Handlers ───────────────────────────────────────────────────
-  const handleChangeText = useCallback((raw: string) => {
-    // Strip any non-digit characters (handles paste scenarios)
-    const digits = raw.replace(/\D/g, '').slice(0, 10);
-    setPhoneDigits(digits);
+  const clearTimers = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (resendUnlockRef.current) {
+      clearTimeout(resendUnlockRef.current);
+      resendUnlockRef.current = null;
+    }
+  };
+
+  const startCountdown = () => {
+    clearTimers();
+    setCountdown(OTP_SECONDS);
+    setCanResend(false);
+
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearTimers();
+          setStep('phone');
+          setOtp('');
+          setError('OTP expired. Please request a new one.');
+          return OTP_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    resendUnlockRef.current = setTimeout(() => {
+      setCanResend(true);
+    }, 30000);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearTimers();
+    };
   }, []);
 
-  const handleSend = useCallback(async () => {
-    // Gate: mark that submission has been attempted so validation shows
-    setHasSubmitted(true);
-    setApiError(null);
+  const handleModeChange = (nextMode: Mode) => {
+    setMode(nextMode);
+    setStep('phone');
+    setPhone('');
+    setOtp('');
+    setError(null);
+    setCountdown(OTP_SECONDS);
+    setCanResend(false);
+    clearTimers();
+  };
 
-    if (!isValidIndianMobile(phoneDigits)) {
-      // Re-focus input so user can correct the number without extra tap
-      inputRef.current?.focus();
-      return;
+  const normalizedPhone = phone.replace(/\D/g, '').slice(0, 10);
+  const canSendOtp = normalizedPhone.length === 10;
+  const canVerifyOtp = otp.trim().length === 6;
+
+  async function handleSendOtp() {
+    setError(null);
+    setIsLoading(true);
+    try {
+      await api.post('/api/auth/request-otp', { phone: '+91' + normalizedPhone, mode });
+      setStep('otp');
+      startCountdown();
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setError('No account found with this number. Switch to Sign Up to create one.');
+      } else if (err.response?.status === 409) {
+        setError('An account already exists with this number. Switch to Log In.');
+      } else if (err.response?.status === 429) {
+        setError('Too many attempts. Please wait a few minutes and try again.');
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
+  }
 
-    // Persist full E.164 number digits to auth store for OTP screen
-    setPhoneNumber(phoneDigits);
+  async function handleVerifyOtp() {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await api.post('/api/auth/verify-otp', {
+        phone: '+91' + normalizedPhone,
+        otp: otp.trim(),
+      });
 
-    const result = await requestOtp(phoneDigits);
+      const { token, user, is_new_user } = res.data;
+      setSession({ token: token.jwt, user, isNewUser: is_new_user });
 
-    if (result.success) {
-      router.push('/(auth)/otp' as never);
-    } else {
-      setApiError(result.error || 'Failed to request OTP');
+      try {
+        if (signIn && setActive && token?.jwt) {
+          await signOut().catch(() => {});
+          const signInAttempt = await signIn.create({ strategy: 'ticket', ticket: token.jwt });
+          if (signInAttempt.status === 'complete') {
+            await setActive({ session: signInAttempt.createdSessionId });
+          }
+        }
+      } catch {
+      }
+
+      if (is_new_user) {
+        router.replace('/(auth)/user-type');
+      } else if (user.user_type === 'aggregator') {
+        router.replace('/(aggregator)/home');
+      } else {
+        router.replace('/(seller)/home');
+      }
+    } catch (err: any) {
+      if (err.response?.status === 400) {
+        const msg = err.response?.data?.message || err.response?.data?.error || '';
+        if (typeof msg === 'string' && msg.toLowerCase().includes('remaining')) {
+          setError(`Incorrect OTP. ${msg}`);
+        } else {
+          setError('Incorrect OTP. Please check and try again.');
+        }
+      } else if (err.response?.status === 429) {
+        setError('Too many attempts. Please wait before trying again.');
+      } else {
+        setError('Verification failed. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
-  }, [phoneDigits, router, requestOtp, setPhoneNumber]);
+  }
 
-  // ── Render ─────────────────────────────────────────────────────
+  function handleChangeNumber() {
+    clearTimers();
+    setStep('phone');
+    setOtp('');
+    setError(null);
+    setCountdown(OTP_SECONDS);
+    setCanResend(false);
+  }
+
+  async function handleResendOtp() {
+    if (!canResend || isLoading) return;
+    await handleSendOtp();
+  }
+
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* ── Navigation bar ── */}
-      <NavBar title="Sign In / Register" onBack={() => router.replace('/(auth)/user-type')} />
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <NavBar title="Phone Verification" variant="light" onBack={() => safeBack('/(auth)/onboarding')} />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* ── Content area ───────────────────────────────────── */}
-          <View style={styles.content}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.content}>
+          <Text variant="heading" style={styles.title}>Welcome to {APP_NAME}</Text>
+          <Text variant="caption" color={colors.muted} style={styles.subtitle}>
+            Log in or create your account with WhatsApp OTP.
+          </Text>
 
-            {/* Headline */}
-            <Text variant="heading" style={[styles.headline, { letterSpacing: -0.4 }]}>
-              Welcome to {APP_NAME}
-            </Text>
+          {step === 'phone' ? (
+            <View style={styles.tabsWrap}>
+              <Pressable
+                onPress={() => handleModeChange('login')}
+                style={[styles.tab, mode === 'login' ? styles.tabActive : styles.tabInactive]}
+              >
+                <Text variant="label" style={mode === 'login' ? styles.tabActiveText : styles.tabInactiveText}>Log In</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleModeChange('signup')}
+                style={[styles.tab, mode === 'signup' ? styles.tabActive : styles.tabInactive]}
+              >
+                <Text variant="label" style={mode === 'signup' ? styles.tabActiveText : styles.tabInactiveText}>Sign Up</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
-            {/* Sub-copy */}
-            <Text variant="caption" style={[styles.subcopy, { lineHeight: 22 }]}>
-              Enter your mobile number. We'll send a verification code on WhatsApp.
-            </Text>
+          <View style={[styles.phoneRow, step === 'otp' && styles.phoneRowDisabled]}>
+            <View style={styles.prefixPill}>
+              <Numeric size={14} color={colors.navy}>+91</Numeric>
+            </View>
+            <View style={styles.phoneInputWrap}>
+              <Input
+                value={normalizedPhone}
+                onChangeText={(value) => setPhone(value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="Enter 10-digit mobile number"
+                keyboardType="number-pad"
+                maxLength={10}
+                editable={step === 'phone'}
+                mono
+              />
+            </View>
+          </View>
 
-            {/* ── Phone input row ─────────────────────────────── */}
-            <View style={{ gap: spacing.xs }}>
-              <Text variant="caption" style={{ fontWeight: '600', color: colors.navy }}>
-                Mobile Number
-              </Text>
-              <View style={styles.inputRow}>
-                {/* Country prefix — non-editable, DM Mono */}
-                <View style={styles.prefixContainer}>
-                  <Globe size={20} color={colors.navy} weight="bold" />
-                  <Numeric size={16} color={colors.navy} style={{ fontWeight: '600' }}>
-                    +91
-                  </Numeric>
-                </View>
+          {step === 'otp' ? (
+            <View>
+              <Input
+                value={otp}
+                onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit OTP"
+                keyboardType="number-pad"
+                maxLength={6}
+                mono
+              />
 
-                {/* Phone number input — DM Mono via fontFamily */}
-                <Pressable
-                  onPress={() => inputRef.current?.focus()}
-                  style={[
-                    styles.inputContainer,
-                    showError && styles.inputContainerError,
-                  ]}
-                  accessible={false}
-                >
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.textInput}
-                    value={phoneDigits}
-                    onChangeText={handleChangeText}
-                    keyboardType="numeric"
-                    maxLength={10}
-                    placeholder="XXXXXXXXXX"
-                    placeholderTextColor={colors.muted}
-                    returnKeyType="done"
-                    onSubmitEditing={handleSend}
-                    editable={!isLoading}
-                    accessibilityLabel="Mobile number"
-                    accessibilityHint="Enter your 10-digit Indian mobile number"
-                  />
+              <View style={styles.metaRow}>
+                <Pressable onPress={handleChangeNumber}>
+                  <Text variant="caption" color={colors.navy}>Change Number</Text>
                 </Pressable>
+                <Text variant="caption" color={colors.muted}>Expires in {formatTime(countdown)}</Text>
               </View>
-            </View>
 
-            {/* WhatsApp Info Banner */}
-            <View style={styles.infoBanner}>
-              <ChatCircleDots size={22} color={colors.teal} weight="fill" />
-              <View style={{ flex: 1 }}>
-                <Text variant="caption" style={{ fontWeight: '600', color: colors.slate }}>
-                  OTP via WhatsApp
+              <Pressable disabled={!canResend} onPress={handleResendOtp} style={styles.resendWrap}>
+                <Text variant="caption" color={canResend ? colors.teal : colors.muted}>
+                  {canResend ? 'Resend OTP' : 'Resend available after 00:30'}
                 </Text>
-                <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
-                  Free · No SMS charges · Instant delivery
-                </Text>
-              </View>
+              </Pressable>
             </View>
+          ) : null}
 
-            {/* ── Inline validation error ─────────────────────── */}
-            {showError && (
-              <Text
-                variant="caption"
-                color={colors.red}
-                style={styles.errorText}
-              >
-                {ERROR_COPY}
-              </Text>
-            )}
-            {apiError && !showError && (
-              <Text
-                variant="caption"
-                color={colors.red}
-                style={styles.errorText}
-              >
-                {apiError}
-              </Text>
+          {error ? (
+            <Text variant="caption" color={colors.red} style={styles.errorText}>{error}</Text>
+          ) : null}
+
+          <View style={styles.buttonWrap}>
+            {step === 'phone' ? (
+              <PrimaryButton
+                label="Send OTP"
+                onPress={handleSendOtp}
+                loading={isLoading}
+                disabled={!canSendOtp}
+              />
+            ) : (
+              <PrimaryButton
+                label="Verify OTP"
+                onPress={handleVerifyOtp}
+                loading={isLoading}
+                disabled={!canVerifyOtp}
+              />
             )}
           </View>
-
-          {/* ── Bottom action area ──────────────────────────────── */}
-          <View style={styles.bottomArea}>
-            <PrimaryButton
-              label="Send OTP via WhatsApp"
-              icon={<ChatCircleDots size={20} color={colors.surface} weight="bold" />}
-              onPress={handleSend}
-              loading={isLoading}
-            />
-
-            {/* Terms copy */}
-            <Text variant="caption" style={styles.termsText}>
-              By continuing, you agree to our <Text variant="caption" style={{ fontWeight: '600', color: colors.navy }}>Terms</Text> and <Text variant="caption" style={{ fontWeight: '600', color: colors.navy }}>Privacy Policy</Text>
-            </Text>
-          </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-  flex: {
+  container: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
-  },
-
-  // ── Content ──────────────────────────────────────────────────
   content: {
-    gap: spacing.sm,
+    flex: 1,
+    padding: spacing.md,
   },
-  headline: {
-    marginBottom: spacing.xs,
+  title: {
+    marginTop: spacing.md,
+    color: colors.navy,
   },
-  subcopy: {
+  subtitle: {
+    marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
-
-  // ── Input row ─────────────────────────────────────────────────
-  inputRow: {
+  tabsWrap: {
     flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.chip,
+    padding: spacing.xs,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  tab: {
+    flex: 1,
+    height: 40,
+    borderRadius: radius.chip,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.teal,
+  },
+  tabInactive: {
+    backgroundColor: 'transparent',
+  },
+  tabActiveText: {
+    color: colors.surface,
+  },
+  tabInactiveText: {
+    color: colors.slate,
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  inputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colorExtended.surface2,
+  phoneRowDisabled: {
+    opacity: 0.6,
+  },
+  prefixPill: {
+    height: 52,
+    minWidth: 56,
     borderRadius: radius.input,
     borderWidth: 1,
     borderColor: colors.border,
-    minHeight: 52, // ≥ 48dp WCAG AA
-    overflow: 'hidden',
-  },
-  inputContainerError: {
-    borderColor: colors.red,
-  },
-  prefixContainer: {
-    flexDirection: 'row',
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    backgroundColor: colorExtended.surface2,
-    borderRadius: radius.input,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    height: 52,
-    gap: spacing.xs,
+    justifyContent: 'center',
   },
-  textInput: {
+  phoneInputWrap: {
     flex: 1,
-    fontFamily: 'DMMono-Regular', // numeric data — DM Mono per MEMORY.md §2
-    fontSize: 16,
-    color: colors.slate,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    minHeight: 52, // ≥ 48dp WCAG AA
   },
-
-  // ── Error ─────────────────────────────────────────────────────
-  errorText: {
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: spacing.xs,
   },
-
-  // ── Bottom ────────────────────────────────────────────────────
-  bottomArea: {
-    gap: spacing.md,
-    marginTop: spacing.xl,
-  },
-  termsText: {
-    textAlign: 'center',
-    color: colors.muted,
-  },
-  infoBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: materialBg.fabric,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    gap: spacing.sm,
+  resendWrap: {
     marginTop: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  errorText: {
+    marginTop: spacing.sm,
+  },
+  buttonWrap: {
+    marginTop: spacing.lg,
   },
 });

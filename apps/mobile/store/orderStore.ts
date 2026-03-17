@@ -20,6 +20,8 @@ export interface Order {
   materials: MaterialCode[];
   estimatedAmount: number;
   confirmedAmount: number | null;
+  displayAmount: number;
+  isFinalAmount: boolean;
   pickupLocality: string;
   pickupAddress: string | null;
   createdAt: string;
@@ -33,10 +35,28 @@ export interface Order {
   sellerName?: string;
   sellerType?: string;
   sellerPhone?: string | null;  // SP1: only non-null post-acceptance, aggregator or seller
+  chatChannelToken?: string | null;      // BLOCK: Ably channel name with HMAC prefix
+  orderChannelToken?: string | null;     // BLOCK: Ably channel name with HMAC prefix
+  pickupLat?: number | null;
+  pickupLng?: number | null;
   rating?: number;
   window?: string;
   estimatedWeights?: Record<string, number>;
+  lineItems?: Array<{
+    materialCode: string;
+    weightKg: number;
+    ratePerKg: number;
+    amount: number;
+  }>;
+  materialCodes?: string[];
   history?: any[];
+}
+
+export function getOrderDisplayAmount(order: Pick<Order, 'displayAmount' | 'confirmedAmount' | 'estimatedAmount'>): number {
+  if (typeof order.displayAmount === 'number' && Number.isFinite(order.displayAmount)) return order.displayAmount;
+  if (typeof order.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount)) return order.confirmedAmount;
+  if (typeof order.estimatedAmount === 'number' && Number.isFinite(order.estimatedAmount)) return order.estimatedAmount;
+  return 0;
 }
 
 // Maps API response shape → internal Order type
@@ -64,6 +84,16 @@ export function mapApiOrder(o: any): Order {
     materials: o.material_codes ?? o.materials ?? [],
     estimatedAmount: typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0),
     confirmedAmount: typeof o.confirmed_value === 'number' ? o.confirmed_value : (o.confirmedAmount ?? null),
+    displayAmount:
+      typeof o.display_amount === 'number'
+        ? o.display_amount
+        : (typeof o.confirmed_value === 'number'
+          ? o.confirmed_value
+          : (typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0))),
+    isFinalAmount:
+      typeof o.is_final_amount === 'boolean'
+        ? o.is_final_amount
+        : typeof o.confirmed_value === 'number',
     pickupLocality: o.pickup_locality ?? o.pickupLocality ?? '',
     pickupAddress: o.pickup_address ?? o.pickupAddress ?? null,
     createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
@@ -76,9 +106,22 @@ export function mapApiOrder(o: any): Order {
     sellerName: typeof o.seller_name === 'string' ? o.seller_name : (typeof o.sellerName === 'string' ? o.sellerName : undefined),
     sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
     sellerPhone: typeof o.seller_phone === 'string' ? o.seller_phone : (o.sellerPhone ?? null),  // SP1
+    chatChannelToken: o.chatChannelToken ?? o.chat_channel ?? null,      // BLOCK: map from API
+    orderChannelToken: o.orderChannelToken ?? o.order_channel ?? null,   // BLOCK: map from API
+    pickupLat: typeof o.pickup_lat === 'number' ? o.pickup_lat : (typeof o.pickupLat === 'number' ? o.pickupLat : null),
+    pickupLng: typeof o.pickup_lng === 'number' ? o.pickup_lng : (typeof o.pickupLng === 'number' ? o.pickupLng : null),
     rating: typeof o.rating === 'number' ? o.rating : undefined,
     window: windowLabel,
     estimatedWeights: o.estimated_weights ?? o.estimatedWeights ?? {},
+    lineItems: Array.isArray(o.line_items)
+      ? o.line_items.map((item: any) => ({
+          materialCode: item.material_code ?? item.materialCode,
+          weightKg: Number(item.weight_kg ?? item.weightKg ?? 0),
+          ratePerKg: Number(item.rate_per_kg ?? item.ratePerKg ?? 0),
+          amount: Number(item.amount ?? 0),
+        }))
+      : undefined,
+    materialCodes: o.material_codes ?? o.materialCodes ?? o.materials ?? [],
     history: o.history ?? [],
   };
 }
@@ -104,6 +147,8 @@ interface OrderStoreState {
   // ── Async API actions ──
   fetchOrders: (silent?: boolean) => Promise<void>;
   fetchOrder: (id: string, silent?: boolean) => Promise<void>;
+  refreshAggregatorOrder: (id: string) => Promise<void>;
+  getOrderById: (id: string) => Order | undefined;
   cancelOrder: (id: string) => Promise<void>;
   createOrder: (payload: Record<string, unknown>) => Promise<Order>;
 }
@@ -218,6 +263,12 @@ export const useOrderStore = create<OrderStoreState>()(
           }
         }
       },
+
+      refreshAggregatorOrder: async (id: string) => {
+        await get().fetchOrder(id, true);
+      },
+
+      getOrderById: (id: string) => get().orders.find((o) => o.orderId === id),
 
       // ── Async: cancel an order (V35 — no status='completed' ever set from client) ──
       cancelOrder: async (id: string) => {

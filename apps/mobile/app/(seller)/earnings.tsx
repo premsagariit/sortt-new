@@ -19,7 +19,7 @@ import { MaterialChip } from '../../components/ui/MaterialChip';
 
 import { useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
-import { useOrderStore } from '../../store/orderStore';
+import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
 
 export default function EarningsSummary() {
   const router = useRouter();
@@ -40,7 +40,7 @@ export default function EarningsSummary() {
     .filter(o => o.status === 'completed')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const totalEarned = completedOrders.reduce((acc, o) => acc + (o.confirmedAmount || o.estimatedAmount || 0), 0);
+  const totalEarned = completedOrders.reduce((acc, o) => acc + getOrderDisplayAmount(o), 0);
   const pickupsCount = completedOrders.length;
   const avgPerOrder = pickupsCount > 0 ? Math.round(totalEarned / pickupsCount) : 0;
 
@@ -93,7 +93,7 @@ export default function EarningsSummary() {
               month: 'short',
               year: 'numeric'
             });
-            const amount = txn.confirmedAmount || txn.estimatedAmount || 0;
+            const amount = getOrderDisplayAmount(txn);
 
             return (
               <View key={txn.orderId} style={styles.txnCard}>

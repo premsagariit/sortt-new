@@ -17,15 +17,16 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, FileText, CaretRight, Star } from 'phosphor-react-native';
+import { CheckCircle, FileText, CaretRight, Star, Receipt } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../../components/ui/Button';
 import { useAuthStore } from '../../../../store/authStore';
 import { useOrderStore } from '../../../../store/orderStore';
+import { useAggregatorStore } from '../../../../store/aggregatorStore';
+import { EmptyState } from '../../../../components/ui/EmptyState';
 
-// ── Fallback Mock ──────────────────────────────────────────────────
 type WeightEntry = {
   material: string;
   materialKey: string;
@@ -42,23 +43,43 @@ const MATERIAL_COLORS: Record<string, string> = {
   glass: colors.material.glass.fg,
 };
 
-const MOCK_ITEMS: WeightEntry[] = [
-  { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
-  { material: 'Metal', materialKey: 'metal', weightKg: 6.0, ratePerKg: 28 },
-  { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0, ratePerKg: 12 },
-];
-
 export default function AggregatorReceiptScreen() {
-  const { id, amount } = useLocalSearchParams<{ id: string; amount: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [rating, setRating] = useState(0);
 
   const { orders } = useOrderStore();
+  const { executionDraftByOrderId, clearExecutionDraft } = useAggregatorStore();
   const order = orders.find(o => o.orderId === id);
+  const draft = id ? executionDraftByOrderId[id] : undefined;
 
-  const totalAmount = amount ? parseFloat(amount) : MOCK_ITEMS.reduce((s, i) => s + i.weightKg * i.ratePerKg, 0);
-  const totalWeight = MOCK_ITEMS.reduce((s, i) => s + i.weightKg, 0);
+  const weightItems: WeightEntry[] = draft
+    ? draft.lineItems.map((item) => ({
+        material: item.label,
+        materialKey: item.materialCode,
+        weightKg: item.weightKg,
+        ratePerKg: item.ratePerKg,
+      }))
+    : Array.isArray(order?.lineItems) && order!.lineItems!.length > 0
+      ? order!.lineItems!.map((item) => ({
+          material: item.materialCode.charAt(0).toUpperCase() + item.materialCode.slice(1),
+          materialKey: item.materialCode,
+          weightKg: Number(item.weightKg ?? 0),
+          ratePerKg: Number(item.ratePerKg ?? 0),
+        }))
+      : Object.entries(order?.estimatedWeights ?? {}).map(([materialCode, weight]) => ({
+          material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
+          materialKey: materialCode,
+          weightKg: Number(weight ?? 0),
+          ratePerKg: 0,
+        }));
+
+  const totalAmount = draft?.totalAmount ?? Number(order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedAmount ?? 0);
+  const totalWeight = draft?.totalWeight ?? weightItems.reduce((s, i) => s + i.weightKg, 0);
 
   const handleFinish = () => {
+    if (id) {
+      clearExecutionDraft(id);
+    }
     // Navigate back to orders list, clearing execution stack
     router.dismissAll();
     router.replace('/(aggregator)/home');
@@ -102,7 +123,15 @@ export default function AggregatorReceiptScreen() {
             </Text>
     
             <View style={styles.weightTable}>
-              {MOCK_ITEMS.map((item) => {
+              {weightItems.length === 0 ? (
+                <View style={{ padding: spacing.md }}>
+                  <EmptyState
+                    icon={<Receipt size={48} color={colors.muted} weight="thin" />}
+                    heading="Receipt details unavailable"
+                    body="No weighed material breakdown was found for this order."
+                  />
+                </View>
+              ) : weightItems.map((item) => {
                 const lineTotal = item.weightKg * item.ratePerKg;
                 return (
                   <View key={item.materialKey} style={styles.weightRow}>

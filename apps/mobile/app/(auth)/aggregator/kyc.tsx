@@ -48,7 +48,7 @@ export default function KycScreen() {
         businessPhoto.reset();
         if (aggregatorType === 'shop') setKycShopPhotoUri(null);
         else setKycVehiclePhotoUri(null);
-        await businessPhoto.pickPhoto();
+        await businessPhoto.capturePhoto();
     };
 
     const businessUri = aggregatorType === 'shop' ? kycShopPhotoUri : kycVehiclePhotoUri;
@@ -120,7 +120,7 @@ export default function KycScreen() {
                     badge="✓ Photo uploaded"
                     permissionDenied={businessPhoto.permissionDenied}
                     isLoading={businessPhoto.isLoading}
-                    onTap={businessPhoto.pickPhoto}
+                    onTap={businessPhoto.capturePhoto}
                     onRetake={handleRetake}
                 />
 
@@ -152,8 +152,8 @@ interface PhotoCardProps {
     badge: string;
     permissionDenied: boolean;
     isLoading: boolean;
-    onTap: () => Promise<void>;
-    onRetake: () => Promise<void>;
+    onTap: () => Promise<any>;
+    onRetake: () => Promise<any>;
 }
 
 function PhotoCard({

@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Switch, Alert } from 'react-native';
 
 import { Stack, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaretRight } from 'phosphor-react-native';
 
@@ -21,12 +22,6 @@ import { useAggregatorStore } from '../../store/aggregatorStore';
 import { useAuthStore } from '../../store/authStore';
 
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
-
-// Mock fallbacks (replaced by backend data on Day 4)
-const MOCK_AGG_FULLNAME = 'Vijay Kumar';
-const MOCK_PHONE_DISPLAY = '+91 ••••• 78900';
-const MOCK_BUSINESS_TYPE = 'Shop-Based';
-const MOCK_LOCALITY = 'Banjara Hills';
 
 interface SettingToggleProps {
     title: string;
@@ -75,16 +70,29 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 
 export default function AggregatorSettingsScreen() {
     const router = useRouter();
-    const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus } = useAggregatorStore();
+    const { signOut: clerkSignOut } = useAuth();
+    const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus, fetchAggregatorProfile, profile } = useAggregatorStore();
     const phoneNumber = useAuthStore((s) => s.phoneNumber);
 
-    // Read from store with mock fallbacks (Day 4: store populated from backend)
-    const displayName = fullName || MOCK_AGG_FULLNAME;
+    const handleLogout = async () => {
+        try {
+            await clerkSignOut();
+        } catch {
+        }
+        useAuthStore.getState().clearSession();
+        router.replace('/(auth)/phone');
+    };
+
+        React.useEffect(() => {
+                void fetchAggregatorProfile();
+        }, [fetchAggregatorProfile]);
+
+        const displayName = profile?.businessName || fullName || 'Aggregator';
     const displayPhone = phoneNumber
       ? `+91 •••••${phoneNumber.slice(-5)}`
-      : MOCK_PHONE_DISPLAY;
-    const displayType = aggregatorType === 'shop' ? 'Shop-Based' : aggregatorType === 'mobile' ? 'Mobile' : MOCK_BUSINESS_TYPE;
-    const displayLocality = primaryArea || MOCK_LOCALITY;
+            : '+91 •••••';
+        const displayType = aggregatorType === 'shop' ? 'Shop-Based' : aggregatorType === 'mobile' ? 'Mobile' : 'Aggregator';
+        const displayLocality = profile?.operatingArea || primaryArea || 'Unknown Area';
 
     // States match the UI requirements
     const [autoOffline, setAutoOffline] = useState(true);
@@ -179,11 +187,15 @@ export default function AggregatorSettingsScreen() {
                 {/* DELETE ACCOUNT */}
                 <View style={[styles.card, { marginTop: spacing.lg }]}>
                     <SettingLink
+                        title="Log Out"
+                        isDestructive
+                        onPress={() => { void handleLogout(); }}
+                    />
+                    <SettingLink
                         title="Delete Account"
                         isDestructive
                         isLast
                         onPress={() => Alert.alert('Account deletion requested')}
-
                     />
                 </View>
 

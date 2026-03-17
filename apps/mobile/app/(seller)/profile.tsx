@@ -8,7 +8,7 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
-import { useOrderStore } from '../../store/orderStore';
+import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { useNotificationStore } from '../../store/notificationStore';
 
@@ -72,7 +72,7 @@ export default function SellerProfileScreen() {
 
   // Computed stats from real store data
   const completedOrders = orders.filter(o => o.status === 'completed');
-  const totalEarned = completedOrders.reduce((acc, o) => acc + (o.confirmedAmount || o.estimatedAmount || 0), 0);
+  const totalEarned = completedOrders.reduce((acc, o) => acc + getOrderDisplayAmount(o), 0);
   const totalPickups = completedOrders.length;
 
   const liveName = authStore.name || 'Sortt User';

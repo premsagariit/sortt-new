@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Alert } from 'react-native';
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
@@ -8,10 +9,12 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialChip } from '../../components/ui/MaterialChip';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
-import { MagnifyingGlass, Clock, Check, X, Lock } from 'phosphor-react-native';
+import { Clock, Check, X, Lock, Package } from 'phosphor-react-native';
 import { BaseCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { SkeletonLoader } from '../../components/ui/SkeletonLoader';
 
 type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
@@ -22,13 +25,19 @@ export default function AggregatorOrdersScreen() {
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
 
-  const loadOrders = () => {
-    fetchAggregatorOrders();
-  };
-
   useEffect(() => {
-    loadOrders();
+    fetchAggregatorOrders();
+    // Poll aggOrders silently every 30s — mirrors seller orders screen pattern
+    // fetchAggregatorOrders(true) never sets isLoading=true so no spinner flash
+    const poll = setInterval(() => fetchAggregatorOrders(true), 30_000);
+    return () => clearInterval(poll);
   }, [fetchAggregatorOrders]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void fetchAggregatorOrders(true);
+    }, [fetchAggregatorOrders])
+  );
 
   const getMaterialKey = (m: string | null) => m ? m.toLowerCase().replace('-', '') : null;
   const matKey = getMaterialKey(selectedMaterial);
@@ -52,7 +61,7 @@ export default function AggregatorOrdersScreen() {
       id: o.orderId || o.id,
       orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
       distance: '—',
-      price: o.confirmedAmount ?? o.estimatedAmount ?? (o.estimated_weights ? Object.values(o.estimated_weights as Record<string, number>).reduce((a, b) => a + b, 0) * 10 : 0),
+      price: Number(o.display_amount ?? o.displayAmount ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_value ?? o.estimatedAmount ?? 0),
       locality: o.pickupLocality ?? o.pickup_locality,
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
       materials: (o.materials || o.material_codes || []) as MaterialCode[],
@@ -72,6 +81,28 @@ export default function AggregatorOrdersScreen() {
 
   // Material filters (New + Active tabs only)
   const materialFilters = ['All', 'Metal', 'Plastic', 'Paper', 'E-Waste', 'Glass'];
+
+  const routeToExecutionStage = (order: ReturnType<typeof mapStoreOrder>) => {
+    if (!order?.id) return;
+
+    if (order.status === 'weighing_in_progress') {
+      router.push({
+        pathname: '/(aggregator)/execution/otp/[id]',
+        params: { id: order.id },
+      } as any);
+      return;
+    }
+
+    if (order.status === 'arrived') {
+      router.push(`/(aggregator)/execution/weighing/${order.id}` as any);
+      return;
+    }
+
+    router.push({
+      pathname: '/(aggregator)/execution/navigate',
+      params: { id: order.id },
+    } as any);
+  };
 
   const renderTabs = () => (
     <View style={styles.tabContainer}>
@@ -130,7 +161,7 @@ export default function AggregatorOrdersScreen() {
   // ── New order card ─────────────────────────────────────────────
   const renderNewOrderCard = (order: typeof newOrders[0]) => (
     <BaseCard key={order.id} style={styles.card}>
-      <Pressable onPress={() => router.push({ pathname: '/(aggregator)/order-detail', params: { id: order.id } })}>
+      <Pressable onPress={() => router.push({ pathname: '/(aggregator)/order/[id]', params: { id: order.id } } as any)}>
         <View style={[styles.cardTopBar, { backgroundColor: colors.red }]} />
         <View style={styles.cardContent}>
           <View style={styles.cardRow}>
@@ -218,8 +249,7 @@ export default function AggregatorOrdersScreen() {
       if (isHistorical) {
         router.push({ pathname: '/(aggregator)/order-history-detail', params: { id: order.id, status: order.status } });
       } else {
-        // Active orders → new dedicated active order detail page (no Accept/Reject)
-        router.push({ pathname: '/(aggregator)/active-order-detail', params: { id: order.id } });
+        routeToExecutionStage(order);
       }
     };
     return (
@@ -288,15 +318,17 @@ export default function AggregatorOrdersScreen() {
             {isActive && (
               <View style={styles.actionRow}>
                 <PrimaryButton
-                  label={order.status === 'arrived' ? 'Start Weighing' : order.status === 'en_route' ? 'Mark Arrived' : 'Navigate'}
+                  label={
+                    order.status === 'weighing_in_progress'
+                      ? 'Continue OTP'
+                      : order.status === 'arrived'
+                        ? 'Start Weighing'
+                        : order.status === 'en_route'
+                          ? 'Mark Arrived'
+                          : 'Navigate'
+                  }
                   style={styles.actionBtn}
-                  onPress={() => {
-                    if (order.status === 'arrived') {
-                      router.push(`/(aggregator)/execution/weighing/${order.id}` as any);
-                    } else {
-                      router.push({ pathname: '/(aggregator)/execution/navigate', params: { id: order.id } } as any);
-                    }
-                  }}
+                  onPress={() => routeToExecutionStage(order)}
                 />
                 <SecondaryButton
                   label="Cancel"
@@ -313,10 +345,11 @@ export default function AggregatorOrdersScreen() {
   };
 
   const renderEmptyState = (message: string) => (
-    <View style={styles.emptyContent}>
-      <MagnifyingGlass size={48} color={colors.border} weight="light" />
-      <Text variant="subheading" color={colors.muted} style={{ marginTop: spacing.md }}>{message}</Text>
-    </View>
+    <EmptyState
+      icon={<Package size={48} color={colors.muted} weight="thin" />}
+      heading={message}
+      body="Try again later or adjust filters."
+    />
   );
 
   return (
@@ -335,7 +368,7 @@ export default function AggregatorOrdersScreen() {
               {error}
             </Text>
             <Pressable 
-              onPress={isLoading ? undefined : loadOrders} 
+              onPress={isLoading ? undefined : () => fetchAggregatorOrders()} 
               disabled={isLoading}
               style={styles.retryButton}
             >
@@ -347,11 +380,8 @@ export default function AggregatorOrdersScreen() {
             </Pressable>
           </View>
         )}
-        {isLoading && !error ? (
-          <View style={{ alignItems: 'center', marginTop: 40 }}>
-            <ActivityIndicator size="large" color={colors.navy} />
-            <Text variant="caption" style={{ marginTop: 12 }}>Loading orders...</Text>
-          </View>
+        {isLoading && !error && newOrders.length === 0 && (aggOrders || []).length === 0 ? (
+          <SkeletonLoader variant="card" height={240} />
         ) : activeTab === 'new' ? (
           filteredNewOrders.length > 0
             ? filteredNewOrders.map(renderNewOrderCard)

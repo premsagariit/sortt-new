@@ -37,8 +37,7 @@ Sortt
 │   │   │   ├── (auth) # Consolidated authentication flow
 │   │   │   │   ├── _layout.tsx # Auth stack layout (Headerless)
 │   │   │   │   ├── onboarding.tsx # Universal 4-slide introduction carousel
-│   │   │   │   ├── phone.tsx # Mobile number entry with country code
-│   │   │   │   ├── otp.tsx # SMS/WhatsApp OTP verification
+│   │   │   │   ├── phone.tsx # Unified phone + OTP flow (login/signup mode tabs + 6-digit OTP entry)
 │   │   │   │   ├── user-type.tsx # Primary role fork: Seller vs. Scrap Dealer
 │   │   │   │   ├── aggregator # Scrap Dealer Onboarding Wizard
 │   │   │   │   │   ├── _layout.tsx # Aggregator stack

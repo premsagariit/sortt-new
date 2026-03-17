@@ -15,6 +15,8 @@ import axios from 'axios';
 import { UTApi } from 'uploadthing/server';
 import { createClerkClient } from '@clerk/backend';
 import { createNotification } from '../../lib/notifications';
+import { ablyRest } from '../../providers/ablyProvider';
+import { channelName } from '../../utils/channelHelper';
 
 // Multer for media uploads (5MB, images only)
 const upload = multer({
@@ -103,13 +105,31 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
         const newOrder = orderRes.rows[0];
         const orderId = newOrder.id;
 
+        let estimatedTotal = 0;
         for (const code of material_codes) {
-          const weight = estimated_weights[code] || 0;
+          const weight = Number(estimated_weights[code] || 0);
+          const rateRes = await client.query(
+            `SELECT rate_per_kg
+             FROM price_index
+             WHERE city_code = $1 AND material_code = $2
+             ORDER BY scraped_at DESC
+             LIMIT 1`,
+            [geo.cityCode, code]
+          );
+          const ratePerKg = Number(rateRes.rows[0]?.rate_per_kg || 0);
+          const lineAmount = weight * ratePerKg;
+          estimatedTotal += lineAmount;
+
           await client.query(`
-                 INSERT INTO order_items (order_id, material_code, estimated_weight_kg)
-                 VALUES ($1, $2, $3)
-               `, [orderId, code, weight]);
+                 INSERT INTO order_items (order_id, material_code, estimated_weight_kg, rate_per_kg, amount)
+                 VALUES ($1, $2, $3, $4, $5)
+               `, [orderId, code, weight, ratePerKg, lineAmount]);
         }
+
+        await client.query(
+          `UPDATE orders SET estimated_value = $1, updated_at = NOW() WHERE id = $2`,
+          [estimatedTotal, orderId]
+        );
 
           await client.query(`
               INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
@@ -172,7 +192,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       }
     });
 
-    return res.status(201).json({ order: buildOrderDto(order, userId) });
+    return res.status(201).json({ order: buildOrderDto(order, userId, req.user?.clerk_user_id) });
   } catch (error: any) {
     if (error.message === 'unsupported_city') {
       return res.status(422).json({ error: 'unsupported_city' });
@@ -201,7 +221,7 @@ router.get('/', async (req, res) => {
       const baseQuery = `
         SELECT o.*, 
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         WHERE o.aggregator_id = $1
@@ -226,7 +246,7 @@ router.get('/', async (req, res) => {
       const baseQuery = `
         SELECT o.*, 
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         WHERE o.seller_id = $1
@@ -255,7 +275,7 @@ router.get('/', async (req, res) => {
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].created_at : null;
 
     return res.json({
-      orders: rows.map(o => buildOrderDto(o, userId)),
+      orders: rows.map(o => buildOrderDto(o, userId, req.user?.clerk_user_id)),
       nextCursor,
       hasMore
     });
@@ -330,7 +350,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
 
     // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
     return res.json({
-      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId)),
+      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId, req.user?.clerk_user_id)),
       nextCursor: rows.length > 0 ? rows[rows.length - 1].created_at : null,
       hasMore
     });
@@ -391,62 +411,6 @@ router.post('/:id/media', upload.single('file'), async (req, res) => {
       [orderId, media_type, storageKey, userId]
     );
     const mediaId = mediaRes.rows[0].id;
-
-    // scale_photo: generate OTP + attempt WhatsApp send (non-fatal)
-    if (media_type === 'scale_photo') {
-      setImmediate(async () => {
-        try {
-          const otp = crypto.randomInt(100000, 999999).toString();
-          const hmacSecret = process.env.OTP_HMAC_SECRET!;
-          const hmac = crypto.createHmac('sha256', hmacSecret).update(otp).digest('hex');
-
-          if (redis) {
-            await redis.set(`otp:order:${orderId}`, hmac, { ex: 600 });
-            await redis.set(`otp:order_plain:${orderId}`, otp, { ex: 600 });
-          }
-
-          // [DEV ONLY] Always log the OTP to console so we can test without WhatsApp
-          if (process.env.NODE_ENV !== 'production') {
-            console.log(`\n\n[DEV OTP] ==========================================`);
-            console.log(`[DEV OTP] ORDER ID: ${orderId}`);
-            console.log(`[DEV OTP] CODE:     ${otp}`);
-            console.log(`[DEV OTP] ==========================================\n\n`);
-          }
-
-          // Fetch seller phone for WhatsApp send
-          const sellerRes = await query(
-            'SELECT phone_hash FROM users WHERE id = $1',
-            [order.seller_id]
-          );
-
-          // WhatsApp OTP send (non-fatal — token may be expired in dev)
-          const metaToken = process.env.META_WHATSAPP_TOKEN;
-          const phoneId = process.env.META_PHONE_NUMBER_ID;
-          if (metaToken && phoneId && sellerRes.rows[0]) {
-            await axios.post(
-              `https://graph.facebook.com/v18.0/${phoneId}/messages`,
-              {
-                messaging_product: 'whatsapp',
-                to: sellerRes.rows[0].phone_hash, // phone in production
-                type: 'template',
-                template: {
-                  name: process.env.META_OTP_TEMPLATE_NAME || 'order_otp',
-                  language: { code: 'en' },
-                  components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }]
-                }
-              },
-              { headers: { Authorization: `Bearer ${metaToken}` } }
-            ).catch((e: any) => {
-              console.warn('[OTP DEV] WhatsApp send failed (non-fatal):', e.message);
-            });
-          } else {
-            console.log('[OTP DEV] Skipping WhatsApp — token/phoneId missing or expired');
-          }
-        } catch (otpErr) {
-          console.error('[OTP] scale_photo OTP flow error (non-fatal):', otpErr);
-        }
-      });
-    }
 
     return res.status(201).json({ mediaId, mediaType: media_type });
   } catch (e: any) {
@@ -556,7 +520,18 @@ router.get('/:id', async (req, res) => {
              agg.name as aggregator_name,
              agg.display_phone as aggregator_display_phone,
              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-             jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights,
+             jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights,
+             COALESCE(
+               json_agg(
+                 DISTINCT jsonb_build_object(
+                   'material_code', oi.material_code,
+                   'weight_kg', COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg),
+                   'rate_per_kg', oi.rate_per_kg,
+                   'amount', COALESCE(oi.amount, 0)
+                 )
+               ) FILTER (WHERE oi.material_code IS NOT NULL),
+               '[]'
+             ) as line_items,
              (
                SELECT json_agg(h ORDER BY h.created_at ASC)
                FROM order_status_history h
@@ -572,16 +547,150 @@ router.get('/:id', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 
     const order = result.rows[0];
-    if (order.seller_id === userId && order.status === 'weighing_in_progress' && redis) {
+    // Fetch OTP from Redis for seller on all active post-accepted statuses
+    const OTP_VISIBLE_STATUSES = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'];
+    if (order.seller_id === userId && OTP_VISIBLE_STATUSES.includes(order.status) && redis) {
       const sellerOtp = await redis.get<string>(`otp:order_plain:${id}`);
       order.otp = sellerOtp ?? '';
     }
-    return res.json(buildOrderDto(order, userId));
+    return res.json(buildOrderDto(order, userId, req.user?.clerk_user_id));
 
   } catch (e) {
     console.error('GET /api/orders/:id error:', e);
     Sentry.captureException(e);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3e. POST /api/orders/:id/finalize-weighing
+// Persist confirmed weights + final order value; immutable after first finalization
+router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { id: orderId } = req.params;
+  const { line_items } = req.body as {
+    line_items?: Array<{ material_code: string; confirmed_weight_kg: number; rate_per_kg: number }>;
+  };
+
+  if (!Array.isArray(line_items) || line_items.length === 0) {
+    return res.status(400).json({ error: 'line_items is required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_user_id = '${userId}'`);
+
+    const orderRes = await client.query(
+      `SELECT id, status, aggregator_id, confirmed_value
+       FROM orders
+       WHERE id = $1
+       FOR UPDATE`,
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRes.rows[0];
+    if (order.aggregator_id !== userId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'not_assigned_aggregator' });
+    }
+
+    if (order.confirmed_value !== null && order.confirmed_value !== undefined) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'order_value_already_finalized' });
+    }
+
+    if (!['arrived', 'weighing_in_progress'].includes(order.status)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'invalid_order_status' });
+    }
+
+    let confirmedTotal = 0;
+    for (const item of line_items) {
+      const materialCode = String(item.material_code || '').trim();
+      const confirmedWeightKg = Number(item.confirmed_weight_kg || 0);
+      const ratePerKg = Number(item.rate_per_kg || 0);
+      if (!materialCode || confirmedWeightKg <= 0 || ratePerKg <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'invalid_line_item' });
+      }
+
+      const lineAmount = confirmedWeightKg * ratePerKg;
+      confirmedTotal += lineAmount;
+
+      const updateRes = await client.query(
+        `UPDATE order_items
+         SET confirmed_weight_kg = $1,
+             rate_per_kg = $2,
+             amount = $3
+         WHERE order_id = $4 AND material_code = $5`,
+        [confirmedWeightKg, ratePerKg, lineAmount, orderId, materialCode]
+      );
+
+      if (updateRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `unknown_material_code:${materialCode}` });
+      }
+    }
+
+    await client.query(
+      `UPDATE orders
+       SET confirmed_value = $1,
+           status = 'weighing_in_progress',
+           updated_at = NOW()
+       WHERE id = $2`,
+      [confirmedTotal, orderId]
+    );
+
+    await client.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
+       VALUES ($1, $2, 'weighing_in_progress', $3, 'Weighing finalized with confirmed values')`,
+      [orderId, order.status, userId]
+    );
+
+    await client.query('COMMIT');
+
+    const refreshed = await query(
+      `SELECT o.*,
+              u.name as seller_name,
+              u.display_phone as seller_display_phone,
+              agg.name as aggregator_name,
+              agg.display_phone as aggregator_display_phone,
+              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+              jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights,
+              COALESCE(
+                json_agg(
+                  DISTINCT jsonb_build_object(
+                    'material_code', oi.material_code,
+                    'weight_kg', COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg),
+                    'rate_per_kg', oi.rate_per_kg,
+                    'amount', COALESCE(oi.amount, 0)
+                  )
+                ) FILTER (WHERE oi.material_code IS NOT NULL),
+                '[]'
+              ) as line_items
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.seller_id
+       LEFT JOIN users agg ON agg.id = o.aggregator_id
+       LEFT JOIN order_items oi ON o.id = oi.order_id
+       WHERE o.id = $1
+       GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone`,
+      [orderId]
+    );
+
+    return res.status(200).json({ order: buildOrderDto(refreshed.rows[0], userId, req.user?.clerk_user_id) });
+  } catch (e: any) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/orders/:id/finalize-weighing error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 });
 
@@ -785,6 +894,9 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
 router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) => {
   const { orderId } = req.params;
   const aggregatorId = req.user!.id;
+  const aggregatorClerkUserId = req.user?.clerk_user_id;
+  let sellerId: string | null = null;
+  let sellerClerkUserId: string | null = null;
 
   const client = await pool.connect();
   try {
@@ -792,7 +904,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     await client.query(`SET LOCAL app.current_user_id = '${aggregatorId}'`);
 
     const lockResult = await client.query(
-      `SELECT id FROM orders WHERE id = $1 AND status = 'created' FOR UPDATE SKIP LOCKED`,
+      `SELECT id, seller_id FROM orders WHERE id = $1 AND status = 'created' FOR UPDATE SKIP LOCKED`,
       [orderId]
     );
 
@@ -800,6 +912,18 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'order_already_taken' });
     }
+
+    sellerId = lockResult.rows[0].seller_id;
+
+    // WARN 1 + BLOCK: Fetch both seller and aggregator phones BEFORE COMMIT to prevent race condition
+    // Fetch seller's clerk_user_id
+    const sellerUserRes = await client.query(
+      `SELECT clerk_user_id FROM users WHERE id = $1`,
+      [sellerId]
+    );
+    sellerClerkUserId = sellerUserRes.rows[0]?.clerk_user_id ?? null;
+
+    // Fetch aggregator's clerk_user_id (already have it from req.user)
 
     await client.query(
       `UPDATE orders SET status = 'accepted', aggregator_id = $1, updated_at = NOW() WHERE id = $2`,
@@ -813,12 +937,94 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     );
 
     await client.query('COMMIT');
-    // TODO Day 13: publish Ably event — order:{orderId} channel, status_updated
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release(); // ALWAYS — prevents pool exhaustion
+  }
+
+  // Publish order status update to Ably (both seller and aggregator channels)
+  setImmediate(async () => {
+    try {
+      if (ablyRest && sellerId) {
+        const sellerChannel = channelName(sellerId, 'order', orderId);
+        const aggChannel = channelName(aggregatorId, 'order', orderId);
+        
+        const statusPayload = {
+          orderId,
+          newStatus: 'accepted',
+          aggregator_id: aggregatorId,
+          timestamp: new Date().toISOString()
+        };
+        
+        ablyRest.channels.get(sellerChannel).publish('status_updated', statusPayload).catch(e => {
+          console.error(`[Ably] Failed to publish to seller ${sellerId} order channel:`, e);
+        });
+        
+        ablyRest.channels.get(aggChannel).publish('status_updated', statusPayload).catch(e => {
+          console.error(`[Ably] Failed to publish to aggregator ${aggregatorId} order channel:`, e);
+        });
+      }
+    } catch (err) {
+      console.error('[Ably] Accept status publish error:', err);
+    }
+  });
+
+  // WARN 1 + BLOCK: Phone fetch for BOTH parties happens synchronously after COMMIT (no race condition)
+  // but outside transaction context (allows non-RLS display_phone updates)
+  try {
+    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+    if (!clerkSecretKey) {
+      console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller/aggregator phones');
+    } else {
+      const clerk = createClerkClient({ secretKey: clerkSecretKey });
+
+      // Fetch and cache seller phone (non-fatal)
+      if (sellerClerkUserId && sellerId) {
+        try {
+          const sellerClerkUser = await clerk.users.getUser(sellerClerkUserId);
+          const sellerPhoneObj = sellerClerkUser.phoneNumbers.find(
+            p => p.id === sellerClerkUser.primaryPhoneNumberId
+          );
+          const sellerPhone = sellerPhoneObj?.phoneNumber ?? null;
+
+          if (sellerPhone) {
+            await query('UPDATE users SET display_phone = $1 WHERE id = $2', [sellerPhone, sellerId]);
+            console.log(`[SP1] Cached seller phone for order ${orderId}`);
+          } else {
+            console.log(`[SP1] Seller has no phone on file for order ${orderId}`);
+          }
+        } catch (err) {
+          console.error('[SP1] Failed to fetch seller phone from Clerk — non-fatal:', err);
+          // Don't throw; keep going for aggregator
+        }
+      }
+
+      // Fetch and cache aggregator phone (non-fatal, BLOCK revision)
+      if (aggregatorClerkUserId) {
+        try {
+          const aggregatorClerkUser = await clerk.users.getUser(aggregatorClerkUserId);
+          const aggregatorPhoneObj = aggregatorClerkUser.phoneNumbers.find(
+            p => p.id === aggregatorClerkUser.primaryPhoneNumberId
+          );
+          const aggregatorPhone = aggregatorPhoneObj?.phoneNumber ?? null;
+
+          if (aggregatorPhone) {
+            await query('UPDATE users SET display_phone = $1 WHERE id = $2', [aggregatorPhone, aggregatorId]);
+            console.log(`[SP1] Cached aggregator phone for order ${orderId}`);
+          } else {
+            console.log(`[SP1] Aggregator has no phone on file for order ${orderId}`);
+          }
+        } catch (err) {
+          console.error('[SP1] Failed to fetch aggregator phone from Clerk — non-fatal:', err);
+          // Don't throw; accept response still goes through
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[SP1] Phone caching error — non-fatal:', err);
+    Sentry.captureException(err);
   }
 
   // Notification (identical pattern to PATCH handler)
@@ -833,36 +1039,55 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     }
   });
 
-  // SP1: Cache seller phone — IDENTICAL block to PATCH handler
+  // OTP gen on acceptance — seller sees the code from the moment the order is accepted.
+  // TTL 24h covers the full pickup lifecycle (navigate → arrive → weigh → verify).
   setImmediate(async () => {
     try {
-      const sellerRes = await query(
-        'SELECT seller_id, display_phone FROM orders o JOIN users u ON u.id = o.seller_id WHERE o.id = $1',
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const hmacSecret = process.env.OTP_HMAC_SECRET!;
+      const hmac = crypto.createHmac('sha256', hmacSecret).update(otp).digest('hex');
+
+      if (redis) {
+        await redis.set(`otp:order:${orderId}`, hmac, { ex: 86400 });       // 24 h
+        await redis.set(`otp:order_plain:${orderId}`, otp, { ex: 86400 });
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`\n\n[DEV OTP] ==========================================`);
+        console.log(`[DEV OTP] ORDER ID: ${orderId}`);
+        console.log(`[DEV OTP] CODE:     ${otp}`);
+        console.log(`[DEV OTP] ==========================================\n\n`);
+      }
+
+      // WhatsApp notification to seller with OTP (non-fatal)
+      const sellerPhoneRes = await query(
+        'SELECT phone_hash FROM users WHERE id = (SELECT seller_id FROM orders WHERE id = $1)',
         [orderId]
       );
-      if (!sellerRes.rows[0]) return;
-      const { seller_id, display_phone } = sellerRes.rows[0];
-      if (display_phone) return;
-
-      const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-      if (!clerkSecretKey) {
-        console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller phone');
-        return;
+      const metaToken = process.env.META_WHATSAPP_TOKEN;
+      const phoneId = process.env.META_PHONE_NUMBER_ID;
+      if (metaToken && phoneId && sellerPhoneRes.rows[0]) {
+        await axios.post(
+          `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: sellerPhoneRes.rows[0].phone_hash,
+            type: 'template',
+            template: {
+              name: process.env.META_OTP_TEMPLATE_NAME || 'order_otp',
+              language: { code: 'en' },
+              components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }]
+            }
+          },
+          { headers: { Authorization: `Bearer ${metaToken}` } }
+        ).catch((e: any) => {
+          console.warn('[OTP] WhatsApp send failed (non-fatal):', e.message);
+        });
+      } else {
+        console.log('[OTP] Skipping WhatsApp — token/phoneId missing or expired');
       }
-      const userRes = await query('SELECT clerk_user_id FROM users WHERE id = $1', [seller_id]);
-      if (!userRes.rows[0]?.clerk_user_id) return;
-      
-      const clerk = createClerkClient({ secretKey: clerkSecretKey });
-      const clerkUser = await clerk.users.getUser(userRes.rows[0].clerk_user_id);
-      const phoneObj = clerkUser.phoneNumbers.find(p => p.id === clerkUser.primaryPhoneNumberId);
-      const phoneNumber = phoneObj?.phoneNumber ?? null;
-      if (phoneNumber) {
-        await query('UPDATE users SET display_phone = $1 WHERE id = $2', [phoneNumber, seller_id]);
-        console.log(`[SP1] Cached seller phone for order ${orderId}`);
-      }
-    } catch (err) {
-      console.error('[SP1] Failed to cache seller phone — non-fatal:', err);
-      Sentry.captureException(err);
+    } catch (otpErr) {
+      console.error('[OTP] accept OTP gen error (non-fatal):', otpErr);
     }
   });
 
@@ -872,7 +1097,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
            u.name as seller_name, u.display_phone as seller_display_phone,
            agg.name as aggregator_name, agg.display_phone as aggregator_display_phone,
            COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-           jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
+           jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights
     FROM orders o
     LEFT JOIN users u ON u.id = o.seller_id
     LEFT JOIN users agg ON agg.id = o.aggregator_id
@@ -881,7 +1106,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
   `, [orderId]);
 
-  return res.status(200).json({ order: buildOrderDto(orderRes.rows[0], aggregatorId) });
+  return res.status(200).json({ order: buildOrderDto(orderRes.rows[0], aggregatorId, req.user?.clerk_user_id) });
 });
 
 // 7. POST /api/orders/:orderId/verify-otp
@@ -907,7 +1132,7 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     await client.query(`SET LOCAL app.current_user_id = '${aggregatorId}'`);
 
     const lockRes = await client.query(
-      'SELECT aggregator_id, status FROM orders WHERE id = $1 FOR UPDATE',
+      'SELECT aggregator_id, status, confirmed_value FROM orders WHERE id = $1 FOR UPDATE',
       [orderId]
     );
     if (lockRes.rows.length === 0) {
@@ -916,6 +1141,11 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     }
 
     const order = lockRes.rows[0];
+
+    if (order.confirmed_value === null || order.confirmed_value === undefined) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'order_value_not_finalized' });
+    }
 
     // V8: only the assigned aggregator can verify OTP
     if (order.aggregator_id !== aggregatorId) {
@@ -960,7 +1190,6 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     );
 
     await client.query('COMMIT');
-    // TODO Day 13: publish Ably event — order:{orderId} channel, status_updated
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -972,6 +1201,37 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
       await redis.del('otp:order_plain:' + orderId);
     }
   }
+
+  // Publish order completion status update to Ably (both seller and aggregator channels)
+  setImmediate(async () => {
+    try {
+      const orderRes = await query(
+        'SELECT seller_id FROM orders WHERE id = $1',
+        [orderId]
+      );
+      if (orderRes.rows[0] && ablyRest) {
+        const sellerId = orderRes.rows[0].seller_id;
+        const sellerChannel = channelName(sellerId, 'order', orderId);
+        const aggChannel = channelName(aggregatorId, 'order', orderId);
+        
+        const statusPayload = {
+          orderId,
+          newStatus: 'completed',
+          timestamp: new Date().toISOString()
+        };
+        
+        ablyRest.channels.get(sellerChannel).publish('status_updated', statusPayload).catch(e => {
+          console.error(`[Ably] Failed to publish to seller order channel:`, e);
+        });
+        
+        ablyRest.channels.get(aggChannel).publish('status_updated', statusPayload).catch(e => {
+          console.error(`[Ably] Failed to publish to aggregator order channel:`, e);
+        });
+      }
+    } catch (err) {
+      console.error('[Ably] Verify-OTP status publish error:', err);
+    }
+  });
 
   // Non-blocking invoice generation placeholder
   setImmediate(() => {

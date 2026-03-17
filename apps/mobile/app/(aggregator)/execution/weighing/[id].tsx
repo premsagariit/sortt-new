@@ -25,32 +25,14 @@ import { MaterialCode } from '../../../../components/ui/Card';
 import { usePhotoCapture } from '../../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../../utils/navigation';
 
-const MOCK_ORDER_MATERIALS: Record<string, { code: MaterialCode; label: string; rate: number }[]> = {
-    'ORD-2841': [
-        { code: 'metal', label: 'Iron (Heavy)', rate: 27 },
-        { code: 'paper', label: 'Newspaper', rate: 9 },
-    ],
-    'ORD-1001': [
-        { code: 'paper', label: 'Cardboard', rate: 7 },
-    ],
-    'ORD-7777': [
-        { code: 'paper', label: 'Newspaper', rate: 10 },
-        { code: 'plastic', label: 'PET Bottles', rate: 12 },
-    ],
-    'ORD-24091': [
-        { code: 'metal', label: 'Iron (Heavy)', rate: 25 },
-        { code: 'plastic', label: 'Mixed Plastic', rate: 12 },
-    ],
-};
-
-const MATERIAL_MAP: Record<MaterialCode, { label: string; rate: number }> = {
-    metal: { label: 'Metal / Iron', rate: 25 },
-    plastic: { label: 'Plastic (PET)', rate: 12 },
-    paper: { label: 'Paper / Cardboard', rate: 10 },
-    ewaste: { label: 'E-Waste', rate: 50 },
-    glass: { label: 'Glass Bottles', rate: 5 },
-    fabric: { label: 'Fabric / Textiles', rate: 8 },
-    custom: { label: 'Other Item', rate: 0 },
+const MATERIAL_MAP: Record<MaterialCode, { label: string }> = {
+    metal: { label: 'Metal / Iron' },
+    plastic: { label: 'Plastic (PET)' },
+    paper: { label: 'Paper / Cardboard' },
+    ewaste: { label: 'E-Waste' },
+    glass: { label: 'Glass Bottles' },
+    fabric: { label: 'Fabric / Textiles' },
+    custom: { label: 'Other Item' },
 };
 
 export default function WeighingScreen() {
@@ -58,20 +40,33 @@ export default function WeighingScreen() {
     const router = useRouter();
     const { orders } = useOrderStore();
     const order = orders.find(o => o.orderId === id);
-
-    const materials = order
-        ? order.materials.map(m => ({
-            code: m,
-            label: MATERIAL_MAP[m]?.label || m.toUpperCase(),
-            rate: MATERIAL_MAP[m]?.rate || 10,
-        }))
-        : (id && MOCK_ORDER_MATERIALS[id] ? MOCK_ORDER_MATERIALS[id] : []);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [weights, setWeights] = useState<Record<string, string>>({});
 
     // usePhotoCapture is the ONLY place camera is launched — never inline in screens
-    const { photoUri, pickPhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
-    const { scalePhotoUri, setScalePhotoUri } = useAggregatorStore();
+    const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
+    const {
+        scalePhotoUri,
+        setScalePhotoUri,
+        uploadOrderMediaApi,
+        finalizeWeighingApi,
+        materialRates,
+        materials: materialConfig,
+        setExecutionDraft,
+    } = useAggregatorStore();
+
+    const materials = (order?.materialCodes ?? order?.materials ?? []).map((code) => {
+        const fromRates = materialRates.find((rate) => rate.material_code === code)?.rate_per_kg;
+        const fromConfig = materialConfig.find((material) => material.id === code)?.ratePerKg;
+        return {
+            code,
+            label: MATERIAL_MAP[code as MaterialCode]?.label || String(code).toUpperCase(),
+            rate: Number(fromRates ?? fromConfig ?? 0),
+            estimatedWeight: Number(order?.estimatedWeights?.[code] ?? 0),
+        };
+    });
 
     // Sync hook URI into aggregatorStore whenever a new photo is captured
     useEffect(() => {
@@ -87,7 +82,7 @@ export default function WeighingScreen() {
     const handleRetake = async () => {
         resetPhoto();
         setScalePhotoUri(null);
-        await pickPhoto();
+        await capturePhoto();
     };
 
     const calculateTotal = () =>
@@ -103,12 +98,54 @@ export default function WeighingScreen() {
     // CTA disabled state reads from STORE (scalePhotoUri), not local state — per hard rules
     const canSubmit = allWeightsEntered && scalePhotoUri !== null;
 
-    const handleNext = () => {
+    const handleNext = async () => {
+        if (!id || !scalePhotoUri) {
+            return;
+        }
+
         const total = calculateTotal();
-        router.push({
-            pathname: '/(aggregator)/execution/otp/[id]' as any,
-            params: { id, amount: total.toString() },
-        });
+
+        setIsSubmitting(true);
+        setErrorMsg(null);
+
+        try {
+            await uploadOrderMediaApi(id, scalePhotoUri, 'scale_photo');
+
+            const lineItems = materials.map((mat, idx) => {
+                const key = `${mat.code}-${idx}`;
+                const weight = parseFloat(weights[key] || '0');
+                return {
+                    materialCode: mat.code,
+                    label: mat.label,
+                    weightKg: weight,
+                    ratePerKg: mat.rate,
+                    amount: weight * mat.rate,
+                };
+            });
+
+            await finalizeWeighingApi(id, lineItems.map((item) => ({
+                materialCode: item.materialCode,
+                weightKg: item.weightKg,
+                ratePerKg: item.ratePerKg,
+            })));
+
+            setExecutionDraft(id, {
+                lineItems,
+                totalAmount: total,
+                totalWeight: lineItems.reduce((sum, item) => sum + item.weightKg, 0),
+                capturedAt: new Date().toISOString(),
+            });
+
+            router.push({
+                pathname: '/(aggregator)/execution/otp/[id]' as any,
+                params: { id },
+            });
+        } catch (err: any) {
+            console.error('Failed to submit weighing step:', err);
+            setErrorMsg(err?.response?.data?.error ?? err?.message ?? 'Failed to upload scale photo');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -150,7 +187,7 @@ export default function WeighingScreen() {
                                             value={weights[key] || ''}
                                             onChangeText={(v) => setWeights(prev => ({ ...prev, [key]: v }))}
                                             keyboardType="numeric"
-                                            placeholder="0.0"
+                                            placeholder={mat.estimatedWeight > 0 ? String(mat.estimatedWeight) : '0.0'}
                                             placeholderTextColor={colors.muted}
                                         />
                                         <Text variant="caption" style={styles.unitSuffix}>kg</Text>
@@ -184,7 +221,7 @@ export default function WeighingScreen() {
                     {!scalePhotoUri ? (
                         <Pressable
                             style={styles.photoBoxEmpty}
-                            onPress={pickPhoto}
+                            onPress={capturePhoto}
                             disabled={isLoading}
                         >
                             {isLoading
@@ -221,6 +258,12 @@ export default function WeighingScreen() {
                         ₹{calculateTotal().toFixed(0)}
                     </Numeric>
                 </View>
+
+                {errorMsg && (
+                    <Text variant="caption" color={colors.red} style={styles.errorText}>
+                        {errorMsg}
+                    </Text>
+                )}
             </ScrollView>
 
             <View style={styles.footer}>
@@ -228,6 +271,7 @@ export default function WeighingScreen() {
                     label="Upload Scale Photo & Send OTP →"
                     onPress={handleNext}
                     disabled={!canSubmit}
+                    loading={isSubmitting}
                 />
             </View>
         </KeyboardAvoidingView>
@@ -367,6 +411,10 @@ const styles = StyleSheet.create({
     totalAmount: {
         marginTop: spacing.xs,
         fontFamily: 'DMMono-Bold',
+    },
+    errorText: {
+        marginTop: spacing.md,
+        textAlign: 'center',
     },
     footer: {
         padding: spacing.md,

@@ -67,15 +67,38 @@ export default function AggregatorProfileScreen() {
   const router = useRouter();
   const authStore = useAuthStore();
   const { fetchMe, name, locality } = authStore;
+  const {
+    fetchAggregatorProfile,
+    fetchAggregatorOrders,
+    profile,
+    weeklySchedule,
+    operatingAreas,
+    aggOrders,
+  } = useAggregatorStore();
   const [heroHeight, setHeroHeight] = useState(300);
   const unreadNotificationsCount = useNotificationStore(s => s.unreadCount);
 
   React.useEffect(() => {
     fetchMe();
-  }, [fetchMe]);
+    void fetchAggregatorProfile();
+    void fetchAggregatorOrders(true);
+  }, [fetchMe, fetchAggregatorProfile, fetchAggregatorOrders]);
 
-  const displayName = name || 'Aggregator';
-  const displayLocality = locality || 'Unknown Area';
+  const displayName = profile?.businessName || name || 'Aggregator';
+  const displayLocality = profile?.operatingArea || locality || 'Unknown Area';
+
+  const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').length;
+  const cancelledOrders = (aggOrders || []).filter((o: any) => o.status === 'cancelled').length;
+  const ratings = (aggOrders || []).map((o: any) => Number(o.rating)).filter((r: number) => Number.isFinite(r) && r > 0);
+  const avgRating = ratings.length > 0 ? (ratings.reduce((sum: number, r: number) => sum + r, 0) / ratings.length).toFixed(1) : '0.0';
+  const completionRate = completedOrders + cancelledOrders > 0
+    ? `${Math.round((completedOrders / (completedOrders + cancelledOrders)) * 100)}%`
+    : '0%';
+
+  const openDays = (weeklySchedule || []).filter((d) => d.isOpen).length;
+  const hoursSubtitle = openDays > 0 ? `${openDays} days configured` : 'Schedule not set';
+  const areasSubtitle = operatingAreas.length > 0 ? `${operatingAreas.length} areas active` : 'No areas configured';
+  const kycSubtitle = profile?.kycStatus ? `Status: ${profile.kycStatus}` : 'KYC status unavailable';
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -162,7 +185,7 @@ export default function AggregatorProfileScreen() {
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Pickups</Text>
                 <Numeric size={20} color={colors.surface}>
-                  142
+                  {completedOrders}
                 </Numeric>
               </View>
               <View style={styles.statDivider} />
@@ -170,13 +193,13 @@ export default function AggregatorProfileScreen() {
                 <Text variant="caption" style={styles.statLabelHero}>Rating</Text>
                 <View style={styles.ratingBox}>
                   <Star size={16} color="#FFD700" weight="fill" />
-                  <Numeric size={20} color={colors.surface}>4.8</Numeric>
+                  <Numeric size={20} color={colors.surface}>{avgRating}</Numeric>
                 </View>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Completion</Text>
-                <Numeric size={20} color={colors.surface}>98%</Numeric>
+                <Numeric size={20} color={colors.surface}>{completionRate}</Numeric>
               </View>
             </View>
 
@@ -218,17 +241,17 @@ export default function AggregatorProfileScreen() {
             onPress={() => router.push('/(aggregator)/profile/order-summary')}
           />
           <MenuItem
-            icon={<MapPin size={22} color={colors.navy} />} title="Operating Areas" subtitle="5 areas active"
+            icon={<MapPin size={22} color={colors.navy} />} title="Operating Areas" subtitle={areasSubtitle}
             onPress={() => router.push('/(aggregator)/profile/operating-areas')}
           />
           <MenuItem
-            icon={<Clock size={22} color={colors.navy} />} title="Hours & Availability" subtitle="Mon–Sat · 8 AM–7 PM"
+            icon={<Clock size={22} color={colors.navy} />} title="Hours & Availability" subtitle={hoursSubtitle}
             onPress={() => router.push('/(aggregator)/profile/hours-availability')}
           />
           <MenuItem
-            icon={<IdentificationCard size={22} color={colors.navy} />} title="KYC Documents" subtitle="Aadhaar + Shop photo — Verified"
+            icon={<IdentificationCard size={22} color={colors.navy} />} title="KYC Documents" subtitle={kycSubtitle}
             onPress={() => router.push('/(aggregator)/profile/kyc-documents')}
-            hasVerifiedBadge
+            hasVerifiedBadge={profile?.kycStatus === 'verified'}
           />
           <MenuItem
             icon={<User size={22} color={colors.navy} />} title="Account Settings" subtitle="Personal & secure login"

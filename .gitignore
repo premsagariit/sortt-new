@@ -47,3 +47,7 @@ backend/.env
 apps/mobile/.env
 
 sql.md
+
+backend/uploads/
+
+r.txt

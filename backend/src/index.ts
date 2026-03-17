@@ -18,6 +18,7 @@ import messagesRouter from './routes/messages';
 import ratingsRouter from './routes/ratings';
 import disputesRouter from './routes/disputes';
 import notificationsRouter from './routes/notifications';
+import realtimeRouter from './routes/realtime';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/messages', messagesRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/realtime', realtimeRouter);
 
 app.use(errorHandler);
 

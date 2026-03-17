@@ -2,38 +2,51 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Warning, Robot } from 'phosphor-react-native';
+import { Warning, Robot, TrendUp, TrendDown } from 'phosphor-react-native';
 
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { safeBack } from '../../utils/navigation';
+import { api } from '../../lib/api';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 type PriceIndexItem = {
     id: string;
     label: string;
     subLabel: string;
-    priceRange: string;
+    price: number;
     trend: 'up' | 'down' | 'stable';
     trendText: string;
     icon: string;
     bg: string;
 };
 
-const PRICE_DATA: PriceIndexItem[] = [
-    { id: '1', label: 'Metal (Iron)', subLabel: 'Ferrous scrap', priceRange: '₹26–30/kg', trend: 'up', trendText: '▲ trending up', icon: '⚙️', bg: '#F3F4F6' },
-    { id: '2', label: 'Metal (Copper)', subLabel: 'Wire, pipes', priceRange: '₹460–500/kg', trend: 'up', trendText: '▲ up ₹12', icon: '🔩', bg: '#F3F4F6' },
-    { id: '3', label: 'Aluminium', subLabel: 'Cans, sheets', priceRange: '₹80–100/kg', trend: 'stable', trendText: '— stable', icon: '🪨', bg: '#F3F4F6' },
-    { id: '4', label: 'Paper', subLabel: 'Newspaper, office', priceRange: '₹10–14/kg', trend: 'stable', trendText: '— stable', icon: '📄', bg: '#FEF3E2' },
-    { id: '5', label: 'Cardboard', subLabel: 'Corrugated boxes', priceRange: '₹6–10/kg', trend: 'stable', trendText: '— stable', icon: '📦', bg: '#FEF3E2' },
-    { id: '6', label: 'Plastic (PET)', subLabel: 'Bottles, clear', priceRange: '₹7–9/kg', trend: 'down', trendText: '▼ down ₹0.2', icon: '🧴', bg: '#EEF4FC' },
-    { id: '7', label: 'E-Waste', subLabel: 'Electronics, cables', priceRange: '₹55–70/kg', trend: 'up', trendText: '▲ up ₹3', icon: '💻', bg: '#EAF5F4' },
-    { id: '8', label: 'Fabric / Clothes', subLabel: '', priceRange: '₹4–8/kg', trend: 'stable', trendText: '— stable', icon: '👗', bg: '#F5F3FF' },
-    { id: '9', label: 'Glass', subLabel: '', priceRange: '₹1–3/kg', trend: 'stable', trendText: '— stable', icon: '🫙', bg: '#EFF6FF' },
-];
-
 export default function PriceIndexScreen() {
     const router = useRouter();
+    const [priceData, setPriceData] = React.useState<PriceIndexItem[]>([]);
+
+    React.useEffect(() => {
+        const loadRates = async () => {
+            try {
+                const res = await api.get('/api/rates');
+                const mapped: PriceIndexItem[] = (res.data?.rates ?? []).map((rate: any, index: number) => ({
+                    id: String(rate.id ?? rate.material_code ?? index),
+                    label: String(rate.material_code ?? 'material').toUpperCase(),
+                    subLabel: 'Live market rate',
+                    price: Number(rate.rate_per_kg ?? 0),
+                    trend: 'stable',
+                    trendText: 'Live',
+                    icon: '♻️',
+                    bg: '#F3F4F6',
+                }));
+                setPriceData(mapped);
+            } catch {
+                setPriceData([]);
+            }
+        };
+        void loadRates();
+    }, []);
 
     const getTrendColor = (trend: 'up' | 'down' | 'stable') => {
         switch (trend) {
@@ -73,12 +86,20 @@ export default function PriceIndexScreen() {
                 </View>
 
                 <View style={styles.listContainer}>
-                    {PRICE_DATA.map((item, index) => (
+                    {priceData.length === 0 ? (
+                        <View style={{ paddingVertical: spacing.xl }}>
+                            <EmptyState
+                              icon={<TrendDown size={48} color={colors.muted} weight="thin" />}
+                              heading="No rate data available"
+                              body="Unable to load live rate index right now."
+                            />
+                        </View>
+                    ) : priceData.map((item, index) => (
                         <View
                             key={item.id}
                             style={[
                                 styles.row,
-                                index === PRICE_DATA.length - 1 && { borderBottomWidth: 0 }
+                                index === priceData.length - 1 && { borderBottomWidth: 0 }
                             ]}
                         >
                             <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
@@ -93,7 +114,7 @@ export default function PriceIndexScreen() {
                             </View>
 
                             <View style={styles.priceWrap}>
-                                <Numeric size={13} style={styles.priceRange}>{item.priceRange}</Numeric>
+                                <Numeric size={13} style={styles.priceRange}>₹{item.price}/kg</Numeric>
                                 <Text
                                     variant="caption"
                                     style={[styles.trendText, { color: getTrendColor(item.trend) }]}

@@ -15,7 +15,7 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,9 +26,8 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, ShieldCheck, Info } from 'phosphor-react-native';
+import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { CheckCircle, ShieldCheck, Info, ArrowRight, Copy, Scales } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
@@ -36,6 +35,7 @@ import { NavBar } from '../../../../components/ui/NavBar';
 import { PrimaryButton } from '../../../../components/ui/Button';
 import { useOrderStore } from '../../../../store/orderStore';
 import { useAggregatorStore } from '../../../../store/aggregatorStore';
+import { EmptyState } from '../../../../components/ui/EmptyState';
 
 // ── Types ──────────────────────────────────────────────────────────
 type WeightEntry = {
@@ -43,15 +43,6 @@ type WeightEntry = {
   materialKey: string;
   weightKg: number;
   ratePerKg: number;
-};
-
-// ── Mock data for fallback ─────────────────────────────────────────
-const MOCK_WEIGHTS: Record<string, WeightEntry[]> = {
-  'ORD-2841': [
-    { material: 'Paper', materialKey: 'paper', weightKg: 12.5, ratePerKg: 10 },
-    { material: 'Metal', materialKey: 'metal', weightKg: 6.0, ratePerKg: 28 },
-    { material: 'Plastic', materialKey: 'plastic', weightKg: 3.0, ratePerKg: 12 },
-  ],
 };
 
 const MATERIAL_COLORS: Record<string, string> = {
@@ -64,22 +55,52 @@ const MATERIAL_COLORS: Record<string, string> = {
 };
 
 export default function AggregatorOtpScreen() {
-  const { id, amount } = useLocalSearchParams<{ id: string; amount: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [otp, setOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const { orders } = useOrderStore();
-  const { verifyOtpApi } = useAggregatorStore();
+  const { orders, fetchOrder } = useOrderStore();
+  const { verifyOtpApi, executionDraftByOrderId } = useAggregatorStore();
+  const otpInputRef = useRef<TextInput>(null);
+  const OTP_LENGTH = 6;
 
   const order = orders.find(o => o.orderId === id);
-  const weightData = id ? MOCK_WEIGHTS[id] : [];
-  
-  // Use the amount passed from weighing screen, or calculate from mock
-  const totalAmount = amount ? parseFloat(amount) : weightData.reduce((s, i) => s + i.weightKg * i.ratePerKg, 0);
+  const draft = id ? executionDraftByOrderId[id] : undefined;
+
+  useEffect(() => {
+    if (id && !order) {
+      void fetchOrder(id, true);
+    }
+  }, [id, order, fetchOrder]);
+
+  const weightData: WeightEntry[] = draft
+    ? draft.lineItems.map((item) => ({
+        material: item.label,
+        materialKey: item.materialCode,
+        weightKg: item.weightKg,
+        ratePerKg: item.ratePerKg,
+      }))
+    : Array.isArray(order?.lineItems) && order!.lineItems!.length > 0
+      ? order!.lineItems!.map((item) => ({
+          material: item.materialCode.charAt(0).toUpperCase() + item.materialCode.slice(1),
+          materialKey: item.materialCode,
+          weightKg: Number(item.weightKg ?? 0),
+          ratePerKg: Number(item.ratePerKg ?? 0),
+        }))
+      : Object.entries(order?.estimatedWeights ?? {}).map(([materialCode, weight]) => ({
+          material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
+          materialKey: materialCode,
+          weightKg: Number(weight ?? 0),
+          ratePerKg: 0,
+        }));
+
+  const totalAmount = draft
+    ? draft.totalAmount
+    : Number(order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedAmount ?? 0);
 
   const handleVerify = async () => {
-    if (otp.length < 4) return;
+    if (otp.length < OTP_LENGTH) return;
     
     setIsVerifying(true);
     setErrorMsg(null);
@@ -92,7 +113,7 @@ export default function AggregatorOtpScreen() {
       // We use router.replace so they can't go "back" to the OTP screen
       router.replace({
         pathname: '/(aggregator)/execution/receipt/[id]' as any,
-        params: { id, amount: totalAmount.toString() }
+        params: { id }
       });
     } catch (err: any) {
       console.error('OTP Verification failed:', err);
@@ -103,26 +124,26 @@ export default function AggregatorOtpScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Stack.Screen options={{ headerShown: false }} />
       <NavBar
         title="Payment Confirmation"
         onBack={() => router.back()}
       />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
           {/* ── Transaction Guard Info ────────────────────── */}
           <View style={styles.guardBanner}>
             <ShieldCheck size={20} color={colors.teal} weight="fill" />
             <Text variant="caption" color={colors.slate} style={{ flex: 1 }}>
-              Enter the OTP provided by the seller to authorize payment and complete pickup.
+              Enter the 6-digit OTP provided by the seller to authorize payment and complete pickup.
             </Text>
           </View>
 
@@ -131,6 +152,13 @@ export default function AggregatorOtpScreen() {
             Pickup Breakdown
           </Text>
 
+          {weightData.length === 0 ? (
+            <EmptyState
+              icon={<Scales size={48} color={colors.muted} weight="thin" />}
+              heading="Pickup details unavailable"
+              body="Weighing data is not available for this order yet."
+            />
+          ) : (
           <View style={styles.summaryTable}>
             {weightData.map((item) => (
               <View key={item.materialKey} style={styles.summaryRow}>
@@ -162,6 +190,7 @@ export default function AggregatorOtpScreen() {
               </Numeric>
             </View>
           </View>
+          )}
 
           {/* ── OTP Entry Area ─────────────────────────────── */}
           <View style={styles.otpSection}>
@@ -169,20 +198,41 @@ export default function AggregatorOtpScreen() {
               Seller OTP
             </Text>
             <View style={styles.otpInputContainer}>
+              <Pressable 
+                style={styles.digitRow} 
+                onPress={() => otpInputRef.current?.focus()}
+              >
+                {Array.from({ length: OTP_LENGTH }).map((_, idx) => {
+                  const digit = otp[idx] || '';
+                  const isFocused = otp.length === idx;
+                  return (
+                    <View 
+                      key={idx} 
+                      style={[
+                        styles.digitBox,
+                        digit ? styles.digitBoxActive : null,
+                        isFocused ? styles.digitBoxFocused : null,
+                        errorMsg ? styles.digitBoxError : null
+                      ]}
+                    >
+                      <Text variant="heading" color={digit ? colors.navy : colors.border}>
+                        {digit || '×'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </Pressable>
+
               <TextInput
-                style={[
-                  styles.otpInput,
-                  errorMsg ? styles.otpInputError : null
-                ]}
+                ref={otpInputRef}
+                style={styles.hiddenInput}
                 value={otp}
                 onChangeText={(v) => {
                   setErrorMsg(null);
-                  setOtp(v.replace(/[^0-9]/g, '').slice(0, 6));
+                  setOtp(v.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
                 }}
-                placeholder="× × × ×"
-                placeholderTextColor={colors.border}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={OTP_LENGTH}
               />
               {isVerifying && (
                 <View style={styles.loaderWrap}>
@@ -211,11 +261,10 @@ export default function AggregatorOtpScreen() {
           <PrimaryButton
             label={isVerifying ? "Verifying..." : "Confirm & Pay Seller →"}
             onPress={handleVerify}
-            disabled={otp.length < 4 || isVerifying}
+            disabled={otp.length < OTP_LENGTH || isVerifying}
           />
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -300,28 +349,46 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   otpInputContainer: {
-    position: 'relative',
+    height: 72,
+    justifyContent: 'center',
   },
-  otpInput: {
+  digitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  digitBox: {
+    flex: 1,
+    height: 72,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.input,
-    height: 64,
-    fontSize: 28,
-    fontFamily: 'DMMono-Bold',
-    textAlign: 'center',
-    color: colors.navy,
-    letterSpacing: 8,
+    borderRadius: radius.card,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  otpInputError: {
+  digitBoxActive: {
+    borderColor: colors.slate,
+  },
+  digitBoxFocused: {
+    borderColor: colors.teal,
+    borderWidth: 2,
+    backgroundColor: colorExtended.tealLight,
+  },
+  digitBoxError: {
     borderColor: colors.red,
     backgroundColor: colors.redLight,
   },
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    width: 0,
+    height: 0,
+  },
   loaderWrap: {
     position: 'absolute',
-    right: 20,
-    top: 22,
+    right: -10,
+    top: 24,
   },
   errorText: {
     textAlign: 'center',

@@ -14,6 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { ArrowsCounterClockwise, CurrencyInr, Camera, ChartLineUp } from 'phosphor-react-native';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
@@ -83,6 +84,14 @@ export default function OnboardingScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  const completeOnboarding = useCallback(async () => {
+    try {
+      await AsyncStorage.setItem('onboarding_complete', 'true');
+    } catch {
+    }
+    router.replace('/(auth)/phone');
+  }, []);
+
   const handleNext = () => {
     if (currentIndex < ONBOARDING_DATA.length - 1) {
       flatListRef.current?.scrollToIndex({
@@ -90,7 +99,7 @@ export default function OnboardingScreen() {
         animated: true,
       });
     } else {
-      router.replace('/(auth)/user-type');
+      void completeOnboarding();
     }
   };
 
@@ -205,7 +214,7 @@ export default function OnboardingScreen() {
 
           {currentIndex < ONBOARDING_DATA.length - 1 && (
             <TouchableOpacity 
-              onPress={() => router.replace('/(auth)/user-type')}
+              onPress={() => { void completeOnboarding(); }}
               style={styles.skipBtn}
             >
               <Text style={styles.skipText}>Skip</Text>

@@ -69,6 +69,7 @@ export default function AggregatorLayout() {
       <Tabs.Screen name="profile/hours-availability" options={{ href: null }} />
       <Tabs.Screen name="profile/kyc-documents" options={{ href: null }} />
       <Tabs.Screen name="profile/order-summary" options={{ href: null }} />
+      <Tabs.Screen name="order/[id]" options={{ href: null }} />
       <Tabs.Screen name="order-detail" options={{ href: null }} />
       <Tabs.Screen name="active-order-detail" options={{ href: null }} />
       <Tabs.Screen name="order-history-detail" options={{ href: null }} />

@@ -43,7 +43,7 @@ export default function Step2Screen() {
   const remainingMaterials = ALL_MATERIALS.filter(m => !selectedMaterials.includes(m));
 
   // usePhotoCapture is the ONLY place camera is launched — never inline in screens
-  const { photoUri, pickPhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
+  const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
 
   // Sync hook URI into store whenever a new photo is captured
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function Step2Screen() {
     resetPhoto();
     setPhotoUri(null);
     setAiHintShown(false);
-    await pickPhoto();
+    await capturePhoto();
   };
 
   const handleAddMaterial = (code: MaterialCode) => {
@@ -135,7 +135,7 @@ export default function Step2Screen() {
             {!capturedUri ? (
               <Pressable
                 style={styles.photoBoxEmpty}
-                onPress={pickPhoto}
+                onPress={capturePhoto}
                 disabled={isLoading}
               >
                 {isLoading ? (

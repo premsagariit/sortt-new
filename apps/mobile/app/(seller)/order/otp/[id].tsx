@@ -18,11 +18,17 @@ import { ShareNetwork, Info } from 'phosphor-react-native';
 export default function SellerOTPDisplayScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
+    const fetchOrder = useOrderStore((s) => s.fetchOrder);
     const order = useOrderStore((s) => s.orders.find(o => o.orderId === id));
     const orderNumber = order?.orderNumber ?? `#${String(id ?? '').slice(0, 8).toUpperCase()}`;
 
-    // Fallback OTP if not in store
-    const otp = order?.otp || '1234';
+    const otp = order?.otp || '';
+
+    useEffect(() => {
+        if (id) {
+            fetchOrder(id, true);
+        }
+    }, [id, fetchOrder]);
 
     useEffect(() => {
         const onBackPress = () => true;
@@ -53,18 +59,24 @@ export default function SellerOTPDisplayScreen() {
                 <View style={styles.header}>
                     <Text variant="subheading" style={styles.title}>Verification Code</Text>
                     <Text variant="body" color={colors.muted} style={styles.subtitle}>
-                        Show this 4-digit code to the dealer to confirm the pickup and complete the payment.
+                        Show this 6-digit code to the dealer to confirm the pickup and complete the payment.
                     </Text>
                 </View>
 
                 <View style={styles.otpCard}>
-                    <View style={styles.otpRow}>
-                        {otp.split('').map((digit, i) => (
-                            <View key={i} style={styles.digitBox}>
-                                <Numeric size={36} color={colors.navy}>{digit}</Numeric>
-                            </View>
-                        ))}
-                    </View>
+                    {otp ? (
+                        <View style={styles.otpRow}>
+                            {otp.split('').map((digit, i) => (
+                                <View key={i} style={styles.digitBox}>
+                                    <Numeric size={36} color={colors.navy}>{digit}</Numeric>
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text variant="caption" color={colors.muted} style={styles.waitingText}>
+                            Waiting for OTP generation...
+                        </Text>
+                    )}
                     <View style={styles.orderLabel}>
                         <Text variant="caption" color={colors.muted}>Order ID: </Text>
                         <Numeric size={12} color={colors.navy}>{orderNumber}</Numeric>
@@ -82,6 +94,7 @@ export default function SellerOTPDisplayScreen() {
                     <PrimaryButton
                         label="Share Verification Code"
                         onPress={handleShare}
+                        disabled={!otp}
                     />
                 </View>
             </View>
@@ -138,6 +151,10 @@ const styles = StyleSheet.create({
     orderLabel: {
         flexDirection: 'row',
         marginTop: spacing.lg,
+    },
+    waitingText: {
+        textAlign: 'center',
+        paddingVertical: spacing.md,
     },
     infoBanner: {
         flexDirection: 'row',

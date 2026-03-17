@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Pressable, Linking } from 'react-native';
-import { Phone, ChatCircleDots } from 'phosphor-react-native';
+import { PhoneCall, ChatCircleDots } from 'phosphor-react-native';
 import { Text } from '../ui/Typography';
 import { Avatar } from '../ui/Avatar';
 import { colors, spacing, radius } from '../../constants/tokens';
@@ -32,7 +32,7 @@ export function ContactCard({ name, phone, role, userType, onChat }: ContactCard
             style={[styles.iconBtn, styles.callBtn]} 
             onPress={() => Linking.openURL(`tel:${phone}`)}
           >
-            <Phone size={24} color={colors.surface} weight="fill" />
+            <PhoneCall size={24} color={colors.surface} weight="fill" />
           </Pressable>
         )}
       </View>

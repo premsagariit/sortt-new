@@ -8,7 +8,9 @@
 
 import React from 'react';
 import { ScrollView, View, StyleSheet } from 'react-native';
+import { Clock, MapPin, Star, CheckCircle } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
@@ -16,45 +18,26 @@ import { safeBack } from '../../../utils/navigation';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { MaterialChip } from '../../../components/ui/MaterialChip';
-
-// Mock transaction data based on aggregator's perspective
-const COMPLETED_ORDERS = [
-    {
-        orderId: 'ORD-2841',
-        orderNumber: '#000001',
-        date: 'Today, 2:45 PM',
-        amount: 1240,
-        materials: ['metal', 'plastic'],
-        seller: 'Amit R.',
-    },
-    {
-        orderId: 'ORD-1001',
-        orderNumber: '#000002',
-        date: 'Yesterday, 11:20 AM',
-        amount: 680,
-        materials: ['paper'],
-        seller: 'Priya S.',
-    },
-    {
-        orderId: 'ORD-7777',
-        orderNumber: '#000003',
-        date: '4 Mar 2026',
-        amount: 2150,
-        materials: ['paper', 'plastic'],
-        seller: 'Kiran K.',
-    },
-    {
-        orderId: 'ORD-24091',
-        orderNumber: '#000004',
-        date: '3 Mar 2026',
-        amount: 1890,
-        materials: ['metal', 'plastic'],
-        seller: 'Suresh M.',
-    },
-];
+import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { EmptyState } from '../../../components/ui/EmptyState';
 
 export default function OrderSummary() {
     const router = useRouter();
+    const { aggOrders, fetchAggregatorOrders } = useAggregatorStore();
+
+    useFocusEffect(
+        React.useCallback(() => {
+            void fetchAggregatorOrders(true);
+        }, [fetchAggregatorOrders])
+    );
+
+    const completedOrders = (aggOrders || []).filter((order: any) => order.status === 'completed');
+    const getAmount = (order: any) => Number(order.display_amount ?? order.displayAmount ?? order.confirmed_value ?? order.confirmedAmount ?? order.estimated_value ?? order.estimatedAmount ?? 0);
+    const totalPayout = completedOrders.reduce((sum: number, order: any) => sum + getAmount(order), 0);
+    const totalVolume = completedOrders.reduce((sum: number, order: any) => {
+        const weights = order.estimated_weights ?? order.estimatedWeights ?? {};
+        return sum + Object.values(weights).reduce((itemSum: number, value: any) => itemSum + Number(value || 0), 0);
+    }, 0);
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -73,17 +56,17 @@ export default function OrderSummary() {
                 <View style={styles.summaryStrip}>
                     <View style={styles.statBox}>
                         <Text variant="caption" color={colors.muted}>Total Volume</Text>
-                        <Numeric size={20} color={colors.navy}>1,420kg</Numeric>
+                        <Numeric size={20} color={colors.navy}>{totalVolume.toFixed(1)}kg</Numeric>
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.statBox}>
                         <Text variant="caption" color={colors.muted}>Pickups</Text>
-                        <Numeric size={20} color={colors.navy}>142</Numeric>
+                        <Numeric size={20} color={colors.navy}>{completedOrders.length}</Numeric>
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.statBox}>
                         <Text variant="caption" color={colors.muted}>Total Payout</Text>
-                        <Numeric size={20} color={colors.navy}>₹58.4k</Numeric>
+                        <Numeric size={20} color={colors.navy}>₹{totalPayout.toLocaleString('en-IN')}</Numeric>
                     </View>
                 </View>
 
@@ -92,24 +75,30 @@ export default function OrderSummary() {
                     <Text variant="subheading">Pickup History</Text>
                 </View>
 
-                {COMPLETED_ORDERS.map((order) => (
+                {completedOrders.length === 0 ? (
+                    <EmptyState
+                      icon={<CheckCircle size={48} color={colors.muted} weight="thin" />}
+                      heading="No completed pickups yet"
+                      body="Completed order history will appear here."
+                    />
+                ) : completedOrders.map((order: any) => (
                     <View key={order.orderId} style={styles.orderCard}>
                         <View style={styles.tealBar} />
                         <View style={styles.orderContent}>
                             <View style={styles.orderTop}>
                                 <View>
-                                    <Numeric size={14} color={colors.navy}>{order.orderNumber}</Numeric>
-                                    <Text variant="caption" color={colors.muted}>{order.date}</Text>
+                                    <Numeric size={14} color={colors.navy}>{order.orderNumber ?? order.order_display_id}</Numeric>
+                                    <Text variant="caption" color={colors.muted}>{new Date(order.created_at ?? order.createdAt).toLocaleString('en-IN')}</Text>
                                 </View>
-                                <Numeric size={20} color={colors.teal}>₹{order.amount}</Numeric>
+                                <Numeric size={20} color={colors.teal}>₹{getAmount(order).toLocaleString('en-IN')}</Numeric>
                             </View>
 
                             <View style={styles.sellerRow}>
-                                <Text variant="label" color={colors.slate}>Picked up from {order.seller}</Text>
+                                <Text variant="label" color={colors.slate}>Picked up from {order.seller_name ?? order.sellerName ?? 'Seller'}</Text>
                             </View>
 
                             <View style={styles.materialsRow}>
-                                {order.materials.map((m: any) => (
+                                {(order.material_codes ?? order.materials ?? []).map((m: any) => (
                                     <MaterialChip key={m} material={m} variant="chip" />
                                 ))}
                             </View>

@@ -38,7 +38,7 @@ const formatTimeDate = (date: Date) => {
 export default function HoursAvailabilityScreen() {
     const router = useRouter();
     const storeSchedule = useAggregatorStore((s) => s.weeklySchedule);
-    const setProfile = useAggregatorStore((s) => s.setProfile);
+    const updateProfile = useAggregatorStore((s) => s.updateProfile);
 
     const [isOpenNow, setIsOpenNow] = useState(true);
     const [schedule, setSchedule] = useState<DaySchedule[]>(storeSchedule);
@@ -91,11 +91,17 @@ export default function HoursAvailabilityScreen() {
 
     const handleSave = async () => {
         setIsSaving(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setProfile({ weeklySchedule: schedule });
-        setIsSaving(false);
-        safeBack('/(aggregator)/profile');
+        try {
+            await updateProfile({
+                operating_hours: {
+                    days: schedule,
+                },
+            });
+            setIsSaving(false);
+            safeBack('/(aggregator)/profile');
+        } catch {
+            setIsSaving(false);
+        }
     };
 
     return (
