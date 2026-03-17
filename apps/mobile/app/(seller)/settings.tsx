@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Switch, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Bell, Globe, Moon, Article, ShieldCheck, CaretRight } from 'phosphor-react-native';
 
@@ -52,17 +51,18 @@ function SettingRow({ icon, title, subtitle, hasToggle, toggleState, onToggle, o
 }
 
 export default function SettingsScreen() {
-  const { signOut: clerkSignOut } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const signOut = useAuthStore((s) => s.signOut);
 
   async function handleLogout() {
     try {
-      await clerkSignOut();
+      await signOut();
     } catch {
+    } finally {
+      useAuthStore.getState().clearSession();
+      router.replace('/(auth)/phone');
     }
-    useAuthStore.getState().clearSession();
-    router.replace('/(auth)/phone');
   }
 
   return (

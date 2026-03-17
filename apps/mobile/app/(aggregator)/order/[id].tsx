@@ -25,7 +25,6 @@ export default function AggregatorOrderByIdScreen() {
   const materialsCfg = useAggregatorStore((s) => s.materials);
   const acceptOrderApi = useAggregatorStore((s) => s.acceptOrderApi);
   const dismissNewOrder = useAggregatorStore((s) => s.dismissNewOrder);
-  const fetchAggregatorOrders = useAggregatorStore((s) => s.fetchAggregatorOrders);
 
   const [rates, setRates] = useState<any[]>([]);
   const [isBusy, setIsBusy] = useState(false);
@@ -35,7 +34,11 @@ export default function AggregatorOrderByIdScreen() {
   useEffect(() => {
     if (id) {
       fetchOrder(id, true);
-      api.get('/api/rates').then((res) => setRates(res.data.rates || [])).catch(() => {});
+      api.get('/api/aggregators/me/rates').then((res) => {
+        setRates(Array.isArray(res.data) ? res.data : (res.data?.rates || []));
+      }).catch(() => {
+        api.get('/api/rates').then((res) => setRates(res.data.rates || [])).catch(() => {});
+      });
     }
   }, [id, fetchOrder]);
 
@@ -45,7 +48,7 @@ export default function AggregatorOrderByIdScreen() {
   const rateMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of rates) {
-      map.set(String(r.material_code), Number(r.rate_per_kg || 0));
+      map.set(String(r.material_code).toLowerCase().replace(/[-_]/g, ''), Number(r.rate_per_kg || 0));
     }
     return map;
   }, [rates]);
@@ -59,16 +62,38 @@ export default function AggregatorOrderByIdScreen() {
   }, [materialsCfg]);
 
   const items = useMemo(() => {
+    const itemRows = Array.isArray(storeOrder?.orderItems)
+      ? storeOrder.orderItems.map((item) => {
+          const normalized = String(item.materialCode || '').toLowerCase().replace(/[-_]/g, '');
+          const ownRate = Number(
+            (typeof item.ratePerKg === 'number' ? item.ratePerKg : null)
+            ?? rateMap.get(normalized)
+            ?? yourRateMap.get(normalized)
+            ?? 0
+          );
+          const estWeight = typeof item.estimatedWeightKg === 'number' ? item.estimatedWeightKg : 0;
+          return {
+            materialCode: item.materialCode,
+            material: item.materialLabel || item.materialCode,
+            weight: estWeight,
+            yourRate: ownRate > 0 ? ownRate : null,
+            lineTotal: ownRate > 0 && estWeight > 0 ? ownRate * estWeight : 0,
+          };
+        })
+      : [];
+
+    if (itemRows.length > 0) return itemRows;
+
     const weights = storeOrder?.estimatedWeights || {};
     const rows = Object.entries(weights).map(([materialCode, weight]) => {
       const normalized = materialCode.toLowerCase().replace(/[-_]/g, '');
-      const sellerRate = Number(rateMap.get(materialCode) || 0);
-      const yourRate = Number(yourRateMap.get(normalized) || sellerRate);
+      const ownRate = Number(rateMap.get(normalized) ?? yourRateMap.get(normalized) ?? 0);
       return {
+        materialCode,
         material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
         weight: Number(weight) || 0,
-        rate: sellerRate,
-        yourRate,
+        yourRate: ownRate > 0 ? ownRate : null,
+        lineTotal: ownRate > 0 ? (Number(weight) || 0) * ownRate : 0,
       };
     });
 
@@ -76,24 +101,30 @@ export default function AggregatorOrderByIdScreen() {
 
     return (feedOrder?.materials || []).map((materialCode) => {
       const normalized = materialCode.toLowerCase().replace(/[-_]/g, '');
-      const sellerRate = Number(rateMap.get(materialCode) || 0);
-      const yourRate = Number(yourRateMap.get(normalized) || sellerRate);
+      const ownRate = Number(rateMap.get(normalized) ?? yourRateMap.get(normalized) ?? 0);
       return {
+        materialCode,
         material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
         weight: 0,
-        rate: sellerRate,
-        yourRate,
+        yourRate: ownRate > 0 ? ownRate : null,
+        lineTotal: 0,
       };
     });
-  }, [storeOrder?.estimatedWeights, feedOrder?.materials, rateMap, yourRateMap]);
+  }, [storeOrder?.orderItems, storeOrder?.estimatedWeights, feedOrder?.materials, rateMap, yourRateMap]);
 
   const totalEst = useMemo(() => {
+    const computed = items.reduce((sum, item) => {
+      if (typeof item.weight === 'number' && typeof item.yourRate === 'number') {
+        return sum + (item.weight * item.yourRate);
+      }
+      return sum;
+    }, 0);
+    if (computed > 0) return computed;
+    if (typeof storeOrder?.estimatedTotal === 'number' && storeOrder.estimatedTotal > 0) return storeOrder.estimatedTotal;
     if (storeOrder) {
       const canonical = getOrderDisplayAmount(storeOrder as any);
       if (canonical > 0) return canonical;
     }
-    const computed = items.reduce((sum, item) => sum + (item.weight * item.rate), 0);
-    if (computed > 0) return computed;
     if (storeOrder?.estimatedAmount && storeOrder.estimatedAmount > 0) return storeOrder.estimatedAmount;
     if (feedOrder?.estimatedPrice && feedOrder.estimatedPrice > 0) return feedOrder.estimatedPrice;
     return 0;
@@ -171,15 +202,17 @@ export default function AggregatorOrderByIdScreen() {
             <View style={styles.tableHeader}>
               <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
               <Text variant="caption" style={[styles.col, styles.colWeight]}>WEIGHT</Text>
-              <Text variant="caption" style={[styles.col, styles.colRate]}>SELLER RATE</Text>
-              <Text variant="caption" style={[styles.col, styles.colYourRate]}>AT YOUR RATE</Text>
+              <Text variant="caption" style={[styles.col, styles.colYourRate]}>YOUR RATE</Text>
+              <Text variant="caption" style={[styles.col, styles.colLineTotal]}>TOTAL</Text>
             </View>
             {items.map((item, idx) => (
               <View key={`${item.material}-${idx}`} style={[styles.tableRow, idx === items.length - 1 && { borderBottomWidth: 0 }]}>
                 <Text variant="label" color={colors.navy} style={[styles.col, styles.colMaterial]}>{item.material}</Text>
                 <Numeric size={14} style={[styles.col, styles.colWeight, { color: colors.teal }]}>{item.weight} kg</Numeric>
-                <Numeric size={14} color={colors.muted} style={[styles.col, styles.colRate]}>₹{item.rate}/kg</Numeric>
-                <Numeric size={14} color={colors.amber} style={[styles.col, styles.colYourRate]}>₹{item.yourRate}/kg</Numeric>
+                <Text variant="caption" color={colors.amber} style={[styles.col, styles.colYourRate]}>
+                  {typeof item.yourRate === 'number' ? `₹${item.yourRate}/kg` : '—'}
+                </Text>
+                <Numeric size={14} color={colors.navy} style={[styles.col, styles.colLineTotal]}>₹{item.lineTotal}</Numeric>
               </View>
             ))}
             <View style={styles.totalRow}>
@@ -259,8 +292,7 @@ export default function AggregatorOrderByIdScreen() {
             setIsBusy(true);
             try {
               await acceptOrderApi(internalOrderId);
-              fetchAggregatorOrders(true);
-              router.replace('/(aggregator)/orders');
+              router.replace({ pathname: '/(aggregator)/active-order-detail', params: { id: internalOrderId } } as any);
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to accept order');
             } finally {
@@ -368,14 +400,14 @@ const styles = StyleSheet.create({
     flex: 1.5,
     textAlign: 'center',
   },
-  colRate: {
-    flex: 1.5,
-    textAlign: 'center',
-  },
   colYourRate: {
-    flex: 2,
-    textAlign: 'right',
+    flex: 1.7,
+    textAlign: 'center',
     fontFamily: 'DMSans-Bold',
+  },
+  colLineTotal: {
+    flex: 1.3,
+    textAlign: 'right',
   },
   totalRow: {
     flexDirection: 'row',

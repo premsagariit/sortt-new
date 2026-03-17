@@ -85,7 +85,16 @@ export default function SellerOrdersScreen() {
   const hasActiveOrder = activeOrders.length > 0;
   const firstActive = activeOrders[0];
 
-  const calculateEstimate = useCallback((order: any) => getOrderDisplayAmount(order), []);
+  const calculateEstimate = useCallback((order: any) => {
+    if (order?.status === 'completed') {
+      if (typeof order?.confirmedTotal === 'number' && Number.isFinite(order.confirmedTotal)) return order.confirmedTotal;
+      if (typeof order?.confirmed_amount === 'number' && Number.isFinite(order.confirmed_amount)) return order.confirmed_amount;
+      if (typeof order?.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount)) return order.confirmedAmount;
+    }
+    if (typeof order?.estimatedTotal === 'number' && Number.isFinite(order.estimatedTotal)) return order.estimatedTotal;
+    if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total)) return order.estimated_total;
+    return getOrderDisplayAmount(order);
+  }, []);
 
   // Format date string from ISO
   const formatDate = (iso: string) => {

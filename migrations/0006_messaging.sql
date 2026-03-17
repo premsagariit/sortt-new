@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_2026_05_order_created
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS aggregator_availability (
   user_id      UUID PRIMARY KEY REFERENCES users(id),
-  is_online    BOOLEAN DEFAULT false,
+  is_online    BOOLEAN DEFAULT true,
   last_ping_at TIMESTAMPTZ DEFAULT NOW()
 );
 

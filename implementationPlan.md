@@ -1,203 +1,312 @@
-# Sortt Auth Flow Overhaul — Implementation Plan (Pre-Execution)
+# Sortt — Order Data Integrity Overhaul Implementation Plan (Pre-Execution)
 
-This plan is prepared after mandatory reads and before any code/SQL/config edits.
+Prepared after mandatory reads and before any code edits.
 
-**Mandatory reads completed:**
-1. `MEMORY.md` (full)
-2. `structure.md` (full)
-3. `PLAN.md` (current state reviewed: Days 1–8 complete, Day 9 current)
-4. `PRD.md` (auth/onboarding/user-flow sections)
-5. `TRD.md` (auth flow + §13 security/privacy patches + related OTP/auth route sections)
+## Mandatory Reads Completed (Confirmed)
+1. `MEMORY.md` (authority + constraints)
+2. `structure.md` (path verification)
+3. `PLAN.md` (current build state)
+4. `TRD.md` §8 (schema) and §13 Security & Privacy patches + V7/V13/V24 references
+5. `backend/src/utils/orderDto.ts`
+6. `backend/src/routes/orders/index.ts`
+7. `apps/mobile/store/aggregatorStore.ts`
+8. `apps/mobile/store/orderStore.ts`
+9. Affected screens (path-corrected):
+	- `apps/mobile/app/(aggregator)/order/[id].tsx` (prompt said `(aggregator)/order-detail.tsx`)
+	- `apps/mobile/app/(aggregator)/orders.tsx`
+	- `apps/mobile/app/(seller)/order/[id].tsx` (prompt said `(shared)/order/[id].tsx`)
+	- `apps/mobile/app/(seller)/orders.tsx`
+10. Skills inventory from `.agent/skills`
+
+Parallel read-only investigations executed across 5 tracks (backend tx/route, DTO contract, aggregator mobile/store, seller mobile/rating, security/docs).
+
+Relevant skills identified:
+- `planner`
+- `react-native-expert`
+- `senior-backend`
+- `database-schema-designer`
+- `senior-security`
+- `verifier`
+- `codebase-mapper`
 
 ---
 
 ## Section 1 — File Inventory
 
-### Database
-- `migrations/0022_unique_phone_hash.sql` — add unique constraint `users_phone_hash_unique` on `users.phone_hash`; uses next available migration number (0019 already exists). **Status: NEW**
+### Backend / API
+- `backend/src/routes/orders/index.ts` — add accept-time rate snapshot + missing-rate fallback + enrich order detail response shape (`order_items`, totals, `seller_has_rated`). **MODIFY**
+- `backend/src/utils/orderDto.ts` — align DTO fields to include order-item data and explicit totals while preserving V24 stripping. **MODIFY**
+- `backend/src/routes/aggregators.ts` — add aggregator-own-rates GET endpoint (`/me/rates` or equivalent) for pre-accept order detail estimates. **MODIFY**
 
-### Backend
-- `backend/src/routes/auth.ts` — add `mode` validation to `request-otp`, Redis mode key handling, `verify-otp` login/signup branching, and `is_new_user` response shaping. **Status: MODIFY**
+### Mobile Stores
+- `apps/mobile/store/aggregatorStore.ts` — compute/store `orderAmount` from order items on accept flows; ensure New→Active shift without refetch dependency. **MODIFY**
+- `apps/mobile/store/orderStore.ts` — map new DTO fields (`order_items`, `estimated_total`, `confirmed_total`, `seller_has_rated`) and preserve non-zero value selection. **MODIFY**
 
-### Mobile Auth Flow
-- `apps/mobile/app/(auth)/phone.tsx` — full rewrite to unified two-tab/two-step phone+OTP flow. **Status: MODIFY**
-- `apps/mobile/app/(auth)/otp.tsx` — deprecated screen removal. **Status: DELETE**
-- `apps/mobile/app/(auth)/_layout.tsx` — remove/de-link deprecated otp route if explicitly registered. **Status: MODIFY**
-- `apps/mobile/app/index.tsx` — verify/fix onboarding gate to `/(auth)/onboarding` vs `/(auth)/phone`. **Status: MODIFY (conditional)**
-- `apps/mobile/app/(auth)/onboarding.tsx` — verify/fix `onboarding_complete` write + route to `/(auth)/phone`. **Status: MODIFY (conditional)**
+### Mobile Screens
+- `apps/mobile/app/(aggregator)/order/[id].tsx` — remove seller-rate column, render live order items/rates, compute estimated total from aggregator rates, change accept navigation to active-order-detail replace path. **MODIFY**
+- `apps/mobile/app/(aggregator)/orders.tsx` — ensure feed accept path updates state instantly and Active tab cards consume `orderAmount`. **MODIFY**
+- `apps/mobile/app/(seller)/order/[id].tsx` — status-aware rates/weights display (estimated vs confirmed) and inline rating block for completed orders. **MODIFY**
+- `apps/mobile/app/(seller)/orders.tsx` — show DTO totals (`estimated_total` or `confirmed_total`) instead of zero fallback. **MODIFY**
 
-### Mobile Store/Guards/Logout
-- `apps/mobile/store/authStore.ts` — add/align `token`, `user`, `isNewUser`, `setSession`, `clearSession` with non-persistent token policy. **Status: MODIFY**
-- `apps/mobile/app/(auth)/user-type.tsx` — add guard to redirect returning users away from user-type screen. **Status: MODIFY**
-- `apps/mobile/app/(aggregator)/settings.tsx` — standardize logout: Clerk signout + clearSession + `router.replace('/(auth)/phone')`. **Status: MODIFY**
-- `apps/mobile/app/(seller)/settings.tsx` — standardize logout: Clerk signout + clearSession + `router.replace('/(auth)/phone')`. **Status: MODIFY**
+### Shared / UI Utilities
+- `apps/mobile/components/order/OrderItemList.tsx` — support explicit weight label + status-aware total label if required by seller detail UX. **MODIFY (conditional)**
+- `apps/mobile/utils/format.ts` — shared currency formatter if no equivalent reusable helper exists. **NEW (conditional)**
 
-### Documentation / Tracking
-- `implementationPlan.md` — execution tracking and final status update. **Status: MODIFY**
-- `PLAN.md` — add auth overhaul status note. **Status: MODIFY**
-- `MEMORY.md` — append learned lessons in §9. **Status: MODIFY**
-- `structure.md` — remove `otp.tsx`, update `phone.tsx` description, add new migration entry. **Status: MODIFY**
-- `TRD.md` — document mode-split auth behavior, `is_new_user`, Redis mode key lifecycle, migration constraint, unified phone screen. **Status: MODIFY**
-- `PRD.md` — update launch/auth user flow and one-phone-one-account constraints. **Status: MODIFY**
-- `README.md` — confirm unchanged unless new env vars are introduced. **Status: MODIFY (conditional)**
-
----
-
-## Section 2 — Sub-Agent Assignments
-
-**Relevant skills identified (from `.agent/skills`) for this task:**
-- `planner` (execution sequencing + gates)
-- `react-native-expert` (Expo Router + auth UI/state patterns)
-- `senior-backend` (Express auth route correctness)
-- `database-schema-designer` (constraint migration hygiene)
-- `senior-security` (auth/privacy enforcement)
-- `verifier` (evidence-based gate validation)
-
-### Sub-Agent 1 — Database Constraint Workstream
-- **Scope:** `migrations/0022_unique_phone_hash.sql` only; apply + verify unique constraint.
-- **Dependency:** none.
-- **Outputs:** migration file, DB apply output, constraint query proof.
-
-### Sub-Agent 2 — Backend Auth Route Workstream
-- **Scope:** `backend/src/routes/auth.ts` only.
-- **Depends on:** Sub-Agent 1 gate pass (constraint exists).
-- **Outputs:** mode-aware `request-otp`, mode-aware `verify-otp`, `is_new_user` response contract, curl evidence.
-
-### Sub-Agent 3 — Mobile Unified Auth Screen Workstream
-- **Scope:** `phone.tsx`, `otp.tsx` delete, auth layout references, onboarding gate verification files.
-- **Routing requirement:** `handleVerifyOtp` must implement all three branches — `is_new_user=true` → `/(auth)/user-type`; `is_new_user=false` + `user_type='aggregator'` → `/(aggregator)/home`; `is_new_user=false` + `user_type='seller'` → `/(seller)/home`.
-- **Depends on:** Sub-Agent 2 gate pass (backend contract stabilized).
-- **Outputs:** single-screen login/signup + OTP flow, zero dangling otp-route refs, mobile type-check pass.
-
-### Sub-Agent 4 — Store/Guard/Logout Workstream
-- **Scope:** `authStore.ts`, `user-type.tsx`, seller/aggregator settings logout handlers.
-- **Depends on:** Sub-Agent 3 gate pass.
-- **Outputs:** `isNewUser`-aware routing guard, standardized logout behavior, mobile type-check pass.
-
-### Sub-Agent 5 — Documentation & Closeout Workstream
-- **Scope:** `PLAN.md`, `MEMORY.md`, `structure.md`, `TRD.md`, `PRD.md`, `README.md`, final `implementationPlan.md` status.
-- **Depends on:** Sub-Agents 1–4 pass + root `pnpm type-check` pass.
-- **Outputs:** synchronized docs + completion report.
-
-**Execution policy note:** Per `MEMORY.md §0.2`, implementation is sequential with hard dependency gates; only read-only discovery may run in parallel.
+### Documentation
+- `implementationPlan.md` — execution status update after implementation. **MODIFY**
+- `PLAN.md` — add overhaul completion note/date. **MODIFY**
+- `MEMORY.md` (§9) — append learned lessons from this overhaul. **MODIFY**
+- `structure.md` — include `apps/mobile/utils/format.ts` only if created. **MODIFY (conditional)**
+- `TRD.md` — document accept-time rate snapshot and DTO standard fields (`estimated_total`, `confirmed_total`, `seller_has_rated`). **MODIFY**
+- `PRD.md` — align order-detail/rating flow contract. **MODIFY**
+- `README.md` — expected unchanged (no env additions), but confirm explicitly. **MODIFY (status note only if needed)**
 
 ---
 
-## Section 3 — Execution Sequence
+## Section 2 — Root Cause Confirmation
 
-1. Create migration `migrations/0022_unique_phone_hash.sql` with `users_phone_hash_unique`.
-2. Apply migration against DB using `DATABASE_URL` from `backend/.env`.
-3. Run DB self-verification query for unique constraint.
-4. **Gate A:** proceed only if constraint query returns exactly one row.
-5. Modify `backend/src/routes/auth.ts` for `mode` (`login|signup`) request validation in `request-otp`.
-6. Add pre-OTP existence checks by mode and Redis mode key `otp:mode:{phone_hash}` TTL 600.
-7. Modify `verify-otp` to read/delete mode key and branch login/signup user handling.
-8. Return `{ token: { jwt }, user: { id, user_type }, is_new_user }` without sensitive internals.
-9. Run backend curl verifications (missing mode, login unknown, signup existing, verify response shape).
-10. **Gate B:** proceed only if backend verification scenarios pass.
-11. Rewrite `apps/mobile/app/(auth)/phone.tsx` to unified two-step flow with tabbed mode and inline errors.
-12. Delete `apps/mobile/app/(auth)/otp.tsx`; remove all route references.
-13. Update `apps/mobile/app/(auth)/_layout.tsx` if otp route is explicitly listed.
-14. Verify/fix onboarding gate in `apps/mobile/app/index.tsx` and `apps/mobile/app/(auth)/onboarding.tsx`.
-15. Run auth-route grep checks and `pnpm --filter mobile type-check`.
-16. **Gate C:** proceed only if otp file/refs are gone and mobile type-check passes.
-17. Update `apps/mobile/store/authStore.ts` with `setSession/clearSession/isNewUser` contract.
-18. Guard `apps/mobile/app/(auth)/user-type.tsx` against returning-user access.
-19. Standardize logout handlers in seller/aggregator settings screens with `router.replace`.
-20. Run `pnpm --filter mobile type-check` again.
-21. **Gate D:** proceed only if auth store/guard/logout checks pass.
-22. Run global verification gates G1–G8.
-23. If any gate fails: fix root cause and re-run failed gate(s) then rerun impacted downstream gate(s).
-24. Execute completion steps in required order (Section 6).
+1. **Hypothesis:** accept route does not snapshot aggregator `rate_per_kg` at accept time.  
+	**Status:** **CONFIRMED.** `POST /api/orders/:orderId/accept` updates status + aggregator only; no `order_items` update from `aggregator_material_rates`.
+
+2. **Hypothesis:** `orderDto.ts`/order detail response does not provide required item-level rate fields robustly.  
+	**Status:** **CORRECTED.** `line_items` exists, but shape is insufficient for target UX: no `material_label`, no separate `estimated_weight_kg` vs `confirmed_weight_kg`, no explicit `estimated_total`/`confirmed_total`, no `seller_has_rated`.
+
+3. **Hypothesis:** aggregator order detail uses hardcoded fixture array.  
+	**Status:** **CORRECTED.** Screen does not use a static fixture array; it derives from store + `/api/rates`, but still has incorrect data source semantics (`SELLER RATE` column and fallback behavior causing incorrect totals).
+
+4. **Hypothesis:** post-accept navigation from detail goes back/feed rather than active detail replace.  
+	**Status:** **CONFIRMED (behavioral mismatch).** Current flow uses `router.replace('/(aggregator)/orders')` (not `active-order-detail`) and can land user back in orders list context instead of execution-ready detail.
+
+5. **Hypothesis:** seller detail shows 0/incorrect rates and doesn’t switch to confirmed weights properly after completion.  
+	**Status:** **CONFIRMED (partially).** Seller detail uses mixed/fallback sources (live `/api/rates`, coalesced weight field), lacking explicit status-driven rendering from stable DTO fields.
+
+6. **Hypothesis:** rating UI missing due to wrong condition or missing fetch/field.  
+	**Status:** **CONFIRMED (UI missing in target screen).** Seller detail screen lacks inline post-completion rating block; separate `(shared)/review/[id].tsx` exists but is not wired to requested seller detail flow and no `seller_has_rated` signal is exposed by order detail DTO.
 
 ---
 
-## Section 4 — Security Rules In Scope
+## Section 3 — Sub-Agent Assignments
 
-- **V7:** Privileged role decisions use DB values only; backend auth flow reads `user_type` from DB row in verify path.
-- **V24:** Never expose `phone_hash` or `clerk_user_id` in auth responses; response DTO only returns allowed fields.
-- **V35:** No changes that allow client updates of `kyc_status`; auth overhaul does not widen this surface.
-- **V-OTP-1:** OTP verification must delete OTP-mode key and OTP key after successful verify (one-time use cleanup).
-- **X3:** OTP persistence remains HMAC-only in Redis; raw OTP never stored.
-- **A3:** No secrets in client or docs; `.env.example` remains key-only, no values committed.
-- **R2:** No new policy regressions; if SQL policy touched, keep `USING`/`WITH CHECK` separation and `current_app_user_id()` convention.
-- **I2:** Existing global sanitize-html middleware remains in effect; no new free-text bypass introduced.
-- **C1-equivalent:** Any new interval (OTP countdown/resend) includes cleanup in `useEffect` return.
+Execution remains sequential for code changes (per `MEMORY.md §0.2`); only discovery was parallel.
+
+### Sub-Agent 1 — Backend Transaction + Route Behavior
+- **Scope:** `backend/src/routes/orders/index.ts`, `backend/src/routes/aggregators.ts`
+- **Tasks:** accept-time rate snapshot update; missing-rate fallback to 0; maintain first-accept transaction atomicity; preserve V7/V13; implement/confirm `GET /api/aggregators/me/rates` for authenticated aggregator-own rates.
+- **Depends on:** none.
+
+### Sub-Agent 2 — DTO / API Contract
+- **Scope:** `backend/src/utils/orderDto.ts`, relevant order detail SELECTs in `backend/src/routes/orders/index.ts`
+- **Tasks:** emit `order_items` required fields, `estimated_total`, `confirmed_total`, `seller_has_rated`, preserve V24.
+- **Depends on:** Sub-Agent 1 contract finalization.
+
+### Sub-Agent 3 — Aggregator Mobile + Store
+- **Scope:** `apps/mobile/app/(aggregator)/order/[id].tsx`, `apps/mobile/app/(aggregator)/orders.tsx`, `apps/mobile/store/aggregatorStore.ts`
+- **Tasks:** remove seller-rate UI, use order-items + aggregator rates, compute `orderAmount`, New→Active local move, route replace to active-order-detail.
+- **Depends on:** Sub-Agent 2 DTO fields available.
+
+### Sub-Agent 4 — Seller Mobile + Rating Flow
+- **Scope:** `apps/mobile/app/(seller)/order/[id].tsx`, `apps/mobile/app/(seller)/orders.tsx`, optional `apps/mobile/components/order/OrderItemList.tsx`
+- **Tasks:** status-aware rates/weights/totals and completed-only rating block with submit/confirmation states.
+- **Depends on:** Sub-Agent 2 DTO fields + Sub-Agent 3 navigation/state stabilization.
+
+Conditional guard for shared component edits:
+- If `apps/mobile/components/order/OrderItemList.tsx` is modified, it is explicitly owned by Sub-Agent 4 and requires an immediate `pnpm --filter mobile type-check` before continuing downstream.
+
+### Sub-Agent 5 — Security/Compliance + Docs Impact
+- **Scope:** `PLAN.md`, `MEMORY.md`, `structure.md`, `TRD.md`, `PRD.md`, `README.md`
+- **Tasks:** update documentation and security sign-off after all functional gates + root type-check pass.
+- **Depends on:** Sub-Agents 1–4 completed + `pnpm type-check` pass.
 
 ---
 
-## Section 5 — Verification Gate Checklist
+## Section 4 — Execution Sequence
 
-### G1 — DB Constraint Live
+1. Patch accept transaction to snapshot rates into `order_items` from `aggregator_material_rates` (same transaction, after accept lock/update).
+2. Add fallback update for unmatched materials to set `rate_per_kg = 0` and `amount = 0` (non-fatal).
+3. Confirm aggregator identity source remains `req.user.id` only.
+4. Add/confirm aggregator-own-rates read endpoint (`GET /api/aggregators/me/rates` or documented equivalent).
+5. Expand order detail query + DTO to include required `order_items` fields, `estimated_total`, `confirmed_total`, `aggregator_name`, `seller_has_rated`.
+6. Preserve V24 field stripping (`phone_hash`, internal auth hashes) in all DTO responses.
+7. Update orderStore mapping for new fields and amount selection logic.
+8. Update aggregator detail screen to remove seller-rate column and render order-item rows from live store/API data.
+9. Update accept handler in aggregator detail to local state transition + `router.replace({ pathname: '/(aggregator)/active-order-detail', params: { id } })`.
+10. Update aggregator feed accept path to local New→Active move and no full refetch dependency.
+11. Update seller detail screen: non-completed statuses use estimated weights; completed uses confirmed weights; show proper totals.
+12. Implement completed-only inline rating block with `POST /api/ratings`, success/error states, and `seller_has_rated` gating.
+13. Update seller orders cards to show DTO totals (completed → confirmed total, else estimated total).
+14. Run mobile scoped type-check; fix only in-scope regressions.
+15. Run root `pnpm type-check`.
+16. If any gate fails, fix root cause and rerun failed + downstream impacted gates.
+17. Apply docs updates in required order (Section 7).
+
+Gates:
+- **Gate A (Backend/DTO):** SA1 + SA2 verification commands pass.
+- **Gate B (Aggregator UX):** SA3 verification commands + manual flow pass.
+- **Gate C (Seller UX):** SA4 manual gates + mobile type-check pass.
+- **Gate D (Closeout):** root type-check + docs/security sign-off complete.
+
+---
+
+## Section 5 — Security Rules In Scope
+
+- **V13:** `completed` only through OTP verify route; no new PATCH transition to completed.
+- **V24:** never expose `phone_hash`, `clerk_user_id`, or internal auth hashes in order DTO.
+- **V7:** role/identity source from verified auth context (`req.user`), never request body.
+- **V25:** full pickup address exposure only post-acceptance to authorized parties.
+- **A3:** no secret leakage in docs/client; no env value hardcoding/logging.
+- **C1-equivalent:** any newly introduced interval/polling includes cleanup in `useEffect` return.
+- **Navigation safety (MEMORY §9):** use `router.replace` for post-accept critical flow to avoid unsafe back-stack rewind.
+
+---
+
+## Section 6 — Verification Gate Checklist
+
+### Sub-Agent 1 (Backend)
+**SA1-V1 — accept snapshot persisted**
 ```bash
-psql "$DATABASE_URL" -c "SELECT conname, contype FROM pg_constraint WHERE conrelid = 'users'::regclass AND conname = 'users_phone_hash_unique';"
+psql "$DATABASE_URL" -c "SELECT id, material_code, estimated_weight_kg, rate_per_kg, amount FROM order_items WHERE order_id = '<TEST_ORDER_ID>';"
 ```
-Expected: exactly 1 row.
+Expected: non-null `rate_per_kg` and `amount` after accept; unmatched materials become `0`/`0`.
 
-### G2 — Login Mode Unknown Phone → 404
+**SA1-V2 — DTO includes order_items with rates**
 ```bash
-curl -s -w "\nHTTP %{http_code}" -X POST http://localhost:3001/api/auth/request-otp -H "Content-Type: application/json" -d '{"phone": "+919000000099", "mode": "login"}'
+curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '.order_items'
 ```
-Expected: HTTP 404 + `no_account`.
+Expected: required item fields present; no sensitive fields.
 
-### G3 — Signup Mode Existing Phone → 409
+**SA1-V3 — totals present**
 ```bash
-curl -s -w "\nHTTP %{http_code}" -X POST http://localhost:3001/api/auth/request-otp -H "Content-Type: application/json" -d '{"phone": "<EXISTING_PHONE>", "mode": "signup"}'
+curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '{estimated_total, confirmed_total}'
 ```
-Expected: HTTP 409 + `account_exists`.
+Expected: both present; accepted orders have `estimated_total > 0` when rates exist.
 
-### G4 — Missing Mode → 400
+**SA1-V4 — aggregator own-rates endpoint**
 ```bash
-curl -s -w "\nHTTP %{http_code}" -X POST http://localhost:3001/api/auth/request-otp -H "Content-Type: application/json" -d '{"phone": "+919000000001"}'
+curl -s -H "Authorization: Bearer <AGGREGATOR_TOKEN>" http://localhost:3001/api/aggregators/me/rates | jq '.'
 ```
-Expected: HTTP 400.
+Expected: array of `{ material_code, rate_per_kg }` rows for the authenticated aggregator.
 
-### G5 — verify-otp Response Shape
-Action: run full signup OTP flow on clean number and inspect response JSON.
-Expected:
-- `token.jwt` exists and non-empty
-- `is_new_user === true`
-- no `phone_hash`
-- no `clerk_user_id`
-
-### G5b — Login verify-otp Existing User Shape + Navigation
-Action: run full login OTP flow on an existing phone and inspect response + mobile routing behavior.
-Expected:
-- `is_new_user === false`
-- `user.user_type` is non-null (`seller` or `aggregator`)
-- no `phone_hash`
-- mobile navigates to the correct role home screen (`/(seller)/home` or `/(aggregator)/home`).
-
-### G6 — `otp.tsx` Deleted + No Dangling References
+### Sub-Agent 2 (Aggregator mobile)
+**SA2-G1 — no fixture/hardcoded materials source in detail**
 ```bash
-find apps/mobile -name "otp.tsx" -path "*/(auth)/*"
-grep -r "/(auth)/otp" apps/mobile/
-grep -r '"otp"' apps/mobile/app/\(auth\)/
+grep -n "hardcode\|fixture\|mock\|dummy\|\[\s*{.*material" apps/mobile/app/\(aggregator\)/order/\[id\].tsx
 ```
-Expected: no results.
+Expected: no fixture/mock arrays for material rows.
 
-### G7 — TypeScript Zero Errors
+**SA2-G2 — seller-rate column removed**
+```bash
+grep -in "seller.*rate\|sellerRate\|seller_rate" apps/mobile/app/\(aggregator\)/order/\[id\].tsx
+```
+Expected: no matches.
+
+**SA2-G3 — mobile compile check**
+```bash
+pnpm --filter mobile type-check
+```
+Expected: exit 0.
+
+### Sub-Agent 3 (Seller mobile)
+**SA3-G4 — accepted order shows aggregator rates (manual)**  
+Open seller order detail for `accepted/en_route/arrived/weighing_in_progress`; rate column must show snapshotted aggregator rate or `—` when null.
+
+**SA3-G5 — completed order shows rating block (manual)**  
+Open completed seller order detail; rating block visible only when `!seller_has_rated`.
+
+**SA3-G6 — seller order cards non-zero values (manual)**  
+Seller orders list must show calculated rupee values from DTO totals (not always `₹0`).
+
+**SA3-G7 — mobile compile check**
+```bash
+pnpm --filter mobile type-check
+```
+Expected: exit 0.
+
+### Global Gates (must all pass)
+**G1 — Rate snapshot at accept** (same as SA1-V1)
+
+**G2 — DTO populated order_items/totals**
+```bash
+curl -s -H "Authorization: Bearer <AGGREGATOR_TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '{estimated_total, confirmed_total, order_items: [.order_items[] | {material_code, rate_per_kg, amount}]}'
+```
+
+**G3 — No seller-rate column in aggregator detail** (same as SA2-G2)
+
+**G4 — No hardcoded materials fixture** (same as SA2-G1)
+
+**G5 — phone_hash absent from order DTO**
+```bash
+curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq 'keys | map(select(test("hash|phone")))'
+```
+Expected: `[]` for sensitive hash keys; party-phone visibility only via allowed fields and role/status guard.
+
+**G6 — post-accept navigation route correctness (manual)**
+Accept from aggregator detail; expected immediate load of `/(aggregator)/active-order-detail` for that order; back should not return to pre-accept detail.
+
+**G7 — Active tab amount correctness (manual)**
+Accepted order card amount equals sum of `estimated_weight_kg * rate_per_kg` from order items.
+
+**G8 — seller accepted-detail rates (manual)**
+Rates shown per line item from snapshotted aggregator rate.
+
+**G9 — seller completed-detail confirmed weights (manual)**
+Weight column uses `confirmed_weight_kg` and header text changes to `Weight`.
+
+**G10 — rating block visibility/completion (manual)**
+Completed order shows rating form; after submit, shows success state / submitted state.
+
+**G11 — seller list values non-zero (manual)**
+Order cards show real totals, not fixed `₹0`.
+
+**G12 — workspace type-check**
 ```bash
 pnpm type-check
 ```
-Expected: exit code 0.
-
-### G8 — Redis Mode Key Cleanup
-Action: after successful `verify-otp`, check key `otp:mode:{phone_hash}` in Upstash (dashboard or direct GET).
-Expected: key not found.
+Expected: exit 0.
 
 ---
 
-## Section 6 — Completion Steps
+## Section 7 — Completion Steps
 
-1. Update `implementationPlan.md` with final execution status.
-2. Update `PLAN.md` auth-overhaul note.
-3. Append learned lessons in `MEMORY.md` §9.
-4. Update `structure.md` auth/migration tree entries.
-5. Update `TRD.md` auth flow documentation.
-6. Update `PRD.md` user flow + auth constraints.
-7. Update `README.md` only if env/setup changed; otherwise record unchanged rationale.
-8. Run `pnpm type-check` and fix any auth-overhaul regressions.
-9. Commit + push with message: `feat: auth overhaul — unified phone+OTP screen, login/signup modes, phone uniqueness enforcement`.
-10. Report completion status for each step and include security sign-off table (V24, V7, V35, X3, V-OTP-1, A3, R2, I2, C1).
+Execute only after all gates pass, in this exact order:
+1. `PLAN.md` update (overhaul note + date)
+2. `MEMORY.md` §9 learned lessons append
+3. `structure.md` update (only if `apps/mobile/utils/format.ts` created)
+4. `TRD.md` update (accept-time snapshot + DTO fields)
+5. `PRD.md` update (order data integrity UX/contract alignment)
+6. `README.md` confirm unchanged/no new setup steps
+7. Run `pnpm type-check` at repo root
+8. Commit + push with specified message
+
+---
+
+**STOP CONDITION (pre-execution):** This plan is ready. No code changes should start until explicit user message: **"proceed"**.
+
+## Security Sign-off (Session Scope)
+
+| Item | Rule | Status |
+|---|---|---|
+| V13 | `order.status='completed'` only via verify-otp route | ✅/⚠️/🚨 |
+| V24 | `phone_hash` absent from order DTO responses | ✅/⚠️/🚨 |
+| V7 | `aggregator_id` sourced from `req.user.id`, never request body | ✅/⚠️/🚨 |
+| V25 | `pickup_address` exposed only post-accept to authorized parties | ✅/⚠️/🚨 |
+| A3 | no secret leakage / no hardcoded env values | ✅/⚠️/🚨 |
+| C1 | any new intervals/effects include cleanup | ✅/⚠️/🚨 |
+
+---
+
+## Execution Status (2026-03-18)
+
+### Sub-Agent Completion
+- Sub-Agent 1 (Backend transaction + `/me/rates`): ✅ complete
+- Sub-Agent 2 (DTO/API contract): ✅ complete
+- Sub-Agent 3 (Aggregator mobile/store): ✅ complete
+- Sub-Agent 4 (Seller mobile/rating): ✅ complete
+- Sub-Agent 5 (Docs/security closeout): ✅ complete
+
+### Gate Outcome Snapshot
+- SA1-V4 (`GET /api/aggregators/me/rates`) route implementation: ✅ implemented (runtime curl requires running backend + valid token)
+- G3/G4 (seller-rate column removed + fixture-free aggregator detail): ✅ code-level complete
+- G12 (`pnpm type-check`): ✅ pass
+
+Manual device-flow gates (G6–G11) remain required in-app verification steps on running clients.
 

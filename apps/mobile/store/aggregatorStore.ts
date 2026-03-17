@@ -23,6 +23,7 @@ export interface AggregatorEarnings {
 }
 
 export interface AggregatorProfile {
+  name: string | null;
   businessName: string | null;
   operatingArea: string | null;
   operatingHours: any | null;
@@ -252,6 +253,27 @@ function mapFeedOrder(o: any): NewOrderRequest {
   };
 }
 
+function computeOrderAmount(order: any): number {
+  if (typeof order?.orderAmount === 'number' && Number.isFinite(order.orderAmount)) return order.orderAmount;
+  if (typeof order?.display_amount === 'number' && Number.isFinite(order.display_amount)) return order.display_amount;
+  if (typeof order?.displayAmount === 'number' && Number.isFinite(order.displayAmount)) return order.displayAmount;
+  if (typeof order?.confirmed_total === 'number' && Number.isFinite(order.confirmed_total) && order.confirmed_total > 0) return order.confirmed_total;
+  if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total)) return order.estimated_total;
+
+  const items = Array.isArray(order?.order_items) ? order.order_items : [];
+  const fromItems = items.reduce((sum: number, item: any) => {
+    const weight = Number(item?.estimated_weight_kg ?? 0);
+    const rate = Number(item?.rate_per_kg ?? 0);
+    if (!Number.isFinite(weight) || !Number.isFinite(rate)) return sum;
+    return sum + (weight * rate);
+  }, 0);
+  if (fromItems > 0) return fromItems;
+
+  if (typeof order?.estimated_value === 'number' && Number.isFinite(order.estimated_value)) return order.estimated_value;
+  if (typeof order?.estimatedAmount === 'number' && Number.isFinite(order.estimatedAmount)) return order.estimatedAmount;
+  return 0;
+}
+
 export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   fullName: '',
   businessName: '',
@@ -279,7 +301,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   profileError: null,
   ratesError: null,
   earningsError: null,
-  isOnline: false,
+  isOnline: true,
   isLoading: false,
   feedError: null,
   lastFeedError: null,
@@ -394,7 +416,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     profileError: null,
     ratesError: null,
     earningsError: null,
-    isOnline: false, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: null, lastAcceptedAt: null, error: null,
+    isOnline: true, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: null, lastAcceptedAt: null, error: null,
     isNetworkError: false,
     scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
     kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
@@ -431,7 +453,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
     try {
       const res = await api.get('/api/orders', { params: { role: 'aggregator' } });
-      set({ aggOrders: res.data.orders ?? [], isLoading: false, error: null, isNetworkError: false });
+      const normalized = (res.data.orders ?? []).map((order: any) => ({
+        ...order,
+        orderAmount: computeOrderAmount(order),
+      }));
+      set({ aggOrders: normalized, isLoading: false, error: null, isNetworkError: false });
     } catch (e: any) {
       if (isNetworkError(e)) {
         set({ isNetworkError: true, isLoading: false });
@@ -454,11 +480,13 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       }
 
       const payload = profileRes.data ?? {};
+      const name = payload.name ?? null;
       const operatingHours = payload.operating_hours ?? payload.aggregator_operating_hours ?? null;
       const operatingArea = payload.operating_area ?? payload.aggregator_locality ?? null;
       const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
       const cityCode = payload.city_code ?? payload.aggregator_city_code ?? null;
       const kycStatus = payload.kyc_status ?? payload.aggregator_kyc_status ?? null;
+      const isOnline = payload.is_online !== undefined ? Boolean(payload.is_online) : true;
 
       const parsedSchedule = Array.isArray(operatingHours?.days)
         ? operatingHours.days
@@ -466,6 +494,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
       set({
         profile: {
+          name,
           businessName,
           operatingArea,
           operatingHours,
@@ -475,6 +504,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         businessName: businessName ?? '',
         primaryArea: operatingArea ?? '',
         weeklySchedule: parsedSchedule,
+        isOnline,
         isProfileLoading: false,
         profileError: null,
       });
@@ -491,12 +521,12 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     try {
       let ratesRes: any;
       try {
-        ratesRes = await api.get('/api/aggregators/rates');
+        ratesRes = await api.get('/api/aggregators/me/rates');
       } catch {
         ratesRes = await api.get('/api/rates');
       }
 
-      const incoming = (ratesRes.data?.rates ?? []) as AggregatorRate[];
+      const incoming = (Array.isArray(ratesRes.data) ? ratesRes.data : (ratesRes.data?.rates ?? [])) as AggregatorRate[];
       const ratesMap = new Map(incoming.map((item) => [item.material_code, item.rate_per_kg]));
       set((state) => ({
         materialRates: incoming,
@@ -619,17 +649,21 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       
       // The backend returns the updated full order DTO
       const completedOrder = res.data.order;
+      const completedOrderWithAmount = {
+        ...completedOrder,
+        orderAmount: computeOrderAmount(completedOrder),
+      };
       
       // Add or update it in the global order store so the Active tab sees it instantly
       const { useOrderStore, mapApiOrder } = require('./orderStore');
-      const mappedOrder = mapApiOrder(completedOrder);
+      const mappedOrder = mapApiOrder(completedOrderWithAmount);
       useOrderStore.getState().addOrder(mappedOrder);
       
       // Update local aggregator state arrays, including aggOrders
       set((state) => ({
         newOrders: state.newOrders.filter((o) => o.id !== orderId),
         activeOrders: [...state.activeOrders, orderId],
-        aggOrders: [completedOrder, ...state.aggOrders],
+        aggOrders: [completedOrderWithAmount, ...state.aggOrders],
         lastAcceptedAt: new Date().toISOString(),
         isLoading: false,
       }));

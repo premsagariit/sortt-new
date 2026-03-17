@@ -20,6 +20,8 @@ export interface Order {
   materials: MaterialCode[];
   estimatedAmount: number;
   confirmedAmount: number | null;
+  estimatedTotal?: number;
+  confirmedTotal?: number;
   displayAmount: number;
   isFinalAmount: boolean;
   pickupLocality: string;
@@ -40,8 +42,18 @@ export interface Order {
   pickupLat?: number | null;
   pickupLng?: number | null;
   rating?: number;
+  sellerHasRated?: boolean;
   window?: string;
   estimatedWeights?: Record<string, number>;
+  orderItems?: Array<{
+    id: string;
+    materialCode: string;
+    materialLabel: string;
+    estimatedWeightKg: number | null;
+    confirmedWeightKg: number | null;
+    ratePerKg: number | null;
+    amount: number | null;
+  }>;
   lineItems?: Array<{
     materialCode: string;
     weightKg: number;
@@ -82,18 +94,36 @@ export function mapApiOrder(o: any): Order {
     orderNumber,
     status: o.status,
     materials: o.material_codes ?? o.materials ?? [],
-    estimatedAmount: typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0),
-    confirmedAmount: typeof o.confirmed_value === 'number' ? o.confirmed_value : (o.confirmedAmount ?? null),
+    estimatedAmount:
+      typeof o.estimated_total === 'number'
+        ? o.estimated_total
+        : (typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0)),
+    confirmedAmount:
+      typeof o.confirmed_total === 'number'
+        ? o.confirmed_total
+        : (typeof o.confirmed_value === 'number' ? o.confirmed_value : (o.confirmedAmount ?? null)),
+    estimatedTotal:
+      typeof o.estimated_total === 'number'
+        ? o.estimated_total
+        : (typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0)),
+    confirmedTotal:
+      typeof o.confirmed_total === 'number'
+        ? o.confirmed_total
+        : (typeof o.confirmed_value === 'number' ? o.confirmed_value : 0),
     displayAmount:
       typeof o.display_amount === 'number'
         ? o.display_amount
-        : (typeof o.confirmed_value === 'number'
-          ? o.confirmed_value
-          : (typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0))),
+        : (typeof o.confirmed_total === 'number' && o.confirmed_total > 0
+          ? o.confirmed_total
+          : (typeof o.estimated_total === 'number'
+            ? o.estimated_total
+            : (typeof o.confirmed_value === 'number'
+              ? o.confirmed_value
+              : (typeof o.estimated_value === 'number' ? o.estimated_value : (o.estimatedAmount ?? 0))))),
     isFinalAmount:
       typeof o.is_final_amount === 'boolean'
         ? o.is_final_amount
-        : typeof o.confirmed_value === 'number',
+        : ((typeof o.confirmed_total === 'number' && o.confirmed_total > 0) || typeof o.confirmed_value === 'number'),
     pickupLocality: o.pickup_locality ?? o.pickupLocality ?? '',
     pickupAddress: o.pickup_address ?? o.pickupAddress ?? null,
     createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
@@ -111,8 +141,20 @@ export function mapApiOrder(o: any): Order {
     pickupLat: typeof o.pickup_lat === 'number' ? o.pickup_lat : (typeof o.pickupLat === 'number' ? o.pickupLat : null),
     pickupLng: typeof o.pickup_lng === 'number' ? o.pickup_lng : (typeof o.pickupLng === 'number' ? o.pickupLng : null),
     rating: typeof o.rating === 'number' ? o.rating : undefined,
+    sellerHasRated: typeof o.seller_has_rated === 'boolean' ? o.seller_has_rated : undefined,
     window: windowLabel,
     estimatedWeights: o.estimated_weights ?? o.estimatedWeights ?? {},
+    orderItems: Array.isArray(o.order_items)
+      ? o.order_items.map((item: any, idx: number) => ({
+          id: String(item.id ?? `${rawOrderId}-${idx}`),
+          materialCode: String(item.material_code ?? item.materialCode ?? ''),
+          materialLabel: String(item.material_label ?? item.materialLabel ?? item.material_code ?? item.materialCode ?? ''),
+          estimatedWeightKg: typeof item.estimated_weight_kg === 'number' ? item.estimated_weight_kg : (typeof item.estimatedWeightKg === 'number' ? item.estimatedWeightKg : null),
+          confirmedWeightKg: typeof item.confirmed_weight_kg === 'number' ? item.confirmed_weight_kg : (typeof item.confirmedWeightKg === 'number' ? item.confirmedWeightKg : null),
+          ratePerKg: typeof item.rate_per_kg === 'number' ? item.rate_per_kg : (typeof item.ratePerKg === 'number' ? item.ratePerKg : null),
+          amount: typeof item.amount === 'number' ? item.amount : null,
+        }))
+      : undefined,
     lineItems: Array.isArray(o.line_items)
       ? o.line_items.map((item: any) => ({
           materialCode: item.material_code ?? item.materialCode,

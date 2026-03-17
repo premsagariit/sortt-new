@@ -22,6 +22,18 @@ export interface DbOrder {
     rate_per_kg: number;
     amount: number;
   }>;
+  order_items?: Array<{
+    id: string;
+    material_code: string;
+    material_label: string;
+    estimated_weight_kg: number | null;
+    confirmed_weight_kg: number | null;
+    rate_per_kg: number | null;
+    amount: number | null;
+  }>;
+  estimated_total?: number | null;
+  confirmed_total?: number | null;
+  seller_has_rated?: boolean;
   [key: string]: any;
 }
 
@@ -53,10 +65,41 @@ export function buildOrderDto(order: DbOrder, requestingUserId: string, requesti
   const order_channel = channelPrefix ? `${channelPrefix}:order:${order.id}` : undefined;
   const chatChannelToken = chat_channel || null;  // camelCase alias for mobile store
   const orderChannelToken = order_channel || null; // camelCase alias for mobile store
-  const estimatedValue = typeof order.estimated_value === 'number' ? order.estimated_value : null;
-  const confirmedValue = typeof order.confirmed_value === 'number' ? order.confirmed_value : null;
+  const estimatedTotal =
+    typeof order.estimated_total === 'number'
+      ? order.estimated_total
+      : (typeof order.estimated_value === 'number' ? order.estimated_value : 0);
+  const confirmedTotal =
+    typeof order.confirmed_total === 'number'
+      ? order.confirmed_total
+      : (typeof order.confirmed_value === 'number' ? order.confirmed_value : 0);
+  const estimatedValue = estimatedTotal;
+  const confirmedValue = confirmedTotal > 0 ? confirmedTotal : (typeof order.confirmed_value === 'number' ? order.confirmed_value : null);
   const displayAmount = confirmedValue ?? estimatedValue ?? 0;
   const isFinalAmount = confirmedValue !== null;
+
+  const normalizedOrderItems = Array.isArray(order.order_items)
+    ? order.order_items
+    : (Array.isArray(order.line_items)
+      ? order.line_items.map((item: any, idx: number) => ({
+          id: String(item.id ?? `${order.id}-${idx}`),
+          material_code: String(item.material_code ?? ''),
+          material_label: String(item.material_label ?? item.material_code ?? ''),
+          estimated_weight_kg: typeof item.estimated_weight_kg === 'number' ? item.estimated_weight_kg : null,
+          confirmed_weight_kg: typeof item.confirmed_weight_kg === 'number' ? item.confirmed_weight_kg : null,
+          rate_per_kg: typeof item.rate_per_kg === 'number' ? item.rate_per_kg : null,
+          amount: typeof item.amount === 'number' ? item.amount : null,
+        }))
+      : []);
+
+  const normalizedLineItems = Array.isArray(order.line_items)
+    ? order.line_items
+    : normalizedOrderItems.map((item) => ({
+        material_code: item.material_code,
+        weight_kg: item.confirmed_weight_kg ?? item.estimated_weight_kg ?? 0,
+        rate_per_kg: item.rate_per_kg ?? 0,
+        amount: item.amount ?? 0,
+      }));
 
   return {
     ...order,
@@ -67,6 +110,8 @@ export function buildOrderDto(order: DbOrder, requestingUserId: string, requesti
     orderChannelToken,
     estimated_value: estimatedValue,
     confirmed_value: confirmedValue,
+    estimated_total: estimatedTotal,
+    confirmed_total: confirmedTotal,
     display_amount: displayAmount,
     is_final_amount: isFinalAmount,
     pickup_address: canSeeAddress ? order.pickup_address : null,
@@ -76,8 +121,10 @@ export function buildOrderDto(order: DbOrder, requestingUserId: string, requesti
     aggregator_phone: (requestingUserId === order.seller_id) && canSeeOtherPartyPhone ? (order.aggregator_display_phone ?? null) : null,
     material_codes: order.material_codes || [],
     estimated_weights: order.estimated_weights || {},
-    line_items: order.line_items || [],
+    order_items: normalizedOrderItems,
+    line_items: normalizedLineItems,
     history: order.history || [],
+    seller_has_rated: Boolean(order.seller_has_rated),
     otp: canSeeOrderOtp ? (order.otp ?? '') : '',
     order_number: undefined,
     phone_hash: undefined,

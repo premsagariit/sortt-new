@@ -63,7 +63,6 @@ const MATERIAL_LABEL: Record<MaterialCode, string> = {
 const MOCK_AGG_NAME = 'Suresh Metals';
 const MOCK_AGG_AREA = 'Madhapur · 3rd Phase';
 const MOCK_AGG_AREA_SHORT = 'Madhapur';
-const MOCK_PENDING_COUNT = '04';
 const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000;
 const MIN_ACCEPTABLE_RATES: Record<string, number> = {
   metal: 25,
@@ -76,15 +75,26 @@ export default function AggregatorHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { isOnline, updateOnlineStatus, earnings, businessName, primaryArea, fetchFeed, error } = useAggregatorStore();
+  const { isOnline, updateOnlineStatus, earnings, profile, primaryArea, fetchFeed, fetchAggregatorProfile, fetchAggregatorEarnings, error } = useAggregatorStore();
   const lastFeedSyncAt = useAggregatorStore((s) => s.lastFeedSyncAt);
   const lastFeedError = useAggregatorStore((s) => s.lastFeedError);
+  const aggregatorName = useAuthStore((s: any) => s.name);
+  const fetchMe = useAuthStore((s: any) => s.fetchMe);
   const userType = useAuthStore((s: any) => s.userType);
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
-  const displayName = businessName || MOCK_AGG_NAME;
+  const displayName = aggregatorName || profile?.name || MOCK_AGG_NAME;
   const displayArea = primaryArea || MOCK_AGG_AREA;
   const displayAreaShort = primaryArea ? primaryArea.split(',')[0]?.trim() || primaryArea : MOCK_AGG_AREA_SHORT;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userType === 'aggregator') {
+        void fetchMe();
+        void fetchAggregatorProfile();
+      }
+    }, [userType, fetchMe, fetchAggregatorProfile])
+  );
 
   const [screenState, setScreenState] = React.useState<'loading' | 'error' | 'empty' | 'populated'>('loading');
   // liveRates stored as { material_code: rate_per_kg } map for O(1) lookup in render
@@ -132,8 +142,9 @@ export default function AggregatorHomeScreen() {
     if (shouldShowLoader) setScreenState('loading');
     
     try {
-      const [, ratesRes] = await Promise.all([
+      const [, , ratesRes] = await Promise.all([
         fetchFeed(silent),
+        fetchAggregatorEarnings('today'),
         api.get('/api/rates').catch(() => null),
       ]);
       if (ratesRes) {
@@ -366,15 +377,15 @@ export default function AggregatorHomeScreen() {
           {/* Stats Row */}
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹{earnings.todayAmount || '1,240'}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹{Number(earnings.todayAmount ?? 0).toLocaleString('en-IN')}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Today</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{earnings.todayPickups || '06'}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{Number(earnings.todayPickups ?? 0)}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Pickups</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{MOCK_PENDING_COUNT}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{activeFeed.length}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Pending</Text>
             </View>
           </View>

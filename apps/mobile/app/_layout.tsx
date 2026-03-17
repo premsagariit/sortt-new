@@ -38,7 +38,7 @@ import {
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
 import { api, setApiTokenGetter } from '../lib/api';
-import { setGlobalClerkSignOut, useAuthStore, type AuthState } from '../store/authStore';
+import { useAuthStore, type AuthState, setGlobalClerkSignOut } from '../store/authStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
 import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';

@@ -520,7 +520,21 @@ router.get('/:id', async (req, res) => {
              agg.name as aggregator_name,
              agg.display_phone as aggregator_display_phone,
              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-             jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights,
+             COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
+             COALESCE(
+               json_agg(
+                 DISTINCT jsonb_build_object(
+                   'id', oi.id,
+                   'material_code', oi.material_code,
+                   'material_label', mt.label_en,
+                   'estimated_weight_kg', oi.estimated_weight_kg,
+                   'confirmed_weight_kg', oi.confirmed_weight_kg,
+                   'rate_per_kg', oi.rate_per_kg,
+                   'amount', oi.amount
+                 )
+               ) FILTER (WHERE oi.id IS NOT NULL),
+               '[]'
+             ) as order_items,
              COALESCE(
                json_agg(
                  DISTINCT jsonb_build_object(
@@ -532,6 +546,13 @@ router.get('/:id', async (req, res) => {
                ) FILTER (WHERE oi.material_code IS NOT NULL),
                '[]'
              ) as line_items,
+             COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
+             COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
+             EXISTS (
+               SELECT 1 FROM ratings r
+               WHERE r.order_id = o.id
+                 AND r.rater_id = o.seller_id
+             ) AS seller_has_rated,
              (
                SELECT json_agg(h ORDER BY h.created_at ASC)
                FROM order_status_history h
@@ -541,6 +562,7 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN users u ON u.id = o.seller_id
       LEFT JOIN users agg ON agg.id = o.aggregator_id
       LEFT JOIN order_items oi ON o.id = oi.order_id
+      LEFT JOIN material_types mt ON mt.code = oi.material_code
       WHERE o.id = $1
       GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
     `, [id]);
@@ -662,7 +684,21 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
               agg.name as aggregator_name,
               agg.display_phone as aggregator_display_phone,
               COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-              jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights,
+              COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
+              COALESCE(
+                json_agg(
+                  DISTINCT jsonb_build_object(
+                    'id', oi.id,
+                    'material_code', oi.material_code,
+                    'material_label', mt.label_en,
+                    'estimated_weight_kg', oi.estimated_weight_kg,
+                    'confirmed_weight_kg', oi.confirmed_weight_kg,
+                    'rate_per_kg', oi.rate_per_kg,
+                    'amount', oi.amount
+                  )
+                ) FILTER (WHERE oi.id IS NOT NULL),
+                '[]'
+              ) as order_items,
               COALESCE(
                 json_agg(
                   DISTINCT jsonb_build_object(
@@ -673,11 +709,19 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
                   )
                 ) FILTER (WHERE oi.material_code IS NOT NULL),
                 '[]'
-              ) as line_items
+              ) as line_items,
+              COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
+              COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
+              EXISTS (
+                SELECT 1 FROM ratings r
+                WHERE r.order_id = o.id
+                  AND r.rater_id = o.seller_id
+              ) AS seller_has_rated
        FROM orders o
        LEFT JOIN users u ON u.id = o.seller_id
        LEFT JOIN users agg ON agg.id = o.aggregator_id
        LEFT JOIN order_items oi ON o.id = oi.order_id
+       LEFT JOIN material_types mt ON mt.code = oi.material_code
        WHERE o.id = $1
        GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone`,
       [orderId]
@@ -930,6 +974,45 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
       [aggregatorId, orderId]
     );
 
+    // Snapshot accepting aggregator rates onto order_items at accept-time (atomic with accept lock).
+    await client.query(
+      `UPDATE order_items oi
+       SET rate_per_kg = amr.rate_per_kg,
+           amount = COALESCE(oi.estimated_weight_kg, 0) * amr.rate_per_kg
+       FROM aggregator_material_rates amr
+       WHERE oi.order_id = $1
+         AND amr.aggregator_id = $2
+         AND amr.material_code = oi.material_code`,
+      [orderId, aggregatorId]
+    );
+
+    // Missing aggregator rate for material is non-fatal: force 0/0 for downstream UI clarity.
+    await client.query(
+      `UPDATE order_items oi
+       SET rate_per_kg = 0,
+           amount = 0
+       WHERE oi.order_id = $1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM aggregator_material_rates amr
+           WHERE amr.aggregator_id = $2
+             AND amr.material_code = oi.material_code
+         )`,
+      [orderId, aggregatorId]
+    );
+
+    await client.query(
+      `UPDATE orders
+       SET estimated_value = COALESCE((
+         SELECT SUM(COALESCE(oi.estimated_weight_kg, 0) * COALESCE(oi.rate_per_kg, 0))
+         FROM order_items oi
+         WHERE oi.order_id = $1
+       ), 0),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [orderId]
+    );
+
     await client.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
        VALUES ($1, 'created', 'accepted', $2, 'Aggregator accepted')`,
@@ -1097,11 +1180,44 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
            u.name as seller_name, u.display_phone as seller_display_phone,
            agg.name as aggregator_name, agg.display_phone as aggregator_display_phone,
            COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-           jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) as estimated_weights
+           COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
+           COALESCE(
+             json_agg(
+               DISTINCT jsonb_build_object(
+                 'id', oi.id,
+                 'material_code', oi.material_code,
+                 'material_label', mt.label_en,
+                 'estimated_weight_kg', oi.estimated_weight_kg,
+                 'confirmed_weight_kg', oi.confirmed_weight_kg,
+                 'rate_per_kg', oi.rate_per_kg,
+                 'amount', oi.amount
+               )
+             ) FILTER (WHERE oi.id IS NOT NULL),
+             '[]'
+           ) as order_items,
+           COALESCE(
+             json_agg(
+               DISTINCT jsonb_build_object(
+                 'material_code', oi.material_code,
+                 'weight_kg', COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg),
+                 'rate_per_kg', oi.rate_per_kg,
+                 'amount', COALESCE(oi.amount, 0)
+               )
+             ) FILTER (WHERE oi.material_code IS NOT NULL),
+             '[]'
+           ) as line_items,
+           COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
+           COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
+           EXISTS (
+             SELECT 1 FROM ratings r
+             WHERE r.order_id = o.id
+               AND r.rater_id = o.seller_id
+           ) AS seller_has_rated
     FROM orders o
     LEFT JOIN users u ON u.id = o.seller_id
     LEFT JOIN users agg ON agg.id = o.aggregator_id
     LEFT JOIN order_items oi ON o.id = oi.order_id
+    LEFT JOIN material_types mt ON mt.code = oi.material_code
     WHERE o.id = $1
     GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
   `, [orderId]);

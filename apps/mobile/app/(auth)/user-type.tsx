@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -10,25 +10,25 @@ import { PrimaryButton } from '../../components/ui/Button';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { useAuthStore } from '../../store/authStore';
 import { APP_NAME } from '../../constants/app';
+import { api } from '../../lib/api';
 
 export default function UserTypeScreen() {
-  const isNewUser = useAuthStore((s) => s.isNewUser);
   const setUserType = useAuthStore((s) => s.setUserType);
 
   const [selectedType, setSelectedType] = useState<'seller' | 'aggregator'>('seller');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!isNewUser) {
-      const userType = useAuthStore.getState().user?.user_type;
-      if (userType === 'aggregator') {
-        router.replace('/(aggregator)/home');
-      } else {
-        router.replace('/(seller)/home');
-      }
+  const handleContinue = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await api.post('/api/users/user-type', { user_type: selectedType });
+    } catch (error) {
+      console.error('Failed to persist user type:', error);
+      setIsSubmitting(false);
+      return;
     }
-  }, [isNewUser]);
 
-  const handleContinue = () => {
     setUserType(selectedType);
     if (selectedType === 'seller') {
       router.replace('/(auth)/seller/account-type');
@@ -43,7 +43,7 @@ export default function UserTypeScreen() {
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text variant="heading" style={styles.title}>I want to…</Text>
+          <Text variant="heading" style={styles.title}>I want toï¿½</Text>
           <Text variant="body" style={styles.subtitle}>Tell us how you'll use {APP_NAME}</Text>
         </View>
 
@@ -103,6 +103,7 @@ export default function UserTypeScreen() {
             label={selectedType === 'seller' ? 'Continue as Seller' : 'Continue as Aggregator'}
             icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             onPress={handleContinue}
+            disabled={isSubmitting}
           />
         </View>
       </View>

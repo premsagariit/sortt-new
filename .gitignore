@@ -51,3 +51,29 @@ sql.md
 backend/uploads/
 
 r.txt
+
+
+user_data_delete.sql
+
+# Agent files
+.agent/
+.claude/
+.github/
+.venv/
+
+implementationPlan.md
+
+.tmp_apply_auth_migration.js
+.tmp_get_existing_phone.js
+check_aggregator_schema.js
+check_cities_schema.js
+check_material_types_schema.js
+check_schema.js
+fix.js
+
+
+reseed_reference_tables.js
+test_seed.js
+user_data_delete.sql
+verify_env.js
+verify_seed_data.js

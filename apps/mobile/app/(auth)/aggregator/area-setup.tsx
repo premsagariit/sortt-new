@@ -25,7 +25,7 @@ const POPULAR_ZONES = [
  */
 export default function AggregatorAreaSetup() {
   const router = useRouter();
-  const { operatingAreas, setOperatingAreas } = useAggregatorStore();
+  const { operatingAreas, businessName, fullName, operatingHours, operatingDays, setOperatingAreas } = useAggregatorStore();
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,7 +33,9 @@ export default function AggregatorAreaSetup() {
     setIsLoading(true);
     try {
       await api.patch('/api/aggregators/profile', {
-        operating_area: operatingAreas.join(', ')
+        operating_area: operatingAreas.join(', '),
+        business_name: businessName || fullName,
+        operating_hours: { days: operatingDays, from: operatingHours.from, to: operatingHours.to },
       });
       router.push('/(auth)/aggregator/materials-setup' as any);
     } catch (e) {

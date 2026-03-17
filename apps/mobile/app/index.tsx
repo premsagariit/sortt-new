@@ -20,14 +20,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../constants/tokens';
 import SplashAnimation from '../components/SplashAnimation';
 import { useAuthStore } from '../store/authStore';
+import { api } from '../lib/api';
 
 let hasShownSplashAnimation = false;
 
 export default function IndexScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
-  const userType = useAuthStore((s) => s.userType);
-  const name = useAuthStore((s) => s.name);
 
   // Track whether the splash animation has finished
   const [splashDone, setSplashDone] = useState(hasShownSplashAnimation);
@@ -62,37 +61,89 @@ export default function IndexScreen() {
   useEffect(() => {
     if (!splashDone || !isLoaded || !onboardingChecked) return;
 
-    if (!onboardingComplete) {
-      router.replace('/(auth)/onboarding' as any);
-      return;
-    }
+    let cancelled = false;
 
-    if (isSignedIn) {
-      // If name is set, user is fully onboarded — go to home
-      if (name && name.trim() !== '') {
-        if (userType === 'aggregator') {
-          router.replace('/(aggregator)/home' as any);
-        } else if (userType === 'seller') {
-          router.replace('/(seller)/home' as any);
-        } else {
-          // Fallback
+    const resolveRoute = async () => {
+      if (!onboardingComplete) {
+        router.replace('/(auth)/onboarding' as any);
+        return;
+      }
+
+      if (!isSignedIn) {
+        router.replace('/(auth)/phone' as any);
+        return;
+      }
+
+      try {
+        const meRes = await api.get('/api/users/me');
+        if (cancelled) return;
+        const me = meRes.data as any;
+
+        if (!me?.user_type) {
           router.replace('/(auth)/user-type' as any);
+          return;
         }
-      } else {
-        // Signed in but no name — go to setup flow based on type
-        if (userType === 'aggregator') {
+
+        if (me.user_type === 'seller') {
+          const hasName = !!me.name && me.name.trim().length > 0;
+          const hasProfileType = !!me.seller_profile_type;
+          const hasLocality = !!me.seller_locality && me.seller_locality.trim().length > 0;
+          const hasCity = !!me.seller_city_code;
+          const needsBusinessSetup = me.seller_profile_type === 'business' && !(me.seller_gstin && me.seller_gstin.trim().length === 15);
+
+          if (!hasProfileType) {
+            router.replace('/(auth)/seller/account-type' as any);
+            return;
+          }
+          if (!hasName || !hasLocality || !hasCity) {
+            router.replace('/(auth)/seller/seller-setup' as any);
+            return;
+          }
+          if (needsBusinessSetup) {
+            router.replace('/(auth)/seller/business-setup' as any);
+            return;
+          }
+          router.replace('/(seller)/home' as any);
+          return;
+        }
+
+        const hasBusinessName = !!me.aggregator_business_name && me.aggregator_business_name.trim().length > 0;
+        const hasCity = !!me.aggregator_city_code;
+        const hasArea = !!me.aggregator_locality && me.aggregator_locality.trim().length > 0;
+        const hasRates = Number(me.aggregator_material_count ?? 0) > 0;
+        const hasKycPhoto = !!me.aggregator_has_kyc_media;
+
+        if (!hasBusinessName || !hasCity) {
           router.replace('/(auth)/aggregator/profile-setup' as any);
-        } else if (userType === 'seller') {
-          router.replace('/(auth)/seller/account-type' as any);
-        } else {
+          return;
+        }
+        if (!hasArea) {
+          router.replace('/(auth)/aggregator/area-setup' as any);
+          return;
+        }
+        if (!hasRates) {
+          router.replace('/(auth)/aggregator/materials-setup' as any);
+          return;
+        }
+        if (!hasKycPhoto) {
+          router.replace('/(auth)/aggregator/kyc' as any);
+          return;
+        }
+
+        router.replace('/(aggregator)/home' as any);
+      } catch {
+        if (!cancelled) {
           router.replace('/(auth)/user-type' as any);
         }
       }
-    } else {
-      // Not signed in — go to phone entry
-      router.replace('/(auth)/phone' as any);
-    }
-  }, [splashDone, isLoaded, onboardingChecked, onboardingComplete, isSignedIn, userType, name, router]);
+    };
+
+    void resolveRoute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [splashDone, isLoaded, onboardingChecked, onboardingComplete, isSignedIn, router]);
 
   return (
     <View style={styles.container}>

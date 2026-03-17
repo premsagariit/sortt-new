@@ -21,6 +21,10 @@
 >   - `NetworkErrorScreen` — rich offline screen (red header mirroring the live NavBar with persona name, avatar, location pill, scroll-driven compression animation, aggregator "Offline" pill) used for all in-app routes.
 >   - Both screens show a 10-second auto-retry countdown and a manual "Retry now" button. Retry probes `GET /api/rates`; network restoration is detected independently by `useNetworkStatus`.
 >   - On reconnect from an `/(auth)` path, the layout restores `/(auth)/phone` if the user was on `phone` or `otp` (OTP is time-limited and cannot be replayed), or restores the exact stored path for other auth screens.
+> - ✅ **Order data integrity overhaul (2026-03-18):**
+>   - At `accepted` transition, `order_items.rate_per_kg` and `order_items.amount` are snapshotted atomically in the accept transaction from the accepting aggregator’s `aggregator_material_rates`.
+>   - Missing aggregator material-rate rows are treated as data gaps (`rate_per_kg=0`, `amount=0`) rather than accept failure.
+>   - Order responses now include canonical `order_items` entries (`material_label`, estimated/confirmed weights, `rate_per_kg`, `amount`) plus order-level `estimated_total`, `confirmed_total`, and `seller_has_rated`.
 
 
 ---

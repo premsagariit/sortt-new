@@ -5,6 +5,40 @@ import * as Sentry from '@sentry/node'; // Assuming Sentry is imported or needs 
 
 const router = Router();
 
+// Persist selected user type during onboarding
+router.post('/user-type', async (req, res) => {
+  const { userId: clerkUserId } = getAuth(req);
+  const { user_type } = req.body as { user_type?: 'seller' | 'aggregator' };
+
+  if (!clerkUserId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user_type !== 'seller' && user_type !== 'aggregator') {
+    return res.status(400).json({ error: 'Invalid user type' });
+  }
+
+  try {
+    const result = await query(
+      `UPDATE users
+       SET user_type = $1
+       WHERE clerk_user_id = $2
+       RETURNING id, user_type`,
+      [user_type, clerkUserId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true, user_type: result.rows[0].user_type });
+  } catch (error: any) {
+    console.error('POST /api/users/user-type error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Endpoint for push token registration
 router.post('/device-token', async (req, res) => {
   const { deviceToken, provider } = req.body;
@@ -112,10 +146,23 @@ router.get('/me', async (req, res) => {
                 s.profile_type as seller_profile_type, s.business_name as seller_business_name,
                 s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
                 a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
-                a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status
+                a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status,
+                COALESCE(r.material_count, 0) as aggregator_material_count,
+                COALESCE(k.has_kyc_media, false) as aggregator_has_kyc_media
          FROM users_public u
          LEFT JOIN seller_profiles s ON u.id = s.user_id AND u.user_type = 'seller'
          LEFT JOIN aggregator_profiles a ON u.id = a.user_id AND u.user_type = 'aggregator'
+         LEFT JOIN (
+           SELECT aggregator_id, COUNT(*)::int AS material_count
+           FROM aggregator_material_rates
+           GROUP BY aggregator_id
+         ) r ON r.aggregator_id = u.id
+         LEFT JOIN (
+           SELECT uploaded_by, true AS has_kyc_media
+           FROM order_media
+           WHERE media_type IN ('kyc_shop', 'kyc_vehicle')
+           GROUP BY uploaded_by
+         ) k ON k.uploaded_by = u.id
          WHERE u.id = $1`,
         [userId]
       );
@@ -126,10 +173,23 @@ router.get('/me', async (req, res) => {
                   s.profile_type as seller_profile_type, s.business_name as seller_business_name,
                   s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
                   a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
-                  a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status
+                  a.city_code as aggregator_city_code, a.kyc_status as aggregator_kyc_status,
+                  COALESCE(r.material_count, 0) as aggregator_material_count,
+                  COALESCE(k.has_kyc_media, false) as aggregator_has_kyc_media
            FROM users u
            LEFT JOIN seller_profiles s ON u.id = s.user_id AND u.user_type = 'seller'
            LEFT JOIN aggregator_profiles a ON u.id = a.user_id AND u.user_type = 'aggregator'
+           LEFT JOIN (
+             SELECT aggregator_id, COUNT(*)::int AS material_count
+             FROM aggregator_material_rates
+             GROUP BY aggregator_id
+           ) r ON r.aggregator_id = u.id
+           LEFT JOIN (
+             SELECT uploaded_by, true AS has_kyc_media
+             FROM order_media
+             WHERE media_type IN ('kyc_shop', 'kyc_vehicle')
+             GROUP BY uploaded_by
+           ) k ON k.uploaded_by = u.id
            WHERE u.id = $1`,
           [userId]
         );

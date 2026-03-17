@@ -111,6 +111,15 @@ pnpm dev:backend
 - Temporary PATCH status debug logging removed from production flow.
 - Aggregator OTP success now updates local order state to `completed` immediately and refreshes aggregator orders silently, keeping Active/Completed tabs in sync.
 
+✅ Order data integrity overhaul applied (2026-03-18):
+- Accept route now snapshots aggregator material rates into `order_items.rate_per_kg` and `order_items.amount` atomically.
+- Order DTO now includes canonical `order_items`, `estimated_total`, `confirmed_total`, and `seller_has_rated` fields.
+- Aggregator accept flow now routes directly to active-order-detail with replace semantics; seller detail now uses status-aware weights and completed-only rating UI.
+
+✅ README setup unchanged:
+- No new environment variables were introduced.
+- No additional installation or startup commands are required.
+
 ✅ Validation: `pnpm type-check` exits 0 at workspace root.
 
 ---

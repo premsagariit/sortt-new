@@ -1179,7 +1179,13 @@
 
 ## 📊 STATUS TRACKER
 
-> Last updated: 2026-03-16
+> Last updated: 2026-03-18
+
+### ✅ Order Data Integrity Overhaul (2026-03-18)
+- Backend accept route now snapshots aggregator rates into `order_items.rate_per_kg` + `amount` within the same accept transaction.
+- Order DTO contract now exposes canonical `order_items`, `estimated_total`, `confirmed_total`, and `seller_has_rated` for seller/aggregator detail flows.
+- Aggregator post-accept flow now navigates with `router.replace` to active detail context and keeps New→Active transitions store-driven.
+- Seller order detail now uses status-aware weight/rate rendering and completed-only rating submission block.
 
 ### ✅ Completed (Days 1–3)
 - [x] Day 1 — Foundation & Design System *(2026-02-26)*

@@ -84,8 +84,12 @@ export default function SellerProfileScreen() {
 
   async function handleSignOut() {
     setIsSigningOut(true);
-    await authStore.signOut();
-    router.replace('/(auth)/user-type' as any);
+    try {
+      await authStore.signOut();
+    } finally {
+      router.replace('/(auth)/phone' as any);
+      setIsSigningOut(false);
+    }
   }
 
   function handleToggleRole() {

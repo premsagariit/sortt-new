@@ -67,12 +67,11 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 
     const { operating_area, operating_hours, business_name } = req.body;
 
-    console.log('[DIAG] PATCH /api/aggregators/profile', {
-        userId,
-        operating_area,
-        business_name,
-        operating_hours: JSON.stringify(operating_hours)
-    });
+    const diagPayload: Record<string, any> = { userId };
+    if (operating_area !== undefined) diagPayload.operating_area = operating_area;
+    if (business_name !== undefined) diagPayload.business_name = business_name;
+    if (operating_hours !== undefined) diagPayload.operating_hours = JSON.stringify(operating_hours);
+    console.log('[DIAG] PATCH /api/aggregators/profile', diagPayload);
 
     try {
         const updateFields: string[] = [];
@@ -115,6 +114,144 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         console.error('Profile PATCH error:', e);
         Sentry.captureException(e);
         res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+// Fetch current aggregator profile details
+router.get('/me', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+
+    try {
+        const result = await query(
+            `SELECT u.id,
+                    u.name,
+                    a.business_name,
+                    a.city_code,
+                    a.operating_area,
+                    a.operating_hours,
+                    a.kyc_status,
+                                        COALESCE(av.is_online, true) AS is_online,
+                    COALESCE(r.material_count, 0) AS material_count
+             FROM users u
+             JOIN aggregator_profiles a ON a.user_id = u.id
+                         LEFT JOIN aggregator_availability av ON av.user_id = u.id
+             LEFT JOIN (
+               SELECT aggregator_id, COUNT(*)::int AS material_count
+               FROM aggregator_material_rates
+               GROUP BY aggregator_id
+             ) r ON r.aggregator_id = u.id
+             WHERE u.id = $1`,
+            [userId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Aggregator profile not found' });
+        }
+
+        return res.json(result.rows[0]);
+    } catch (e: any) {
+        console.error('GET /api/aggregators/me error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Failed to load aggregator profile' });
+    }
+});
+
+// Returns authenticated aggregator's configured material rates
+router.get('/me/rates', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+
+    try {
+        const result = await query(
+            `SELECT material_code, rate_per_kg, updated_at
+             FROM aggregator_material_rates
+             WHERE aggregator_id = $1
+             ORDER BY material_code ASC`,
+            [userId]
+        );
+
+        return res.json(result.rows);
+    } catch (e: any) {
+        console.error('GET /api/aggregators/me/rates error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Failed to load aggregator rates' });
+    }
+});
+
+// Aggregator earnings summary by period (today|week|month)
+router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const period = String(req.query.period ?? 'month');
+
+    let intervalExpr = "INTERVAL '30 days'";
+    if (period === 'today') intervalExpr = "INTERVAL '1 day'";
+    else if (period === 'week') intervalExpr = "INTERVAL '7 days'";
+
+    try {
+        const totals = await query(
+            `SELECT COALESCE(SUM(item_totals.order_total), 0) AS total_earned,
+                    COUNT(*)::int AS orders_completed,
+                    COALESCE(SUM(item_totals.total_weight_kg), 0) AS total_weight_kg
+             FROM orders o
+             JOIN LATERAL (
+               SELECT COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS order_total,
+                      COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS total_weight_kg
+               FROM order_items oi
+               WHERE oi.order_id = o.id
+             ) item_totals ON true
+             WHERE o.aggregator_id = $1
+               AND o.status = 'completed'
+               AND o.deleted_at IS NULL
+               AND o.created_at >= NOW() - ${intervalExpr}`,
+            [userId]
+        );
+
+        const materialBreakdown = await query(
+            `SELECT oi.material_code,
+                    COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS amount,
+                    COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS weight_kg
+             FROM orders o
+             JOIN order_items oi ON oi.order_id = o.id
+             WHERE o.aggregator_id = $1
+               AND o.status = 'completed'
+               AND o.deleted_at IS NULL
+               AND o.created_at >= NOW() - ${intervalExpr}
+             GROUP BY oi.material_code
+             ORDER BY amount DESC`,
+            [userId]
+        );
+
+        const dailySeries = await query(
+            `SELECT TO_CHAR(DATE_TRUNC('day', o.created_at), 'YYYY-MM-DD') AS date,
+                    COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS amount
+             FROM orders o
+             JOIN order_items oi ON oi.order_id = o.id
+             WHERE o.aggregator_id = $1
+               AND o.status = 'completed'
+               AND o.deleted_at IS NULL
+               AND o.created_at >= NOW() - ${intervalExpr}
+             GROUP BY DATE_TRUNC('day', o.created_at)
+             ORDER BY DATE_TRUNC('day', o.created_at) ASC`,
+            [userId]
+        );
+
+        return res.json({
+            total_earned: Number(totals.rows[0]?.total_earned ?? 0),
+            orders_completed: Number(totals.rows[0]?.orders_completed ?? 0),
+            total_weight_kg: Number(totals.rows[0]?.total_weight_kg ?? 0),
+            material_breakdown: materialBreakdown.rows.map((row: any) => ({
+                material_code: row.material_code,
+                amount: Number(row.amount ?? 0),
+                weight_kg: Number(row.weight_kg ?? 0),
+            })),
+            daily_series: dailySeries.rows.map((row: any) => ({
+                date: row.date,
+                amount: Number(row.amount ?? 0),
+            })),
+        });
+    } catch (e: any) {
+        console.error('GET /api/aggregators/earnings error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Failed to load earnings' });
     }
 });
 

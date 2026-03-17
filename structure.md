@@ -1,177 +1,295 @@
-Sortt
+﻿Sortt
 ├── MEMORY.md # Authoritative project context and learned lessons
 ├── PLAN.md # Master roadmap and daily build status tracker
 ├── PRD.md # Product Requirements Document
 ├── README.md # Project overview and setup instructions
 ├── TRD.md # Technical requirements and schema specs
 ├── UI_REFERENCE.md # Branding and UI build guide
-├── adapters
-│   ├── CLAUDE.md # Adapter configuration for Claude
-│   ├── GEMINI.md # Adapter configuration for Gemini
-│   └── GPT_OSS.md # Adapter configuration for GPT-based models
+├── implementationPlan.md # Current implementation execution plan
+├── structure.md # This file (project structure and descriptions)
+├── app.json # Root Expo metadata
+├── eas.json # EAS build configuration
+├── package.json # Root workspace package config
+├── pnpm-lock.yaml # Monorepo lockfile
+├── pnpm-workspace.yaml # Monorepo workspace definition
+├── tsconfig.json # Root TypeScript config
+├── constants_app.ts # Shared app-level constants
+├── requirements.txt # Python dependencies for scraper/support scripts
+├── .env.example # Environment template
+├── .npmrc # pnpm/npm workspace settings
+├── .antigravityignore # Internal tooling ignore rules
+├── .antigravityrules # Internal tooling rules
+├── r.txt # Local reference scratch file
+├── user_data_delete.sql # SQL helper for data deletion workflows
+│
+├── Root utility scripts # Local schema/data checks and reseeding
+│   ├── check_aggregator_schema.js
+│   ├── check_cities_schema.js
+│   ├── check_material_types_schema.js
+│   ├── check_schema.js
+│   ├── fix.js
+│   ├── reseed_reference_tables.js
+│   ├── test_seed.js
+│   ├── verify_env.js
+│   └── verify_seed_data.js
+│
 ├── apps
-│   ├── mobile
+│   ├── mobile # React Native app (Expo + Expo Router + Zustand)
+│   │   ├── app.json
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── metro.config.js
+│   │   ├── expo-env.d.ts
+│   │   ├── .env
+│   │   ├── assets
+│   │   │   ├── avatar_placeholder.png
+│   │   │   └── images
+│   │   │       ├── adaptive-icon.png
+│   │   │       ├── favicon.png
+│   │   │       ├── icon.png
+│   │   │       └── splash.png
 │   │   ├── app
-│   │   │   ├── (aggregator) # Scrap dealer specific screens
-│   │   │   │   ├── _layout.tsx # Aggregator tab layout and navigation
-│   │   │   │   ├── active-order-detail.tsx # Post-acceptance view (Navigate/Cancel/Full Address)
-│   │   │   │   ├── price-index.tsx # National market index view
-│   │   │   │   ├── earnings.tsx # Dealer earnings history and dashboard
-│   │   │   │   ├── edit-profile.tsx # Aggregator profile editor
-│   │   │   │   ├── settings.tsx # Aggregator preferences and logout
-│   │   │   │   ├── execution # Order Execution Flow
-│   │   │   │   │   ├── _layout.tsx # Hidden bottom tab layout for execution
-│   │   │   │   │   ├── navigate.tsx # Map guidance to seller
-│   │   │   │   │   ├── confirm.tsx # Pickup confirmation transition state
-│   │   │   │   │   ├── receipt.tsx # Pickup completion receipt
-│   │   │   │   │   ├── otp
-│   │   │   │   │   │   └── [id].tsx # Aggregator 6-digit OTP confirmation and completion handoff
-│   │   │   │   │   └── weighing
-│   │   │   │   │       └── [id].tsx # Material weighing and camera capture
-│   │   │   │   ├── home.tsx # Nearby orders feed for dealers
-│   │   │   │   ├── order-detail.tsx # Pre-acceptance view (Accept/Reject/Locality)
-│   │   │   │   ├── order-history-detail.tsx # Redesigned history view (Paid/Ratings)
-│   │   │   │   ├── orders.tsx # Ongoing and completed pickup management (4-tab system)
-│   │   │   │   ├── profile.tsx # Dealer public profile and shop details
-│   │   │   │   └── route.tsx # Internal routing logic for aggregator flow
-│   │   │   ├── (auth) # Consolidated authentication flow
-│   │   │   │   ├── _layout.tsx # Auth stack layout (Headerless)
-│   │   │   │   ├── onboarding.tsx # Universal 4-slide introduction carousel
-│   │   │   │   ├── phone.tsx # Unified phone + OTP flow (login/signup mode tabs + 6-digit OTP entry)
-│   │   │   │   ├── user-type.tsx # Primary role fork: Seller vs. Scrap Dealer
-│   │   │   │   ├── aggregator # Scrap Dealer Onboarding Wizard
-│   │   │   │   │   ├── _layout.tsx # Aggregator stack
+│   │   │   ├── _layout.tsx # Root layout/providers
+│   │   │   ├── index.tsx # Splash bridge and initial routing
+│   │   │   ├── (auth) # Authentication and onboarding flow
+│   │   │   │   ├── _layout.tsx
+│   │   │   │   ├── onboarding.tsx
+│   │   │   │   ├── phone.tsx
+│   │   │   │   ├── otp.tsx
+│   │   │   │   ├── user-type.tsx
+│   │   │   │   ├── aggregator
+│   │   │   │   │   ├── _layout.tsx
 │   │   │   │   │   ├── profile-setup.tsx
 │   │   │   │   │   ├── area-setup.tsx
-│   │   │   │   │   ├── kyc.tsx # KYC document upload and verification
-│   │   │   │   │   └── materials-setup.tsx
-│   │   │   │   └── seller # Seller Onboarding Wizard
-│   │   │   │       ├── _layout.tsx # Seller stack
-│   │   │   │       ├── account-type.tsx # Individual vs Business
-│   │   │   │       ├── business-setup.tsx # GST and Industry details
-│   │   │   │       └── seller-setup.tsx # Basic naming and locality
-│   │   │   ├── (seller) # Household and Business seller workflow
-│   │   │   │   ├── _layout.tsx # Seller bottom-tab navigation layout
-│   │   │   │   ├── agg-profile.tsx # View dealer details before/after booking
-│   │   │   │   ├── browse.tsx # Material category and rate exploration
-│   │   │   │   ├── earnings.tsx # Seller-side transaction history
-│   │   │   │   ├── edit-profile.tsx # Seller profile editor
-│   │   │   │   ├── home.tsx # Seller dashboard: Rates, active orders, CTA
-│   │   │   │   ├── listing # Progressive selling wizard
-│   │   │   │   │   ├── _layout.tsx # Multi-step wizard stack
-│   │   │   │   │   ├── index.tsx # Selling flow entry point
-│   │   │   │   │   ├── step1.tsx # Select items and materials
-│   │   │   │   │   ├── step2.tsx # Capture or upload scrap photos
-│   │   │   │   │   ├── step3.tsx # Weight estimation, pricing, and DateTimePicker
-│   │   │   │   │   └── step4.tsx # Final review and post to marketplace
-│   │   │   │   ├── orders.tsx # Seller order tracking (Active/Past)
-│   │   │   │   ├── prices.tsx # Detailed material rate list
-│   │   │   │   ├── profile.tsx # Seller account overview and settings
-│   │   │   │   └── settings.tsx # Seller preferences and logout
-│   │   │   ├── (shared) # Common screens used across roles
-│   │   │   │   ├── _layout.tsx # Stack wrapper for shared screens
-│   │   │   │   ├── chat
-│   │   │   │   │   └── [id].tsx # Peer-to-peer messaging room
+│   │   │   │   │   ├── materials-setup.tsx
+│   │   │   │   │   └── kyc.tsx
+│   │   │   │   └── seller
+│   │   │   │       ├── _layout.tsx
+│   │   │   │       ├── account-type.tsx
+│   │   │   │       ├── business-setup.tsx
+│   │   │   │       └── seller-setup.tsx
+│   │   │   ├── (seller) # Seller surface
+│   │   │   │   ├── _layout.tsx
+│   │   │   │   ├── home.tsx
+│   │   │   │   ├── browse.tsx
+│   │   │   │   ├── agg-profile.tsx
+│   │   │   │   ├── prices.tsx
+│   │   │   │   ├── orders.tsx
+│   │   │   │   ├── earnings.tsx
+│   │   │   │   ├── edit-profile.tsx
+│   │   │   │   ├── profile.tsx
+│   │   │   │   ├── settings.tsx
+│   │   │   │   ├── listing
+│   │   │   │   │   ├── _layout.tsx
+│   │   │   │   │   ├── index.tsx
+│   │   │   │   │   ├── step1.tsx
+│   │   │   │   │   ├── step2.tsx
+│   │   │   │   │   ├── step3.tsx
+│   │   │   │   │   └── step4.tsx
+│   │   │   │   └── order
+│   │   │   │       ├── [id].tsx
+│   │   │   │       └── otp
+│   │   │   │           └── [id].tsx
+│   │   │   ├── (aggregator) # Aggregator/dealer surface
+│   │   │   │   ├── _layout.tsx
+│   │   │   │   ├── home.tsx
+│   │   │   │   ├── orders.tsx
+│   │   │   │   ├── active-order-detail.tsx
+│   │   │   │   ├── order-history-detail.tsx
+│   │   │   │   ├── price-index.tsx
+│   │   │   │   ├── earnings.tsx
+│   │   │   │   ├── edit-profile.tsx
+│   │   │   │   ├── profile.tsx
+│   │   │   │   ├── route.tsx
+│   │   │   │   ├── settings.tsx
 │   │   │   │   ├── order
-│   │   │   │   │   └── [id].tsx # Deep order detail view with status map
-│   │   │   │   ├── otp-confirm
-│   │   │   │   │   └── [id].tsx # Handshake OTP for pickup verification
-│   │   │   │   ├── receipt
-│   │   │   │   │   └── [id].tsx # Immutable digital receipt post-payment
-│   │   │   │   ├── review
-│   │   │   │   │   └── [id].tsx # Post-pickup review
-│   │   │   │   ├── help.tsx # Support tickets and FAQ access
-│   │   │   │   ├── language.tsx # Localization and language toggle
-│   │   │   │   ├── notifications.tsx # Activity feed
-│   │   │   │   ├── privacy-policy.tsx # Legal privacy document
-│   │   │   │   ├── terms-of-service.tsx # Usage terms and conditions
-│   │   │   │   └── terms-privacy.tsx # Unified legal view shell
-│   │   │   ├── _layout.tsx # Root layout/providers
-│   │   │   └── index.tsx # Application index (Splash bridge)
-│   │   ├── app.json # Expo project configuration
+│   │   │   │   │   └── [id].tsx
+│   │   │   │   ├── profile
+│   │   │   │   │   ├── buy-rates.tsx
+│   │   │   │   │   ├── hours-availability.tsx
+│   │   │   │   │   ├── kyc-documents.tsx
+│   │   │   │   │   ├── operating-areas.tsx
+│   │   │   │   │   └── order-summary.tsx
+│   │   │   │   └── execution
+│   │   │   │       ├── _layout.tsx
+│   │   │   │       ├── navigate.tsx
+│   │   │   │       ├── confirm.tsx
+│   │   │   │       ├── otp
+│   │   │   │       │   └── [id].tsx
+│   │   │   │       ├── weighing
+│   │   │   │       │   └── [id].tsx
+│   │   │   │       └── receipt
+│   │   │   │           └── [id].tsx
+│   │   │   └── (shared) # Shared cross-role pages
+│   │   │       ├── _layout.tsx
+│   │   │       ├── help.tsx
+│   │   │       ├── language.tsx
+│   │   │       ├── notifications.tsx
+│   │   │       ├── privacy-policy.tsx
+│   │   │       ├── terms-of-service.tsx
+│   │   │       ├── terms-privacy.tsx
+│   │   │       ├── dispute.tsx
+│   │   │       ├── chat
+│   │   │       │   └── [id].tsx
+│   │   │       ├── order # currently reserved/empty directory
+│   │   │       └── review
+│   │   │           └── [id].tsx
 │   │   ├── components
-│   │   │   ├── SplashAnimation.tsx # SVG-driven scrap falling animation
-│   │   │   ├── domain # Business-logic heavy components
-│   │   │   └── ui # Atomic design system (Pure presentational)
-│   │   │       ├── Avatar.tsx # User profile image handler
-│   │   │       ├── Button.tsx # Theme-compliant pressables
-│   │   │       ├── Card.tsx # Standard content wrappers
-│   │   │       ├── EmptyState.tsx # Placeholder for null data states
-│   │   │       ├── NetworkErrorScreen.tsx # Full-screen offline fallback (in-app routes)
-│   │   │       ├── AuthNetworkErrorScreen.tsx # Full-screen offline fallback (auth routes)
-│   │   │       ├── Input.tsx # Text/Form fields with validation
-│   │   │       ├── MaterialChip.tsx # Filter/Selection material bubbles
-│   │   │       ├── NavBar.tsx # Dynamic header with navigation hooks
-│   │   │       ├── SkeletonLoader.tsx # Shimmering loading states
-│   │   │       ├── StatusChip.tsx # Color-coded status labels
-│   │   │       ├── StepIndicator.tsx # Horizontal progress dots
-│   │   │       ├── TabBar.tsx # Custom bottom navigation tabs
-│   │   │       ├── Typography.tsx # Standardized Text and Numeric styles
-│   │   │       └── WizardStepIndicator.tsx # Progressive progress bar
+│   │   │   ├── SplashAnimation.tsx
+│   │   │   ├── _1.tsx
+│   │   │   ├── domain
+│   │   │   │   └── CancelOrderModal.tsx
+│   │   │   ├── order
+│   │   │   │   ├── ContactCard.tsx
+│   │   │   │   ├── OrderItemList.tsx
+│   │   │   │   └── OrderTimeline.tsx
+│   │   │   └── ui
+│   │   │       ├── AuthNetworkErrorScreen.tsx
+│   │   │       ├── Avatar.tsx
+│   │   │       ├── Button.tsx
+│   │   │       ├── Card.tsx
+│   │   │       ├── DayToggle.tsx
+│   │   │       ├── EmptyState.tsx
+│   │   │       ├── Input.tsx
+│   │   │       ├── MaterialChip.tsx
+│   │   │       ├── MessageBubble.tsx
+│   │   │       ├── NavBar.tsx
+│   │   │       ├── NetworkErrorScreen.tsx
+│   │   │       ├── NotificationBell.tsx
+│   │   │       ├── NotificationWatcher.tsx
+│   │   │       ├── ProgressBar.tsx
+│   │   │       ├── SkeletonLoader.tsx
+│   │   │       ├── SorttLogo.tsx
+│   │   │       ├── StatusChip.tsx
+│   │   │       ├── StepIndicator.tsx
+│   │   │       ├── TabBar.tsx
+│   │   │       ├── Typography.tsx
+│   │   │       ├── WizardStepIndicator.tsx
+│   │   │       └── ZoneChip.tsx
 │   │   ├── constants
-│   │   │   ├── app.ts # Global strings and service URLs
-│   │   │   └── tokens.ts # Design tokens (Colors, Radius, Spacing)
-│   │   ├── hooks # Custom React hooks
-│   │   │   ├── usePhotoCapture.ts # Standardized camera and picker hook
-│   │   │   └── useNetworkStatus.ts # Online/offline network listener
-│   │   ├── store # Zustand state containers
-│   │   │   ├── aggregatorStore.ts # Dealer-side order/session state (accept, status, media, OTP verify, active→completed sync)
-│   │   │   ├── authStore.ts # User session, role, and onboarding data
-│   │   │   ├── chatStore.ts # Realtime messaging state and history
-│   │   │   ├── listingStore.ts # Draft state for the selling wizard
-│   │   │   ├── orderStore.ts # Cross-role order lifecycle state
-│   │   │   └── uiStore.ts # Navigation signals and global overlays
-│   │   ├── utils # Helper functions
-│   │   │   ├── navigation.tsx # Safe navigation helpers (safeBack pattern)
-│   │   │   └── error.ts # Network error classification helpers
-│   │   ├── package.json # NPM dependencies for mobile app
-│   │   ├── .env # Environment variables for mobile app
-│   │   └── tsconfig.json # TypeScript configuration for mobile app
-│   └── web # Web dashboard and management (TBI)
+│   │   │   ├── app.ts
+│   │   │   └── tokens.ts
+│   │   ├── hooks
+│   │   │   ├── useAggregatorFeedChannel.ts
+│   │   │   ├── useNetworkStatus.ts
+│   │   │   ├── useOrderChannel.ts
+│   │   │   └── usePhotoCapture.ts
+│   │   ├── lib
+│   │   │   ├── api.ts
+│   │   │   ├── clerk.ts
+│   │   │   ├── push.ts
+│   │   │   └── realtime.ts
+│   │   ├── store
+│   │   │   ├── aggregatorStore.ts
+│   │   │   ├── authStore.ts
+│   │   │   ├── chatStore.ts
+│   │   │   ├── listingStore.ts
+│   │   │   ├── notificationStore.ts
+│   │   │   ├── orderStore.ts
+│   │   │   └── uiStore.ts
+│   │   └── utils
+│   │       ├── error.ts
+│   │       └── navigation.tsx
+│   │
+│   └── web # Next.js web app
 │       ├── package.json
-│       └── tsconfig.json
-├── backend # Backend service (Azure App Service)
+│       ├── tsconfig.json
+│       ├── next-env.d.ts
+│       ├── tailwind.config.ts
+│       ├── app
+│       │   ├── layout.tsx
+│       │   ├── page.tsx
+│       │   ├── globals.css
+│       │   ├── admin
+│       │   └── aggregator
+│       ├── components
+│       │   └── ui
+│       │       └── SorttLogo.tsx
+│       └── constants
+│           ├── app.ts
+│           └── tokens.ts
+│
+├── backend # Express API (TypeScript + PostgreSQL)
 │   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
+│   ├── .env
+│   ├── check_db.ts
+│   ├── clear_rate_limit.js
+│   ├── fix_partitions.js
+│   ├── run_migrations.js
+│   ├── test_day9.js
+│   ├── test_db.js
+│   ├── test-kyc.js
+│   ├── test-meta.js
+│   ├── tmp_migrate.js
+│   ├── verify_day5.js
+│   ├── verify_day6.js
+│   ├── scripts
+│   │   ├── apply_migration_0018.js
+│   │   ├── apply_migration_0021.js
+│   │   ├── schema_check.js
+│   │   ├── truncate_all_tables.js
+│   │   └── verify_tables_empty.js
 │   ├── src
-│   │   ├── index.ts # App entry + helmet + middleware registration
-│   │   ├── instrument.ts # Sentry initialization
-│   │   ├── scheduler.ts # node-cron jobs (culling, refresh views)
-│   │   ├── db.ts # Pool connection helper (Day 9)
-│   │   ├── lib # Shared utilities
-│   │   │   ├── db.ts # PostgreSQL wrapper client
-│   │   │   └── redis.ts # Upstash Redis and rate limiters
-│   │   ├── middleware # Auth, sanitization, role verification
-│   │   │   ├── auth.ts # Clerk authentication (direct verifyToken approach)
-│   │   │   ├── sanitize.ts # Input HTML sanitization
-│   │   │   ├── verifyRole.ts # Strict role enforcement
-│   │   │   └── errorHandler.ts # Secure error handling
-│   │   ├── routes # Auth, users, orders
-│   │   │   ├── orders/ # CRUD flows for listings
-│   │   │   ├── aggregators.ts # Dealer search and profiles
-│   │   │   ├── auth.ts # OTP and registration
-│   │   │   ├── disputes.ts # Dispute resolution and status history transition logging (old_status/new_status)
-│   │   │   ├── messages.ts # In-app chat and phone number filtering
-│   │   │   ├── rates.ts # Public market rates with caching
-│   │   │   ├── ratings.ts # Post-trade review system
-│   │   │   └── users.ts # Profile and settings
-│   │   └── utils # Helper functions and DTOs
-│   │       ├── orderDto.ts # Response transformation for orders
-│   │       └── orderStateMachine.ts # Status transition rules
-│   ├── .env # Environment variables for backend
-│   └── tsconfig.json # TypeScript configuration for backend
-├── pnpm-workspace.yaml # Monorepo workspace configuration
-├── package.json # Root package management
-├── packages # Shared internal libraries
-│   ├── analysis # Gemini Vision Material Recognition
-│   ├── auth # Clerk authentication provider logic
-│   ├── maps # Map provider and geocoding abstraction
-│   ├── realtime # Ably Messaging and Presence
-│   ├── storage # Uploadthing file management
-├── scraper # Scrap material rate scrapers
-│   └── main.py # Python rate crawler entry
-├── scripts # CI/CD and repository maintenance tools
-├── docs # Technical documentation and guides
-├── migrations # PostgreSQL database migrations
+│   │   ├── index.ts
+│   │   ├── instrument.ts
+│   │   ├── scheduler.ts
+│   │   ├── lib
+│   │   │   ├── db.ts
+│   │   │   ├── redis.ts
+│   │   │   ├── notifications.ts
+│   │   │   └── storage.ts
+│   │   ├── middleware
+│   │   │   ├── auth.ts
+│   │   │   ├── errorHandler.ts
+│   │   │   ├── sanitize.ts
+│   │   │   └── verifyRole.ts
+│   │   ├── providers
+│   │   │   ├── ablyProvider.ts
+│   │   │   └── maps.ts
+│   │   ├── routes
+│   │   │   ├── aggregators.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── disputes.ts
+│   │   │   ├── messages.ts
+│   │   │   ├── notifications.ts
+│   │   │   ├── rates.ts
+│   │   │   ├── ratings.ts
+│   │   │   ├── realtime.ts
+│   │   │   ├── users.ts
+│   │   │   └── orders
+│   │   │       └── index.ts
+│   │   └── utils
+│   │       ├── channelHelper.ts
+│   │       ├── orderDto.ts
+│   │       ├── orderStateMachine.ts
+│   │       └── pushHelper.ts
+│   └── uploads # runtime-uploaded files (gitignored)
+│
+├── packages # Shared workspace packages
+│   ├── analysis
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src
+│   ├── auth
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src
+│   ├── maps
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src
+│   ├── realtime
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src
+│   └── storage
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── src
+│
+├── migrations # Database schema and data migrations
 │   ├── 0001_reference_tables.sql
 │   ├── 0002_users.sql
 │   ├── 0003_profiles.sql
@@ -189,6 +307,33 @@ Sortt
 │   ├── 0015_otp_log_make_hmac_nullable.sql
 │   ├── 0016_standardise_column_names.sql
 │   ├── 0017_standardise_trd_columns.sql
-│   └── 0018_order_number_per_seller.sql
-├── dist_deploy # Deployment artifacts (Azure App Service)
-└── structure.md # This file (Project Structure & Descriptions)
+│   ├── 0018_order_number_per_seller.sql
+│   ├── 0019_users_display_phone.sql
+│   ├── 0020_sync_notifications_schema.sql
+│   ├── 0021_order_value_consistency.sql
+│   ├── 0022_aggregator_availability_default_online.sql
+│   ├── 0022_unique_phone_hash.sql # duplicate number exists in repo
+│   └── 0023_add_last_seen.sql
+│
+├── scripts # Workspace utility scripts
+│   ├── search_repo.ps1
+│   ├── search_repo.sh
+│   ├── setup_search.ps1
+│   ├── setup_search.sh
+│   ├── validate-all.ps1
+│   ├── validate-all.sh
+│   ├── validate-skills.ps1
+│   ├── validate-skills.sh
+│   ├── validate-templates.ps1
+│   ├── validate-templates.sh
+│   ├── validate-workflows.ps1
+│   └── validate-workflows.sh
+│
+├── docs # Internal docs and runbooks
+│   ├── model-selection-playbook.md
+│   ├── runbook.md
+│   └── token-optimization-guide.md
+│
+└── scraper # Python scraper service
+    ├── .gitkeep
+    └── main.py

@@ -17,12 +17,55 @@ import { useAuthStore } from '../../store/authStore';
 type Step = 'phone' | 'otp';
 type Mode = 'login' | 'signup';
 
+type MeResponse = {
+  user_type: 'seller' | 'aggregator' | null;
+  name?: string | null;
+  seller_profile_type?: 'individual' | 'business' | null;
+  seller_locality?: string | null;
+  seller_city_code?: string | null;
+  seller_gstin?: string | null;
+  aggregator_business_name?: string | null;
+  aggregator_locality?: string | null;
+  aggregator_city_code?: string | null;
+  aggregator_material_count?: number | null;
+  aggregator_has_kyc_media?: boolean | null;
+};
+
 const OTP_SECONDS = 600;
 
 const formatTime = (seconds: number) => {
   const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
   const ss = (seconds % 60).toString().padStart(2, '0');
   return `${mm}:${ss}`;
+};
+
+const resolveOnboardingRoute = (me: MeResponse): string => {
+  if (!me.user_type) return '/(auth)/user-type';
+
+  if (me.user_type === 'seller') {
+    const hasName = !!me.name && me.name.trim().length > 0;
+    const hasProfileType = !!me.seller_profile_type;
+    const hasLocality = !!me.seller_locality && me.seller_locality.trim().length > 0;
+    const hasCity = !!me.seller_city_code;
+    const needsBusinessSetup = me.seller_profile_type === 'business' && !(me.seller_gstin && me.seller_gstin.trim().length === 15);
+
+    if (!hasProfileType) return '/(auth)/seller/account-type';
+    if (!hasName || !hasLocality || !hasCity) return '/(auth)/seller/seller-setup';
+    if (needsBusinessSetup) return '/(auth)/seller/business-setup';
+    return '/(seller)/home';
+  }
+
+  const hasBusinessName = !!me.aggregator_business_name && me.aggregator_business_name.trim().length > 0;
+  const hasCity = !!me.aggregator_city_code;
+  const hasArea = !!me.aggregator_locality && me.aggregator_locality.trim().length > 0;
+  const hasRates = Number(me.aggregator_material_count ?? 0) > 0;
+  const hasKycPhoto = !!me.aggregator_has_kyc_media;
+
+  if (!hasBusinessName || !hasCity) return '/(auth)/aggregator/profile-setup';
+  if (!hasArea) return '/(auth)/aggregator/area-setup';
+  if (!hasRates) return '/(auth)/aggregator/materials-setup';
+  if (!hasKycPhoto) return '/(auth)/aggregator/kyc';
+  return '/(aggregator)/home';
 };
 
 export default function PhoneScreen() {
@@ -146,10 +189,20 @@ export default function PhoneScreen() {
 
       if (is_new_user) {
         router.replace('/(auth)/user-type');
-      } else if (user.user_type === 'aggregator') {
-        router.replace('/(aggregator)/home');
       } else {
-        router.replace('/(seller)/home');
+        try {
+          const meRes = await api.get('/api/users/me');
+          const nextRoute = resolveOnboardingRoute(meRes.data as MeResponse);
+          router.replace(nextRoute as any);
+        } catch {
+          if (user.user_type === 'aggregator') {
+            router.replace('/(auth)/aggregator/profile-setup');
+          } else if (user.user_type === 'seller') {
+            router.replace('/(auth)/seller/account-type');
+          } else {
+            router.replace('/(auth)/user-type');
+          }
+        }
       }
     } catch (err: any) {
       if (err.response?.status === 400) {
@@ -219,7 +272,7 @@ export default function PhoneScreen() {
               <Input
                 value={normalizedPhone}
                 onChangeText={(value) => setPhone(value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="Enter 10-digit mobile number"
+                placeholder="Enter mobile number"
                 keyboardType="number-pad"
                 maxLength={10}
                 editable={step === 'phone'}
@@ -233,7 +286,7 @@ export default function PhoneScreen() {
               <Input
                 value={otp}
                 onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter 6-digit OTP"
+                placeholder="Enter OTP"
                 keyboardType="number-pad"
                 maxLength={6}
                 mono

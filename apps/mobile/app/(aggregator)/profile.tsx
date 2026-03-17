@@ -84,7 +84,8 @@ export default function AggregatorProfileScreen() {
     void fetchAggregatorOrders(true);
   }, [fetchMe, fetchAggregatorProfile, fetchAggregatorOrders]);
 
-  const displayName = profile?.businessName || name || 'Aggregator';
+  const displayName = name || profile?.name || 'Aggregator';
+  const displayBusinessName = profile?.businessName || 'Business name not set';
   const displayLocality = profile?.operatingArea || locality || 'Unknown Area';
 
   const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').length;
@@ -122,8 +123,11 @@ export default function AggregatorProfileScreen() {
   });
 
   const handleSignOut = async () => {
-    authStore.signOut();
-    router.replace('/(auth)/user-type' as any);
+    try {
+      await authStore.signOut();
+    } finally {
+      router.replace('/(auth)/phone' as any);
+    }
   };
 
   const handleSwitchUserType = async () => {
@@ -172,6 +176,8 @@ export default function AggregatorProfileScreen() {
               </Text>
               <CheckCircle size={24} color={colors.teal} weight="fill" />
             </View>
+
+            <Text variant="caption" style={styles.heroBusinessName}>{displayBusinessName}</Text>
 
             <View style={styles.badgeRow}>
               <View style={styles.localityPill}>
@@ -366,6 +372,11 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontSize: 24,
     fontWeight: '700',
+  },
+  heroBusinessName: {
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: -4,
+    marginBottom: spacing.sm,
   },
   badgeRow: {
     flexDirection: 'row',

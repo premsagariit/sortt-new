@@ -10,7 +10,6 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Switch, Alert } from 'react-native';
 
 import { Stack, useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaretRight } from 'phosphor-react-native';
 
@@ -70,24 +69,26 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 
 export default function AggregatorSettingsScreen() {
     const router = useRouter();
-    const { signOut: clerkSignOut } = useAuth();
     const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus, fetchAggregatorProfile, profile } = useAggregatorStore();
+    const accountName = useAuthStore((s) => s.name);
     const phoneNumber = useAuthStore((s) => s.phoneNumber);
+    const signOut = useAuthStore((s) => s.signOut);
 
     const handleLogout = async () => {
         try {
-            await clerkSignOut();
+            await signOut();
         } catch {
+        } finally {
+            useAuthStore.getState().clearSession();
+            router.replace('/(auth)/phone');
         }
-        useAuthStore.getState().clearSession();
-        router.replace('/(auth)/phone');
     };
 
         React.useEffect(() => {
                 void fetchAggregatorProfile();
         }, [fetchAggregatorProfile]);
 
-        const displayName = profile?.businessName || fullName || 'Aggregator';
+        const displayName = accountName || profile?.name || fullName || 'Aggregator';
     const displayPhone = phoneNumber
       ? `+91 •••••${phoneNumber.slice(-5)}`
             : '+91 •••••';

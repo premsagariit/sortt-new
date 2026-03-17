@@ -61,7 +61,7 @@ export default function AggregatorOrdersScreen() {
       id: o.orderId || o.id,
       orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
       distance: '—',
-      price: Number(o.display_amount ?? o.displayAmount ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_value ?? o.estimatedAmount ?? 0),
+      price: Number(o.orderAmount ?? o.display_amount ?? o.displayAmount ?? o.confirmed_total ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_total ?? o.estimated_value ?? o.estimatedAmount ?? 0),
       locality: o.pickupLocality ?? o.pickup_locality,
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
       materials: (o.materials || o.material_codes || []) as MaterialCode[],
@@ -220,8 +220,6 @@ export default function AggregatorOrdersScreen() {
               onPress={async () => {
                 try {
                   await acceptOrderApi(order.id);
-                  // Refresh active list immediately to ensure perfect sync
-                  fetchAggregatorOrders(true);
                   setActiveTab('active');
                 } catch (e: any) {
                   Alert.alert('Error', e.message || 'Failed to accept order');

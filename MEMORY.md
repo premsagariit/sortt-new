@@ -784,6 +784,12 @@ Do not delete old entries. Append only.
 
 - **[2026-03-16] Auth Path Restore on Reconnect:** When a user loses connectivity while on an `/(auth)` screen, `offlineAuthPathRef` stores the current pathname. On reconnect, the layout redirects to `/(auth)/phone` if the stored path was `/(auth)/phone` or `/(auth)/otp` (OTP is time-bounded and should not be replayed), or to the exact stored path otherwise. Always clear `offlineAuthPathRef.current = null` before calling `router.replace` to prevent looping. Only redirect if the current path differs from the target. Affects: `apps/mobile/app/_layout.tsx`.
 
+- **[2026-03-18] Aggregator rate snapshot at accept-time:** The accept route must update `order_items.rate_per_kg` and `order_items.amount` inside the same `FOR UPDATE SKIP LOCKED` acceptance transaction by joining `aggregator_material_rates` on `(aggregator_id, material_code)`. If no matching rate exists, set `rate_per_kg=0` and `amount=0` (non-fatal) to keep downstream UI deterministic. Affects: `backend/src/routes/orders/index.ts`.
+- **[2026-03-18] Canonical order DTO totals and items:** Seller/aggregator detail screens should consume backend-computed `estimated_total`/`confirmed_total` and canonical `order_items` payload, while preserving legacy `line_items` only for compatibility. This prevents client-side drift in value calculations. Affects: `backend/src/utils/orderDto.ts`, `backend/src/routes/orders/index.ts`, `apps/mobile/store/orderStore.ts`.
+- **[2026-03-18] Post-accept navigation safety:** From aggregator pre-accept detail, successful accept should `router.replace` directly to active-order-detail context, not back to feed/list, to avoid invalid back-stack return to a stale pre-accept screen. Affects: `apps/mobile/app/(aggregator)/order/[id].tsx`.
+- **[2026-03-18] Seller detail status-aware weights:** Seller detail must render `estimated_weight_kg` before completion and `confirmed_weight_kg` after completion, with totals switched accordingly. Do not reuse a single coalesced weight field for both UX states. Affects: `apps/mobile/app/(seller)/order/[id].tsx`.
+- **[2026-03-18] Completed-only seller rating gate:** Rating UI is rendered in seller order detail only when `order.status==='completed' && !seller_has_rated`; on successful submit, replace form with submitted confirmation state. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `backend/src/utils/orderDto.ts`.
+
 ---
 
 ## 11. Pricing Architecture — 3-Tier Model

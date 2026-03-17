@@ -29,6 +29,7 @@
 > - Database migration `0018_order_number_per_seller.sql` has been applied for per-seller sequential numbering.
 > - Mobile execution flow now threads route `id` across navigate → weighing → OTP → confirm → receipt screens.
 > - Workspace gate check: `pnpm type-check` exits 0.
+> - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow now supports inline rating submission gated by `seller_has_rated`.
 
 ---
 
