@@ -25,6 +25,8 @@
 >   - At `accepted` transition, `order_items.rate_per_kg` and `order_items.amount` are snapshotted atomically in the accept transaction from the accepting aggregator’s `aggregator_material_rates`.
 >   - Missing aggregator material-rate rows are treated as data gaps (`rate_per_kg=0`, `amount=0`) rather than accept failure.
 >   - Order responses now include canonical `order_items` entries (`material_label`, estimated/confirmed weights, `rate_per_kg`, `amount`) plus order-level `estimated_total`, `confirmed_total`, and `seller_has_rated`.
+>   - Notification rows now persist structured metadata in `notifications.data` (`order_id`, `order_display_id`, `kind`) and mobile notification taps route to role-specific order detail paths.
+>   - DTO phone exposure uses explicit viewer-type + status gating and aggregator surfaces keep icon-only dialer behavior without rendering phone number text.
 
 
 ---

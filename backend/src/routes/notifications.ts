@@ -12,7 +12,7 @@ router.get('/', async (req: Request, res: Response) => {
         const offset = parseInt(req.query.offset as string) || 0;
 
         const result = await query(`
-            SELECT id, title, body, type, is_read, created_at
+            SELECT id, title, body, type, is_read, created_at, data
             FROM notifications
             WHERE user_id = $1
             ORDER BY created_at DESC
@@ -25,6 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
                 title: n.title,
                 body: n.body,
                 type: n.type,
+                data: n.data ?? {},
                 is_read: n.is_read,
                 created_at: n.created_at
             }))

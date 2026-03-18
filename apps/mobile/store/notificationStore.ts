@@ -6,6 +6,12 @@ export type NotificationItem = {
     title: string;
     body: string;
     type: 'order' | 'message' | 'payment' | 'rating' | 'review' | 'dispute';
+    data?: {
+        order_id?: string;
+        order_display_id?: string;
+        kind?: string;
+        [key: string]: any;
+    };
     is_read: boolean;
     created_at: string;
 };

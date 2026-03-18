@@ -5,7 +5,7 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — UI Polish & Bug Fixes Complete (2026-03-19)
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 
@@ -36,18 +36,28 @@ If PLAN.md says "build the UI today" and TRD says something that implies a diffe
 It describes 5 simultaneous agents working in parallel: Agent 1 = Seller app, Agent 2 = Aggregator app, Agent 3 = Backend, Agent 4 = Web/Admin, Agent 5 = Database.
 
 **What is actually happening (CURRENT — follow this):**
-This is a **sequential, single-thread, 10-day build**. One domain at a time. One day's tasks at a time. The order is:
+This is a **sequential, single-thread build model**. One domain at a time. Build phases:
 
 ```
-Days 1–3  → UI first (static, no backend calls)
-- [x] **Day 7: Auth Routes + Redis + Scheduler** (2026-03-09)
-- [x] **Day 8: Mobile Auth Wiring + Clerk Integration** (2026-03-10)
-- [ ] **Day 9: Core Order Routes** (Current)
- + DB integration
-Day 7     → Edge Functions + Realtime + Push
-Day 8     → AI + Invoice + Provider abstractions
-Day 9     → Web Portal + Admin + Testing
-Day 10    → Security audit + CI/CD + Launch hardening
+✅ COMPLETED:
+Days 1–3  → UI shells (static, mock data)        [GATE PASSED 2026-03-01]
+Days 4–5  → Database + PostgreSQL schema         [GATE PASSED 2026-03-08]
+Day 6     → Express backend foundation           [GATE PASSED 2026-03-09]
+Day 7     → Auth routes + OTP + Scheduler        [GATE PASSED 2026-03-09]
+Day 8     → Mobile auth wiring + Clerk           [GATE PASSED 2026-03-10]
+Days 9–10 → Core order routes + API wiring       [BLOCKED — awaiting assignment]
+
+🔄 IN PROGRESS:
+UI Polish Phases 1–6 + Bug Fixes         [COMPLETE — 2026-03-19]
+  - 6 coordinated implementation phases across seller/aggregator screens
+  - 5 post-implementation bug fixes (input overlap, unwanted page, ₹0 values, rate ₹0, icon styling)
+  - All validation gates passed
+
+⏳ NEXT:
+Days 9–10 → Core Order Routes API wiring (order creation, status updates, media, transactions)
+Days 11–12 → Atomic ops + First-accept-wins + OTP completion
+Days 13–15 → Realtime + AI + Invoice generation + Price scraper
+Days 16–17 → Web Portal + Admin + Security audit
 ```
 
 **Rules that follow from this:**
@@ -788,7 +798,10 @@ Do not delete old entries. Append only.
 - **[2026-03-18] Canonical order DTO totals and items:** Seller/aggregator detail screens should consume backend-computed `estimated_total`/`confirmed_total` and canonical `order_items` payload, while preserving legacy `line_items` only for compatibility. This prevents client-side drift in value calculations. Affects: `backend/src/utils/orderDto.ts`, `backend/src/routes/orders/index.ts`, `apps/mobile/store/orderStore.ts`.
 - **[2026-03-18] Post-accept navigation safety:** From aggregator pre-accept detail, successful accept should `router.replace` directly to active-order-detail context, not back to feed/list, to avoid invalid back-stack return to a stale pre-accept screen. Affects: `apps/mobile/app/(aggregator)/order/[id].tsx`.
 - **[2026-03-18] Seller detail status-aware weights:** Seller detail must render `estimated_weight_kg` before completion and `confirmed_weight_kg` after completion, with totals switched accordingly. Do not reuse a single coalesced weight field for both UX states. Affects: `apps/mobile/app/(seller)/order/[id].tsx`.
-- **[2026-03-18] Completed-only seller rating gate:** Rating UI is rendered in seller order detail only when `order.status==='completed' && !seller_has_rated`; on successful submit, replace form with submitted confirmation state. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `backend/src/utils/orderDto.ts`.
+- **[2026-03-18] Completed-only seller rating gate:** Rating UI is rendered in seller order detail only when `order.status==='completed' && !seller_has_rated`; on successful submit, replace form with submitted confirmation state and immediately refresh the order from API so `seller_has_rated` stays server-authoritative. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `backend/src/utils/orderDto.ts`.
+- **[2026-03-18] Notifications require structured metadata for deterministic deep-linking:** `notifications.data` must carry `order_id` (+ optional `order_display_id`, `kind`) when type=`order`; UI tap handlers should route by current role to seller/aggregator detail paths and fall back to mark-read-only when metadata is missing. Affects: `backend/src/lib/notifications.ts`, `backend/src/routes/notifications.ts`, `apps/mobile/app/(shared)/notifications.tsx`.
+- **[2026-03-18] Locality alias compatibility:** `pickup_locality` is the canonical DB field; DTOs should also expose compatibility aliases (`pickupLocality`, `locality`) during migration windows to prevent list/detail display drift across older client mapping code. Affects: `backend/src/utils/orderDto.ts`, `apps/mobile/store/orderStore.ts`.
+- **[2026-03-18] Accept-flow state synchronization:** After aggregator accepts an order, refresh canonical order state before transitioning to active detail to avoid stale intermediate values from mixed store sources. Affects: `apps/mobile/app/(aggregator)/order/[id].tsx`, `apps/mobile/store/orderStore.ts`, `apps/mobile/store/aggregatorStore.ts`.
 
 ---
 

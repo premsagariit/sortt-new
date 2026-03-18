@@ -6,13 +6,14 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput,
     KeyboardAvoidingView, Platform, Pressable,
     ActivityIndicator, Image, BackHandler,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Camera, WarningCircle } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../../constants/tokens';
 import { NavBar } from '../../../../components/ui/NavBar';
@@ -24,6 +25,7 @@ import { MaterialCode } from '../../../../components/ui/Card';
 // Camera logic is ONLY in this hook — never call ImagePicker directly in screens
 import { usePhotoCapture } from '../../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../../utils/navigation';
+import { api } from '../../../../lib/api';
 
 const MATERIAL_MAP: Record<MaterialCode, { label: string }> = {
     metal: { label: 'Metal / Iron' },
@@ -38,12 +40,13 @@ const MATERIAL_MAP: Record<MaterialCode, { label: string }> = {
 export default function WeighingScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const { orders } = useOrderStore();
+    const { orders, fetchOrder } = useOrderStore();
     const order = orders.find(o => o.orderId === id);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [weights, setWeights] = useState<Record<string, string>>({});
+    const [liveRates, setLiveRates] = useState<any[]>([]);
 
     // usePhotoCapture is the ONLY place camera is launched — never inline in screens
     const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
@@ -55,15 +58,99 @@ export default function WeighingScreen() {
         materialRates,
         materials: materialConfig,
         setExecutionDraft,
+        fetchAggregatorRates,
     } = useAggregatorStore();
 
+    const normalizeMaterialCode = useCallback((value: string) => String(value || '').toLowerCase().replace(/[-_\s]/g, ''), []);
+
+    useFocusEffect(
+        useCallback(() => {
+            let active = true;
+
+            if (id) {
+                fetchOrder(id, true);
+            }
+
+            // Refresh store's materialRates and materials[] so configRateMap stays current
+            void fetchAggregatorRates();
+
+            (async () => {
+                try {
+                    const res = await api.get('/api/aggregators/me/rates');
+                    if (!active) return;
+                    setLiveRates(Array.isArray(res.data) ? res.data : (res.data?.rates || []));
+                } catch {
+                    try {
+                        const fallback = await api.get('/api/rates');
+                        if (!active) return;
+                        setLiveRates(fallback.data?.rates || []);
+                    } catch {
+                        if (!active) return;
+                        setLiveRates([]);
+                    }
+                }
+            })();
+
+            return () => {
+                active = false;
+            };
+        }, [id, fetchOrder, fetchAggregatorRates])
+    );
+
+    const liveRateMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const rate of liveRates) {
+            const normalized = normalizeMaterialCode(String(rate?.material_code || ''));
+            if (!normalized) continue;
+            map.set(normalized, Number(rate?.rate_per_kg || 0));
+        }
+        return map;
+    }, [liveRates, normalizeMaterialCode]);
+
+    const storeRateMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const rate of materialRates) {
+            const normalized = normalizeMaterialCode(String(rate?.material_code || ''));
+            if (!normalized) continue;
+            map.set(normalized, Number(rate?.rate_per_kg || 0));
+        }
+        return map;
+    }, [materialRates, normalizeMaterialCode]);
+
+    const configRateMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const material of materialConfig) {
+            const normalized = normalizeMaterialCode(String(material?.id || ''));
+            if (!normalized) continue;
+            map.set(normalized, Number(material?.ratePerKg || 0));
+        }
+        return map;
+    }, [materialConfig, normalizeMaterialCode]);
+
+    const orderItemRateMap = useMemo(() => {
+        const map = new Map<string, number>();
+        const orderItems = Array.isArray(order?.orderItems) ? order.orderItems : [];
+        for (const item of orderItems) {
+            const normalized = normalizeMaterialCode(String(item?.materialCode || ''));
+            if (!normalized) continue;
+            const rate = Number(item?.ratePerKg || 0);
+            if (rate > 0) {
+                map.set(normalized, rate);
+            }
+        }
+        return map;
+    }, [order?.orderItems, normalizeMaterialCode]);
+
     const materials = (order?.materialCodes ?? order?.materials ?? []).map((code) => {
-        const fromRates = materialRates.find((rate) => rate.material_code === code)?.rate_per_kg;
-        const fromConfig = materialConfig.find((material) => material.id === code)?.ratePerKg;
+        const normalizedCode = normalizeMaterialCode(String(code));
+        const fromOrderItem = orderItemRateMap.get(normalizedCode);
+        const fromLiveRates = liveRateMap.get(normalizedCode);
+        const fromStoreRates = storeRateMap.get(normalizedCode);
+        const fromConfig = configRateMap.get(normalizedCode);
         return {
             code,
             label: MATERIAL_MAP[code as MaterialCode]?.label || String(code).toUpperCase(),
-            rate: Number(fromRates ?? fromConfig ?? 0),
+            rate: Number(fromOrderItem ?? fromLiveRates ?? fromStoreRates ?? fromConfig ?? 0),
             estimatedWeight: Number(order?.estimatedWeights?.[code] ?? 0),
         };
     });
@@ -268,7 +355,7 @@ export default function WeighingScreen() {
 
             <View style={styles.footer}>
                 <PrimaryButton
-                    label="Upload Scale Photo & Send OTP →"
+                    label="Upload Scale Photo →"
                     onPress={handleNext}
                     disabled={!canSubmit}
                     loading={isSubmitting}

@@ -14,18 +14,21 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, FileText, CaretRight, Star, Receipt } from 'phosphor-react-native';
+import { CheckCircle, Star, Receipt, ImageSquare, CaretLeft } from 'phosphor-react-native';
 
-import { colors, colorExtended, spacing, radius } from '../../../../constants/tokens';
+import { colors, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
-import { PrimaryButton, SecondaryButton } from '../../../../components/ui/Button';
-import { useAuthStore } from '../../../../store/authStore';
+import { PrimaryButton } from '../../../../components/ui/Button';
 import { useOrderStore } from '../../../../store/orderStore';
 import { useAggregatorStore } from '../../../../store/aggregatorStore';
 import { EmptyState } from '../../../../components/ui/EmptyState';
+import { api } from '../../../../lib/api';
+import { safeBack } from '../../../../utils/navigation';
 
 type WeightEntry = {
   material: string;
@@ -46,11 +49,21 @@ const MATERIAL_COLORS: Record<string, string> = {
 export default function AggregatorReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [rating, setRating] = useState(0);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [rates, setRates] = useState<any[]>([]);
 
   const { orders } = useOrderStore();
   const { executionDraftByOrderId, clearExecutionDraft } = useAggregatorStore();
   const order = orders.find(o => o.orderId === id);
   const draft = id ? executionDraftByOrderId[id] : undefined;
+
+  React.useEffect(() => {
+    if (!id) return;
+    api.get('/api/rates')
+      .then(res => setRates(res.data.rates || []))
+      .catch(() => setRates([]));
+  }, [id]);
 
   const weightItems: WeightEntry[] = draft
     ? draft.lineItems.map((item) => ({
@@ -70,11 +83,51 @@ export default function AggregatorReceiptScreen() {
           material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
           materialKey: materialCode,
           weightKg: Number(weight ?? 0),
-          ratePerKg: 0,
+          ratePerKg: Number(rates.find((r) => r.material_code === materialCode)?.rate_per_kg ?? 0),
         }));
 
-  const totalAmount = draft?.totalAmount ?? Number(order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedAmount ?? 0);
+  // First try draft, then confirmed DB values, then fallback to estimates
+  let totalAmount = 0;
+  if (draft?.totalAmount && draft.totalAmount > 0) {
+    totalAmount = draft.totalAmount;
+  } else if (typeof order?.confirmedTotal === 'number' && order.confirmedTotal > 0) {
+    totalAmount = order.confirmedTotal;
+  } else if (typeof order?.confirmedAmount === 'number' && order.confirmedAmount > 0) {
+    totalAmount = order.confirmedAmount;
+  } else if (typeof order?.displayAmount === 'number' && order.displayAmount > 0) {
+    totalAmount = order.displayAmount;
+  } else if (typeof order?.estimatedAmount === 'number' && order.estimatedAmount > 0) {
+    totalAmount = order.estimatedAmount;
+  }
+
+  // If no total found, compute from lineItems
+  if (totalAmount <= 0 && weightItems.length > 0) {
+    totalAmount = weightItems.reduce((sum, item) => sum + (item.weightKg * item.ratePerKg), 0);
+  }
+
   const totalWeight = draft?.totalWeight ?? weightItems.reduce((s, i) => s + i.weightKg, 0);
+
+  React.useEffect(() => {
+    if (!id) return;
+    setMediaLoading(true);
+    api.get(`/api/orders/${id}/media`)
+      .then(async (res) => {
+        const items: any[] = res.data.media ?? [];
+        const preferred = items.find((m: any) => m.media_type === 'scrap_photo');
+        const fallback = items[0];
+        const selected = preferred ?? fallback;
+
+        if (!selected?.id) {
+          setMediaUrl(null);
+          return;
+        }
+
+        const urlRes = await api.get(`/api/orders/${id}/media/${selected.id}/url`).catch(() => null);
+        setMediaUrl(urlRes?.data?.url ?? null);
+      })
+      .catch(() => setMediaUrl(null))
+      .finally(() => setMediaLoading(false));
+  }, [id]);
 
   const handleFinish = () => {
     if (id) {
@@ -94,6 +147,12 @@ export default function AggregatorReceiptScreen() {
       >
         {/* ── Teal confirmation header ──────────────────────── */}
         <View style={styles.successHeader}>
+          <Pressable
+            onPress={() => safeBack('/(aggregator)/orders?tab=Completed')}
+            style={styles.heroBackButton}
+          >
+            <CaretLeft size={18} color={colors.surface} weight="regular" />
+          </Pressable>
           <View style={styles.iconCircle}>
              <CheckCircle size={48} color={colors.teal} weight="fill" />
           </View>
@@ -113,6 +172,32 @@ export default function AggregatorReceiptScreen() {
         </View>
 
         {/* ── Weight table ───────────────────────────────────── */}
+        <View style={styles.summarySection}>
+            <Text
+              variant="caption"
+              color={colors.navy}
+              style={styles.sectionLabel}
+            >
+              SCRAP IMAGE
+            </Text>
+
+            <View style={styles.mediaCard}>
+              {mediaLoading ? (
+                <View style={styles.mediaLoaderWrap}>
+                  <ActivityIndicator color={colors.navy} />
+                </View>
+              ) : mediaUrl ? (
+                <Image source={{ uri: mediaUrl }} style={styles.scrapImage} />
+              ) : (
+                <EmptyState
+                  icon={<ImageSquare size={48} color={colors.muted} weight="thin" />}
+                  heading="No scrap photo available"
+                  body="Pickup image is not attached for this order."
+                />
+              )}
+            </View>
+        </View>
+
         <View style={styles.summarySection}>
             <Text
               variant="caption"
@@ -215,12 +300,14 @@ export default function AggregatorReceiptScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.teal,
   },
   scroll: {
     flex: 1,
+    backgroundColor: colors.teal,
   },
   scrollContent: {
+    paddingTop: 0,
     paddingBottom: spacing.xl,
   },
 
@@ -229,6 +316,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+  },
+  heroBackButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconCircle: {
       width: 72,
@@ -249,6 +345,28 @@ const styles = StyleSheet.create({
   summarySection: {
       marginTop: spacing.lg,
       paddingHorizontal: spacing.md,
+  },
+  mediaCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.md,
+  },
+  mediaLoaderWrap: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  scrapImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: radius.input,
+    backgroundColor: colors.skeleton,
   },
   sectionLabel: {
     marginBottom: spacing.sm,
@@ -305,7 +423,13 @@ const styles = StyleSheet.create({
   },
 
   ratingCard: {
+    marginTop: spacing.lg,
     marginHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     gap: spacing.xs,
   },
@@ -317,6 +441,7 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: spacing.xl,
     paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
     gap: spacing.md,
   },
   reportIssue: {

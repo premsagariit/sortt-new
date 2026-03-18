@@ -1,312 +1,224 @@
-# Sortt — Order Data Integrity Overhaul Implementation Plan (Pre-Execution)
+# Order Data Integrity + UI Consistency Plan (Approval Gate)
 
-Prepared after mandatory reads and before any code edits.
+Date: 2026-03-18  
+Mode: Planning only (no code edits until explicit approval)
 
-## Mandatory Reads Completed (Confirmed)
-1. `MEMORY.md` (authority + constraints)
-2. `structure.md` (path verification)
-3. `PLAN.md` (current build state)
-4. `TRD.md` §8 (schema) and §13 Security & Privacy patches + V7/V13/V24 references
-5. `backend/src/utils/orderDto.ts`
-6. `backend/src/routes/orders/index.ts`
-7. `apps/mobile/store/aggregatorStore.ts`
-8. `apps/mobile/store/orderStore.ts`
-9. Affected screens (path-corrected):
-	- `apps/mobile/app/(aggregator)/order/[id].tsx` (prompt said `(aggregator)/order-detail.tsx`)
-	- `apps/mobile/app/(aggregator)/orders.tsx`
-	- `apps/mobile/app/(seller)/order/[id].tsx` (prompt said `(shared)/order/[id].tsx`)
-	- `apps/mobile/app/(seller)/orders.tsx`
-10. Skills inventory from `.agent/skills`
+## 1) Objective
 
-Parallel read-only investigations executed across 5 tracks (backend tx/route, DTO contract, aggregator mobile/store, seller mobile/rating, security/docs).
+Deliver a single coherent update across seller + aggregator order flows to fix:
+- Receipt page back navigation consistency
+- Tab bar contamination (extra tab entry)
+- Seller details card consistency (name + address + phone) - Only in seller's UI
+- Seller details card consistency (name + address) - Only in aggregator's UI
+- Seller order detail page layout sequencing (status-based layout only, preserve existing workflow/API)
+- Weighing rate source (`rate_per_kg` zero fallback)
+- Order value consistency for seller card in `weighing_in_progress` and `completed`
+- Aggregator material table simplification for non-accepted states
+- Privacy constraints (seller number never visibly exposed on aggregator UI card)
+- Aggregator order card content and status label/style consistency
+- Aggregator OTP success receipt destination consistency
 
-Relevant skills identified:
-- `planner`
-- `react-native-expert`
-- `senior-backend`
-- `database-schema-designer`
-- `senior-security`
-- `verifier`
-- `codebase-mapper`
+## 2) Mandatory Constraints (Confirmed)
 
----
+- No code edits before this plan approval.
+- Preserve V13: `completed` transition only via OTP verify route.
+- Preserve V7: role/identity from `req.user` context.
+- Preserve SP1 privacy matrix from DTO; no raw sensitive fields in responses.
+- Tokenized UI only (no new hardcoded colors).
+- Keep existing API/routing workflow unless specifically required for consistency.
 
-## Section 1 — File Inventory
+## 3) Findings Snapshot (5-Track Investigation)
 
-### Backend / API
-- `backend/src/routes/orders/index.ts` — add accept-time rate snapshot + missing-rate fallback + enrich order detail response shape (`order_items`, totals, `seller_has_rated`). **MODIFY**
-- `backend/src/utils/orderDto.ts` — align DTO fields to include order-item data and explicit totals while preserving V24 stripping. **MODIFY**
-- `backend/src/routes/aggregators.ts` — add aggregator-own-rates GET endpoint (`/me/rates` or equivalent) for pre-accept order detail estimates. **MODIFY**
+### Track A — Backend Transactions/Routes
+- `confirmed_value` is persisted at `finalize-weighing` and reused through completion.
+- `verify-otp` completion currently returns success payload; completion visuals depend on frontend routing/fetch timing.
+- Zero-rate issue can happen when rate lookup chain misses normalized material mapping or stale rate fetch state.
 
-### Mobile Stores
-- `apps/mobile/store/aggregatorStore.ts` — compute/store `orderAmount` from order items on accept flows; ensure New→Active shift without refetch dependency. **MODIFY**
-- `apps/mobile/store/orderStore.ts` — map new DTO fields (`order_items`, `estimated_total`, `confirmed_total`, `seller_has_rated`) and preserve non-zero value selection. **MODIFY**
+### Track B — DTO/Store Contract
+- `orderDto` already enforces post-accept phone exposure by role/status.
+- Seller/aggregator totals can diverge if one path recalculates while another trusts `displayAmount`.
+- Status text consistency differs between `StatusChip` and order-card inline text.
 
-### Mobile Screens
-- `apps/mobile/app/(aggregator)/order/[id].tsx` — remove seller-rate column, render live order items/rates, compute estimated total from aggregator rates, change accept navigation to active-order-detail replace path. **MODIFY**
-- `apps/mobile/app/(aggregator)/orders.tsx` — ensure feed accept path updates state instantly and Active tab cards consume `orderAmount`. **MODIFY**
-- `apps/mobile/app/(seller)/order/[id].tsx` — status-aware rates/weights display (estimated vs confirmed) and inline rating block for completed orders. **MODIFY**
-- `apps/mobile/app/(seller)/orders.tsx` — show DTO totals (`estimated_total` or `confirmed_total`) instead of zero fallback. **MODIFY**
+### Track C — Aggregator Mobile Surface
+- Extra tab source is tab config leakage/route exposure logic.
+- Non-accepted MATERIAL LIST should be 2 columns only (Material, Est. Weight).
+- Seller phone visibility conflict: dial action needed in `navigate`, but number text must stay hidden.
+- OTP completion must always route/render the same “good receipt” variant.
 
-### Shared / UI Utilities
-- `apps/mobile/components/order/OrderItemList.tsx` — support explicit weight label + status-aware total label if required by seller detail UX. **MODIFY (conditional)**
-- `apps/mobile/utils/format.ts` — shared currency formatter if no equivalent reusable helper exists. **NEW (conditional)**
+### Track D — Seller Mobile Surface
+- Seller receipt hero back control must be standard icon without background.
+- Seller detail should be one merged container (name + pickup address + phone).
+- Seller order detail requires receipt-like layout structure without hero and without ratings block.
+- Review input/footer overlap requires spacing fix in seller receipt ratings area.
 
-### Documentation
-- `implementationPlan.md` — execution status update after implementation. **MODIFY**
-- `PLAN.md` — add overhaul completion note/date. **MODIFY**
-- `MEMORY.md` (§9) — append learned lessons from this overhaul. **MODIFY**
-- `structure.md` — include `apps/mobile/utils/format.ts` only if created. **MODIFY (conditional)**
-- `TRD.md` — document accept-time rate snapshot and DTO standard fields (`estimated_total`, `confirmed_total`, `seller_has_rated`). **MODIFY**
-- `PRD.md` — align order-detail/rating flow contract. **MODIFY**
-- `README.md` — expected unchanged (no env additions), but confirm explicitly. **MODIFY (status note only if needed)**
+### Track E — Security/Compliance + Docs
+- SP1/V13/V25/V26 constraints are compatible with requested UX updates.
+- Privacy-sensitive surfaces identified (aggregator contact cards and phone displays).
+- Verification gates must include privacy checks + value correctness checks across statuses.
 
----
+## 4) File Inventory (Planned Touch Set)
 
-## Section 2 — Root Cause Confirmation
+### Seller UI
+- `apps/mobile/app/(seller)/order/receipt/[id].tsx`
+- `apps/mobile/app/(seller)/order/[id].tsx`
+- `apps/mobile/app/(seller)/orders.tsx`
+- `apps/mobile/app/(seller)/_layout.tsx`
 
-1. **Hypothesis:** accept route does not snapshot aggregator `rate_per_kg` at accept time.  
-	**Status:** **CONFIRMED.** `POST /api/orders/:orderId/accept` updates status + aggregator only; no `order_items` update from `aggregator_material_rates`.
+### Shared UI
+- `apps/mobile/app/(shared)/review/[id].tsx` (only if overlap remains in current state)
 
-2. **Hypothesis:** `orderDto.ts`/order detail response does not provide required item-level rate fields robustly.  
-	**Status:** **CORRECTED.** `line_items` exists, but shape is insufficient for target UX: no `material_label`, no separate `estimated_weight_kg` vs `confirmed_weight_kg`, no explicit `estimated_total`/`confirmed_total`, no `seller_has_rated`.
+### Aggregator UI
+- `apps/mobile/components/ui/TabBar.tsx`
+- `apps/mobile/app/(aggregator)/orders.tsx`
+- `apps/mobile/app/(aggregator)/order/[id].tsx`
+- `apps/mobile/app/(aggregator)/active-order-detail.tsx`
+- `apps/mobile/app/(aggregator)/execution/navigate.tsx`
+- `apps/mobile/app/(aggregator)/execution/otp/[id].tsx`
+- `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
 
-3. **Hypothesis:** aggregator order detail uses hardcoded fixture array.  
-	**Status:** **CORRECTED.** Screen does not use a static fixture array; it derives from store + `/api/rates`, but still has incorrect data source semantics (`SELLER RATE` column and fallback behavior causing incorrect totals).
+### Shared Components / Stores
+- `apps/mobile/components/ui/Card.tsx` (order card visual/content rules)
+- `apps/mobile/components/order/ContactCard.tsx` (if needed for icon-only privacy mode)
+- `apps/mobile/store/orderStore.ts`
+- `apps/mobile/store/aggregatorStore.ts`
 
-4. **Hypothesis:** post-accept navigation from detail goes back/feed rather than active detail replace.  
-	**Status:** **CONFIRMED (behavioral mismatch).** Current flow uses `router.replace('/(aggregator)/orders')` (not `active-order-detail`) and can land user back in orders list context instead of execution-ready detail.
+### Backend (only if needed after frontend/store alignment)
+- `backend/src/routes/orders/index.ts`
+- `backend/src/utils/orderDto.ts`
 
-5. **Hypothesis:** seller detail shows 0/incorrect rates and doesn’t switch to confirmed weights properly after completion.  
-	**Status:** **CONFIRMED (partially).** Seller detail uses mixed/fallback sources (live `/api/rates`, coalesced weight field), lacking explicit status-driven rendering from stable DTO fields.
+## 5) Dependency-Ordered Implementation Plan
 
-6. **Hypothesis:** rating UI missing due to wrong condition or missing fetch/field.  
-	**Status:** **CONFIRMED (UI missing in target screen).** Seller detail screen lacks inline post-completion rating block; separate `(shared)/review/[id].tsx` exists but is not wired to requested seller detail flow and no `seller_has_rated` signal is exposed by order detail DTO.
+## Phase 0 — Baseline Re-check (No behavior change)
+1. Re-read current versions of all touched screens (some were recently modified manually).
+2. Freeze current route graph for seller/aggregator completion flows.
+3. Confirm current status-to-amount mapping in seller and aggregator order cards.
 
----
+Deliverable: exact delta checklist (current vs expected) with no edits.
 
-## Section 3 — Sub-Agent Assignments
+## Phase 1 — Navigation + Tab Integrity
+1. Standardize receipt hero back icon (seller + aggregator receipt) to app-standard icon and transparent background.
+2. Remove extra bottom tab caused by receipt leakage.
+3. Ensure all non-tab seller/aggregator routes are hidden (`href: null`) from tab bar.
 
-Execution remains sequential for code changes (per `MEMORY.md §0.2`); only discovery was parallel.
+Deliverable: tab bar shows intended tabs only; receipt routes never appear as tabs.
 
-### Sub-Agent 1 — Backend Transaction + Route Behavior
-- **Scope:** `backend/src/routes/orders/index.ts`, `backend/src/routes/aggregators.ts`
-- **Tasks:** accept-time rate snapshot update; missing-rate fallback to 0; maintain first-accept transaction atomicity; preserve V7/V13; implement/confirm `GET /api/aggregators/me/rates` for authenticated aggregator-own rates.
-- **Depends on:** none.
+## Phase 2 — Seller Page Structure (Layout-only, preserve behavior)
+1. Refactor `seller/order/[id]` into receipt-like card sequencing without hero and without ratings block.
+2. Implement two status-driven section orders:
+	- A) non-accepted (`created`, etc.) sequence as requested
+	- B) accepted sequence with map/tracking block first
+3. Merge seller contact + pickup containers into one seller-details card:
+	- always use seller name
+	- always prefer seller contact from order/auth fallback chain
+4. Keep existing API calls, routing, OTP flow, and cancel actions unchanged.
 
-### Sub-Agent 2 — DTO / API Contract
-- **Scope:** `backend/src/utils/orderDto.ts`, relevant order detail SELECTs in `backend/src/routes/orders/index.ts`
-- **Tasks:** emit `order_items` required fields, `estimated_total`, `confirmed_total`, `seller_has_rated`, preserve V24.
-- **Depends on:** Sub-Agent 1 contract finalization.
+Deliverable: only layout/section ordering changes, no workflow changes.
 
-### Sub-Agent 3 — Aggregator Mobile + Store
-- **Scope:** `apps/mobile/app/(aggregator)/order/[id].tsx`, `apps/mobile/app/(aggregator)/orders.tsx`, `apps/mobile/store/aggregatorStore.ts`
-- **Tasks:** remove seller-rate UI, use order-items + aggregator rates, compute `orderAmount`, New→Active local move, route replace to active-order-detail.
-- **Depends on:** Sub-Agent 2 DTO fields available.
+## Phase 3 — Aggregator Privacy + Materials Tables
+1. In `aggregator/order/[id]` and `aggregator/active-order-detail.tsx`:
+	- for non-accepted states show only 2 columns: Material, Est. Weight
+	- remove `YOUR RATE`, `TOTAL`, and `Total Estimated` row.
+2. Enforce strict privacy on aggregator seller contact card:
+	- no visible seller phone number text anywhere
+	- keep/validate call action behavior only where explicitly required.
+3. In `execution/navigate.tsx`:
+	- phone icon click must open dialer with seller number preloaded
+	- number remains hidden on card.
+4. Phone icon click must use `Linking.openURL('tel:' + order.sellerPhone)` from react-native — the same pattern already used on the seller side for calling the aggregator. 
+	- sellerPhone must come from the order DTO (backend-provided), not computed client-side. 
+	- No new abstraction or package required.
 
-### Sub-Agent 4 — Seller Mobile + Rating Flow
-- **Scope:** `apps/mobile/app/(seller)/order/[id].tsx`, `apps/mobile/app/(seller)/orders.tsx`, optional `apps/mobile/components/order/OrderItemList.tsx`
-- **Tasks:** status-aware rates/weights/totals and completed-only rating block with submit/confirmation states.
-- **Depends on:** Sub-Agent 2 DTO fields + Sub-Agent 3 navigation/state stabilization.
+Deliverable: privacy-safe UI with required call functionality.
 
-Conditional guard for shared component edits:
-- If `apps/mobile/components/order/OrderItemList.tsx` is modified, it is explicitly owned by Sub-Agent 4 and requires an immediate `pnpm --filter mobile type-check` before continuing downstream.
+## Phase 4 — Weighing Rate Source and Value Integrity
+1. Rate resolution chain for the weighing screen only (active in-progress orders) `execution/weighing/[id].tsx`: 
+	- `aggregator_material_rates` from DB via live fetch on screen focus — PRIMARY
+	- `order_items.rate_per_kg` snapshot — only if DB has no rate for that material code; 
+	- `0` only if genuinely absent in both. Completed and finalized order values are frozen in DB and must never be recalculated from current rates. Also: identify the exact backend route used to fetch aggregator rates (e.g. GET /api/aggregators/rates) and call it on screen focus, not only on mount.
+2. Ensure no forced “save again in buy-rates” requirement unless aggregator intentionally changes rates.
+3. Confirm seller order card amount logic for statuses:
+	- `created/accepted/en_route/arrived/cancelled`: existing correct logic retained
+	- `weighing_in_progress/completed`: use real value from final line-item sum (aggregator-confirmed weights × rates)
+4. Validate DB reflects completed order final value consistently for both parties.
 
-### Sub-Agent 5 — Security/Compliance + Docs Impact
-- **Scope:** `PLAN.md`, `MEMORY.md`, `structure.md`, `TRD.md`, `PRD.md`, `README.md`
-- **Tasks:** update documentation and security sign-off after all functional gates + root type-check pass.
-- **Depends on:** Sub-Agents 1–4 completed + `pnpm type-check` pass.
 
----
+Deliverable: no `0` rate unless genuinely missing in DB; seller card values align with aggregator finalization.
 
-## Section 4 — Execution Sequence
+## Phase 5 — Order Card Visual Harmonization
+1. Aggregator side order cards:
+	- remove seller and ratings display
+	- use `Completed` (not `Done`)
+	- increase/bolden order number text (same as the one in seller side UI)
+	- remove dot/dash beside order number
+	- hide order value in New + Active + Cancelled tabs; show real value only in Completed.
+2. Seller side order cards:
+	- remove `Paid to wallet`
+	- remove aggregator name text
+3. Align status-chip semantics/colors between seller and aggregator cards.
 
-1. Patch accept transaction to snapshot rates into `order_items` from `aggregator_material_rates` (same transaction, after accept lock/update).
-2. Add fallback update for unmatched materials to set `rate_per_kg = 0` and `amount = 0` (non-fatal).
-3. Confirm aggregator identity source remains `req.user.id` only.
-4. Add/confirm aggregator-own-rates read endpoint (`GET /api/aggregators/me/rates` or documented equivalent).
-5. Expand order detail query + DTO to include required `order_items` fields, `estimated_total`, `confirmed_total`, `aggregator_name`, `seller_has_rated`.
-6. Preserve V24 field stripping (`phone_hash`, internal auth hashes) in all DTO responses.
-7. Update orderStore mapping for new fields and amount selection logic.
-8. Update aggregator detail screen to remove seller-rate column and render order-item rows from live store/API data.
-9. Update accept handler in aggregator detail to local state transition + `router.replace({ pathname: '/(aggregator)/active-order-detail', params: { id } })`.
-10. Update aggregator feed accept path to local New→Active move and no full refetch dependency.
-11. Update seller detail screen: non-completed statuses use estimated weights; completed uses confirmed weights; show proper totals.
-12. Implement completed-only inline rating block with `POST /api/ratings`, success/error states, and `seller_has_rated` gating.
-13. Update seller orders cards to show DTO totals (completed → confirmed total, else estimated total).
-14. Run mobile scoped type-check; fix only in-scope regressions.
-15. Run root `pnpm type-check`.
-16. If any gate fails, fix root cause and rerun failed + downstream impacted gates.
-17. Apply docs updates in required order (Section 7).
+Deliverable: consistent card language and color semantics across both roles.
 
-Gates:
-- **Gate A (Backend/DTO):** SA1 + SA2 verification commands pass.
-- **Gate B (Aggregator UX):** SA3 verification commands + manual flow pass.
-- **Gate C (Seller UX):** SA4 manual gates + mobile type-check pass.
-- **Gate D (Closeout):** root type-check + docs/security sign-off complete.
+## Phase 6 — Receipt Consistency After OTP
+1. Inspect `apps/mobile/app/(aggregator)/execution/otp/[id].tsx` for inline receipt rendering (a full-green background receipt block rendered directly in this file on success). 
+	- Remove that inline block entirely. 
+	- On OTP success, the only action is `router.replace('/(aggregator)/execution/receipt/' + orderId)`.
+	- The receipt screen already renders correctly — the bug is that the OTP screen renders its own inline version before or instead of navigating.
+2. Eliminate any alternate full-green receipt view exposure from OTP route path.
+3. Keep completed-tab opening path consistent with OTP path destination.
 
----
+Deliverable: same receipt visual regardless of entry path.
 
-## Section 5 — Security Rules In Scope
+## 6) Security + Compliance Scope During Implementation
 
-- **V13:** `completed` only through OTP verify route; no new PATCH transition to completed.
-- **V24:** never expose `phone_hash`, `clerk_user_id`, or internal auth hashes in order DTO.
-- **V7:** role/identity source from verified auth context (`req.user`), never request body.
-- **V25:** full pickup address exposure only post-acceptance to authorized parties.
-- **A3:** no secret leakage in docs/client; no env value hardcoding/logging.
-- **C1-equivalent:** any newly introduced interval/polling includes cleanup in `useEffect` return.
-- **Navigation safety (MEMORY §9):** use `router.replace` for post-accept critical flow to avoid unsafe back-stack rewind.
+- Do not expose seller number text on aggregator screens.
+- Do not change DTO exposure logic in a way that leaks pre-accept phone/address.
+- Do not alter completed/disputed transition constraints.
+- If backend adjustment is needed, keep contract backward-compatible with current stores.
 
----
+## 7) Verification Gates (Post-Implementation)
 
-## Section 6 — Verification Gate Checklist
+## Gate A — Type/Build
+- `pnpm type-check`
 
-### Sub-Agent 1 (Backend)
-**SA1-V1 — accept snapshot persisted**
-```bash
-psql "$DATABASE_URL" -c "SELECT id, material_code, estimated_weight_kg, rate_per_kg, amount FROM order_items WHERE order_id = '<TEST_ORDER_ID>';"
-```
-Expected: non-null `rate_per_kg` and `amount` after accept; unmatched materials become `0`/`0`.
+## Gate B — Seller Flow
+- Seller order detail sequence matches requested A/B order by status.
+- Seller details card merged and populated with seller name/phone/address.
+- No ratings block in seller order detail page.
+- Receipt review input/button overlap resolved.
 
-**SA1-V2 — DTO includes order_items with rates**
-```bash
-curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '.order_items'
-```
-Expected: required item fields present; no sensitive fields.
+## Gate C — Aggregator Flow
+- Non-accepted MATERIAL LIST in both target pages shows exactly 2 columns.
+- Seller phone number text hidden across aggregator surfaces.
+- Navigate phone icon opens dialer with number.
+- OTP completion always routes to canonical receipt.
 
-**SA1-V3 — totals present**
-```bash
-curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '{estimated_total, confirmed_total}'
-```
-Expected: both present; accepted orders have `estimated_total > 0` when rates exist.
+## Gate D — Value Integrity
+- Weighing screen rates no longer default to 0 when DB rates exist.
+- Seller and aggregator cards show aligned final values after weighing/completion.
+- Completed value persisted and displayed consistently on both sides.
 
-**SA1-V4 — aggregator own-rates endpoint**
-```bash
-curl -s -H "Authorization: Bearer <AGGREGATOR_TOKEN>" http://localhost:3001/api/aggregators/me/rates | jq '.'
-```
-Expected: array of `{ material_code, rate_per_kg }` rows for the authenticated aggregator.
+## Gate E — Card UX Consistency
+- Aggregator cards hide value in New/Active, show only in Completed.
+- Aggregator card no seller/rating, `Completed` label updated.
+- Seller card removed aggregator name and `Paid to wallet` text.
+- Status chip colors consistent across both roles.
 
-### Sub-Agent 2 (Aggregator mobile)
-**SA2-G1 — no fixture/hardcoded materials source in detail**
-```bash
-grep -n "hardcode\|fixture\|mock\|dummy\|\[\s*{.*material" apps/mobile/app/\(aggregator\)/order/\[id\].tsx
-```
-Expected: no fixture/mock arrays for material rows.
+## 8) Rollout Sequence (Execution Order)
 
-**SA2-G2 — seller-rate column removed**
-```bash
-grep -in "seller.*rate\|sellerRate\|seller_rate" apps/mobile/app/\(aggregator\)/order/\[id\].tsx
-```
-Expected: no matches.
+1. Tab/back controls and route hygiene
+2. Seller order detail layout refactor
+3. Aggregator table/privacy updates
+4. Weighing rate source + value integrity
+5. Order card harmonization
+6. OTP->receipt canonical routing consistency
+7. Full verification gates
 
-**SA2-G3 — mobile compile check**
-```bash
-pnpm --filter mobile type-check
-```
-Expected: exit 0.
+## 9) Open Clarifications (Need your confirmation before coding)
 
-### Sub-Agent 3 (Seller mobile)
-**SA3-G4 — accepted order shows aggregator rates (manual)**  
-Open seller order detail for `accepted/en_route/arrived/weighing_in_progress`; rate column must show snapshotted aggregator rate or `—` when null.
-
-**SA3-G5 — completed order shows rating block (manual)**  
-Open completed seller order detail; rating block visible only when `!seller_has_rated`.
-
-**SA3-G6 — seller order cards non-zero values (manual)**  
-Seller orders list must show calculated rupee values from DTO totals (not always `₹0`).
-
-**SA3-G7 — mobile compile check**
-```bash
-pnpm --filter mobile type-check
-```
-Expected: exit 0.
-
-### Global Gates (must all pass)
-**G1 — Rate snapshot at accept** (same as SA1-V1)
-
-**G2 — DTO populated order_items/totals**
-```bash
-curl -s -H "Authorization: Bearer <AGGREGATOR_TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq '{estimated_total, confirmed_total, order_items: [.order_items[] | {material_code, rate_per_kg, amount}]}'
-```
-
-**G3 — No seller-rate column in aggregator detail** (same as SA2-G2)
-
-**G4 — No hardcoded materials fixture** (same as SA2-G1)
-
-**G5 — phone_hash absent from order DTO**
-```bash
-curl -s -H "Authorization: Bearer <TOKEN>" http://localhost:3001/api/orders/<TEST_ORDER_ID> | jq 'keys | map(select(test("hash|phone")))'
-```
-Expected: `[]` for sensitive hash keys; party-phone visibility only via allowed fields and role/status guard.
-
-**G6 — post-accept navigation route correctness (manual)**
-Accept from aggregator detail; expected immediate load of `/(aggregator)/active-order-detail` for that order; back should not return to pre-accept detail.
-
-**G7 — Active tab amount correctness (manual)**
-Accepted order card amount equals sum of `estimated_weight_kg * rate_per_kg` from order items.
-
-**G8 — seller accepted-detail rates (manual)**
-Rates shown per line item from snapshotted aggregator rate.
-
-**G9 — seller completed-detail confirmed weights (manual)**
-Weight column uses `confirmed_weight_kg` and header text changes to `Weight`.
-
-**G10 — rating block visibility/completion (manual)**
-Completed order shows rating form; after submit, shows success state / submitted state.
-
-**G11 — seller list values non-zero (manual)**
-Order cards show real totals, not fixed `₹0`.
-
-**G12 — workspace type-check**
-```bash
-pnpm type-check
-```
-Expected: exit 0.
+1. For `seller/order/[id]` accepted-state map section, should we use the current tracking component/placeholder exactly as-is (layout reposition only), with no new map provider work?
+2. For aggregator privacy rule, should phone icon be shown only in `execution/navigate.tsx` and hidden in all other aggregator screens (including `order/[id]` and receipt/history)?
+3. For seller card value at `weighing_in_progress`, should it switch immediately to confirmed running total as soon as finalize-weighing writes DB values (before completion), or only after explicit status update event is received?
 
 ---
 
-## Section 7 — Completion Steps
-
-Execute only after all gates pass, in this exact order:
-1. `PLAN.md` update (overhaul note + date)
-2. `MEMORY.md` §9 learned lessons append
-3. `structure.md` update (only if `apps/mobile/utils/format.ts` created)
-4. `TRD.md` update (accept-time snapshot + DTO fields)
-5. `PRD.md` update (order data integrity UX/contract alignment)
-6. `README.md` confirm unchanged/no new setup steps
-7. Run `pnpm type-check` at repo root
-8. Commit + push with specified message
-
----
-
-**STOP CONDITION (pre-execution):** This plan is ready. No code changes should start until explicit user message: **"proceed"**.
-
-## Security Sign-off (Session Scope)
-
-| Item | Rule | Status |
-|---|---|---|
-| V13 | `order.status='completed'` only via verify-otp route | ✅/⚠️/🚨 |
-| V24 | `phone_hash` absent from order DTO responses | ✅/⚠️/🚨 |
-| V7 | `aggregator_id` sourced from `req.user.id`, never request body | ✅/⚠️/🚨 |
-| V25 | `pickup_address` exposed only post-accept to authorized parties | ✅/⚠️/🚨 |
-| A3 | no secret leakage / no hardcoded env values | ✅/⚠️/🚨 |
-| C1 | any new intervals/effects include cleanup | ✅/⚠️/🚨 |
-
----
-
-## Execution Status (2026-03-18)
-
-### Sub-Agent Completion
-- Sub-Agent 1 (Backend transaction + `/me/rates`): ✅ complete
-- Sub-Agent 2 (DTO/API contract): ✅ complete
-- Sub-Agent 3 (Aggregator mobile/store): ✅ complete
-- Sub-Agent 4 (Seller mobile/rating): ✅ complete
-- Sub-Agent 5 (Docs/security closeout): ✅ complete
-
-### Gate Outcome Snapshot
-- SA1-V4 (`GET /api/aggregators/me/rates`) route implementation: ✅ implemented (runtime curl requires running backend + valid token)
-- G3/G4 (seller-rate column removed + fixture-free aggregator detail): ✅ code-level complete
-- G12 (`pnpm type-check`): ✅ pass
-
-Manual device-flow gates (G6–G11) remain required in-app verification steps on running clients.
-
+Approval needed: once you confirm this plan (and answer the 3 clarifications), implementation will begin in this exact order.

@@ -64,6 +64,13 @@ export default function OrderHistoryDetailScreen() {
     const [reviewText, setReviewText] = useState('');
     const [isReviewSubmitted, setIsReviewSubmitted] = useState(false);
 
+    // Always fetch full order detail to get orderItems with confirmed weights + rates
+    React.useEffect(() => {
+        if (id) {
+            void fetchOrder(id, true);
+        }
+    }, [id, fetchOrder]);
+
     // Seed fallbacks
     const displayOrder = order
         ? {
@@ -95,16 +102,43 @@ export default function OrderHistoryDetailScreen() {
             rating: 0,
         };
 
-    const materialDetails: MaterialDetail[] = Object.entries(order?.estimatedWeights ?? {}).map(([material, value]) => ({
-        material: material.charAt(0).toUpperCase() + material.slice(1),
-        weight: Number(value ?? 0),
-        actualWeight: Number(value ?? 0),
-        rate: 0,
-    }));
+    // Build material breakdown from confirmed order_items (set by finalize-weighing)
+    // Falls back to line_items, then to estimated weights with no rate info
+    const materialDetails: MaterialDetail[] = (() => {
+        if (Array.isArray(order?.orderItems) && order!.orderItems!.length > 0) {
+            return order!.orderItems!.map(item => ({
+                material: (item.materialLabel || item.materialCode || '')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                weight: Number(item.estimatedWeightKg ?? 0),
+                actualWeight: Number(item.confirmedWeightKg ?? item.estimatedWeightKg ?? 0),
+                rate: Number(item.ratePerKg ?? 0),
+            }));
+        }
+        if (Array.isArray(order?.lineItems) && order!.lineItems!.length > 0) {
+            return order!.lineItems!.map(item => ({
+                material: (item.materialCode || '')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                weight: Number(item.weightKg ?? 0),
+                actualWeight: Number(item.weightKg ?? 0),
+                rate: Number(item.ratePerKg ?? 0),
+            }));
+        }
+        return Object.entries(order?.estimatedWeights ?? {}).map(([material, value]) => ({
+            material: material.charAt(0).toUpperCase() + material.slice(1),
+            weight: Number(value ?? 0),
+            actualWeight: Number(value ?? 0),
+            rate: 0,
+        }));
+    })();
 
     const subTotal = materialDetails.reduce((sum, d) => sum + (d.actualWeight ?? d.weight) * d.rate, 0);
-    const serviceFee = isCompleted ? Math.round(subTotal * 0.05) : 0;
-    const finalTotal = subTotal - serviceFee;
+    // Use confirmed value from DB (set at finalize-weighing), fall back to computed subTotal
+    const finalTotal =
+        (typeof order?.confirmedTotal === 'number' && order.confirmedTotal > 0) ? order.confirmedTotal :
+        (typeof order?.confirmedAmount === 'number' && order.confirmedAmount > 0) ? order.confirmedAmount :
+        subTotal;
     const heroBg = isCancelled ? '#4A5568' : colors.teal;
 
     const handleSubmitRating = () => {
@@ -250,10 +284,6 @@ export default function OrderHistoryDetailScreen() {
                                 <View style={styles.tableTotalRow}>
                                     <Text variant="label" color={colors.navy} style={{ flex: 1 }}>Subtotal</Text>
                                     <Numeric size={15} color={colors.navy}>₹{subTotal}</Numeric>
-                                </View>
-                                <View style={styles.tableTotalRow}>
-                                    <Text variant="label" color={colors.muted} style={{ flex: 1 }}>Service Fee (5%)</Text>
-                                    <Numeric size={15} color={colors.red}>- ₹{serviceFee}</Numeric>
                                 </View>
                                 <View style={[styles.tableTotalRow, { borderTopWidth: 2, borderTopColor: colors.navy, marginTop: 8, paddingTop: 8 }]}>
                                     <Text variant="label" color={colors.navy} style={{ fontFamily: 'DMSans-Bold', flex: 1 }}>Total Earned</Text>

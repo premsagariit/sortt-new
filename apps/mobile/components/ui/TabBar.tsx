@@ -7,7 +7,7 @@
  * It exports two static tab config arrays consumed by each user
  * type's _layout.tsx <Tabs> declaration.
  *
- * Seller tabs:     Home | Orders | New | Browse | Profile       (5 tabs)
+ * Seller tabs:     Home | Orders | Browse | Profile       (4 tabs)
  * Aggregator tabs: Home | Feed | Route | Earnings | Profile (5 tabs)
  *
  * Phosphor v2 API:
@@ -51,7 +51,6 @@ export interface TabEntry {
 
 
 // ── Seller tab configuration — 5 tabs ────────────────────────────
-// Corrected per sortt_ui.html: Browse replaces Prices tab.
 export const SELLER_TABS: TabEntry[] = [
   { name: 'home', label: 'Home', Icon: House },
   { name: 'orders', label: 'Orders', Icon: ClipboardText },

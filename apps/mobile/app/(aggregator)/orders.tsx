@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -7,9 +7,8 @@ import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialChip } from '../../components/ui/MaterialChip';
-import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
-import { Clock, Check, X, Lock, Package } from 'phosphor-react-native';
+import { Clock, Lock, Package } from 'phosphor-react-native';
 import { BaseCard, OrderStatus, MaterialCode } from '../../components/ui/Card';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
@@ -21,6 +20,7 @@ type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
   const { newOrders, aggOrders, dismissNewOrder, acceptOrderApi, cancelOrder, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
+  const materials = useAggregatorStore((s) => s.materials);
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -42,32 +42,59 @@ export default function AggregatorOrdersScreen() {
   const getMaterialKey = (m: string | null) => m ? m.toLowerCase().replace('-', '') : null;
   const matKey = getMaterialKey(selectedMaterial);
 
-  // ── New tab orders (from aggregator store) ─────────────────────
-  const filteredNewOrders = newOrders.filter(
-    o => !matKey || o.materials.includes(matKey as any)
+  // ── New tab orders (from aggregator store) — latest created first ─
+  const filteredNewOrders = useMemo(() =>
+    [...newOrders]
+      .filter(o => !matKey || o.materials.includes(matKey as any))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [newOrders, matKey]
   );
 
   // ── Active, completed, cancelled (from order store aggOrders) ────
-  const activeOrders = (aggOrders || []).filter((o: any) =>
-    ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) &&
-    (!matKey || o.materials?.includes(matKey as any) || o.material_codes?.includes(matKey as any))
-  ).map(mapStoreOrder);
+  const activeOrders = useMemo(() =>
+    (aggOrders || [])
+      .filter((o: any) =>
+        ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) &&
+        (!matKey || o.materials?.includes(matKey as any) || o.material_codes?.includes(matKey as any))
+      )
+      .map((o) => mapStoreOrder(o, materials))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [aggOrders, materials, matKey]
+  );
 
-  const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').map(mapStoreOrder);
-  const cancelledOrders = (aggOrders || []).filter((o: any) => o.status === 'cancelled').map(mapStoreOrder);
+  const completedOrders = useMemo(() =>
+    (aggOrders || [])
+      .filter((o: any) => o.status === 'completed')
+      .map((o) => mapStoreOrder(o, materials))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [aggOrders, materials]
+  );
 
-  function mapStoreOrder(o: any) {
+  const cancelledOrders = useMemo(() =>
+    (aggOrders || [])
+      .filter((o: any) => o.status === 'cancelled')
+      .map((o) => mapStoreOrder(o, materials))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [aggOrders, materials]
+  );
+
+  function mapStoreOrder(o: any, mats: typeof materials) {
+    const rawPrice = Number(o.orderAmount ?? o.display_amount ?? o.displayAmount ?? o.confirmed_total ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_total ?? o.estimated_value ?? o.estimatedAmount ?? 0);
+    const weights: Record<string, number> = o.estimated_weights ?? o.estimatedWeights ?? {};
+    const price = rawPrice > 0 ? rawPrice : mats.reduce((sum, mat) => sum + (Number(weights[mat.id] ?? 0) * mat.ratePerKg), 0);
     return {
       id: o.orderId || o.id,
       orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
       distance: '—',
-      price: Number(o.orderAmount ?? o.display_amount ?? o.displayAmount ?? o.confirmed_total ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_total ?? o.estimated_value ?? o.estimatedAmount ?? 0),
+      price,
       locality: o.pickupLocality ?? o.pickup_locality,
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
       materials: (o.materials || o.material_codes || []) as MaterialCode[],
       sellerType: o.sellerType ?? o.seller_name ?? 'Seller',
       rating: o.rating ?? 4.5,
       status: o.status as OrderStatus,
+      createdAt: String(o.createdAt ?? o.created_at ?? ''),
+      updatedAt: String(o.updatedAt ?? o.updated_at ?? ''),
     };
   }
 
@@ -159,19 +186,21 @@ export default function AggregatorOrdersScreen() {
   };
 
   // ── New order card ─────────────────────────────────────────────
-  const renderNewOrderCard = (order: typeof newOrders[0]) => (
+  const renderNewOrderCard = (order: typeof newOrders[0]) => {
+    const displayPrice = order.estimatedPrice > 0
+      ? order.estimatedPrice
+      : materials.reduce((sum, mat) => sum + (Number(order.estimatedWeights?.[mat.id] ?? 0) * mat.ratePerKg), 0);
+    return (
     <BaseCard key={order.id} style={styles.card}>
       <Pressable onPress={() => router.push({ pathname: '/(aggregator)/order/[id]', params: { id: order.id } } as any)}>
         <View style={[styles.cardTopBar, { backgroundColor: colors.red }]} />
         <View style={styles.cardContent}>
           <View style={styles.cardRow}>
             <View style={styles.rowLeft}>
-              <Numeric size={13} color={colors.muted} style={styles.monoText}>{order.orderNumber}</Numeric>
-              <View style={styles.dotSeparator} />
+              <Text variant="subheading" color={colors.navy} style={styles.orderNumberText}>{order.orderNumber}</Text>
               <Lock size={12} color={colors.amber} weight="fill" />
               <Text variant="caption" color={colors.muted} style={{ marginLeft: 2 }}>{order.distanceKm ? order.distanceKm.toFixed(1) : '—'} km</Text>
             </View>
-            <Numeric size={20} color={colors.amber} style={styles.priceText}>~₹{order.estimatedPrice}</Numeric>
           </View>
 
           <View style={styles.cardRow}>
@@ -194,21 +223,6 @@ export default function AggregatorOrdersScreen() {
             {order.materials.map((m) => (
               <MaterialChip key={m} material={m} variant="chip" />
             ))}
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.sellerRow}>
-            <View style={styles.sellerLeft}>
-              <Avatar name={order.sellerType} userType="seller" size="sm" />
-              <View>
-                <Text variant="label" color={colors.navy}>{order.sellerType}</Text>
-                <Text variant="caption" color={colors.muted}>Rated {order.rating}</Text>
-              </View>
-            </View>
-            <View style={styles.newBadge}>
-              <Text variant="caption" color={colors.teal} style={styles.newBadgeText}>NEW</Text>
-            </View>
           </View>
 
           {/* Action row */}
@@ -237,6 +251,7 @@ export default function AggregatorOrdersScreen() {
       </Pressable>
     </BaseCard>
   );
+  };
 
   // ── Active/Completed/Cancelled order card ──────────────────────
   const renderOrderCard = (order: ReturnType<typeof mapStoreOrder>) => {
@@ -261,11 +276,12 @@ export default function AggregatorOrdersScreen() {
           <View style={styles.cardContent}>
             <View style={styles.cardRow}>
               <View style={styles.rowLeft}>
-                <Numeric size={13} color={colors.muted} style={styles.monoText}>{order.orderNumber}</Numeric>
-                <View style={styles.dotSeparator} />
+                <Text variant="subheading" color={colors.navy} style={styles.orderNumberText}>{order.orderNumber}</Text>
                 <Text variant="caption" color={colors.muted}>{order.distance}</Text>
               </View>
-              <Numeric size={20} color={colors.amber} style={styles.priceText}>₹{order.price}</Numeric>
+              {order.status === 'completed' && (
+                <Numeric size={20} color={colors.amber} style={styles.priceText}>₹{order.price}</Numeric>
+              )}
             </View>
 
             <View style={styles.cardRow}>
@@ -282,7 +298,7 @@ export default function AggregatorOrdersScreen() {
                 }}>
                   {order.status === 'en_route' ? 'On the Way' :
                     order.status === 'arrived' ? 'Arrived' :
-                      order.status === 'completed' ? 'Done' :
+                      order.status === 'completed' ? 'Completed' :
                         order.status === 'cancelled' ? 'Cancelled' : 'Accepted'}
                 </Text>
               </View>
@@ -299,18 +315,6 @@ export default function AggregatorOrdersScreen() {
               {order.materials.map((m: MaterialCode) => (
                 <MaterialChip key={m} material={m} variant="chip" />
               ))}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.sellerRow}>
-              <View style={styles.sellerLeft}>
-                <Avatar name={order.sellerType} userType="seller" size="sm" />
-                <View>
-                  <Text variant="label" color={colors.navy}>{order.sellerType}</Text>
-                  <Text variant="caption" color={colors.muted}>Rated {order.rating}</Text>
-                </View>
-              </View>
             </View>
 
             {isActive && (
@@ -463,19 +467,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   rowLeft: { flexDirection: 'row', alignItems: 'center' },
-  monoText: { fontFamily: 'DMMono-Regular', fontSize: 12 },
+  orderNumberText: { fontFamily: 'DMSans-Bold', fontSize: 17, marginRight: spacing.xs },
   priceText: { fontFamily: 'DMMono-Medium', fontSize: 18 },
-  dotSeparator: { width: 2, height: 2, borderRadius: 1, backgroundColor: colors.border, marginHorizontal: 6 },
   localityText: { fontFamily: 'DMSans-Bold', fontSize: 15, flex: 1 },
   highValueBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, backgroundColor: colors.tealLight },
   highValueText: { fontFamily: 'DMSans-SemiBold', fontSize: 9 },
   statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   materialsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  sellerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sellerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  newBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
-  newBadgeText: { fontFamily: 'DMSans-Bold', fontSize: 9 },
   actionRow: { flexDirection: 'row', marginTop: spacing.md, gap: spacing.sm },
   acceptBtn: { flex: 2, height: 40, backgroundColor: colors.teal },
   actionBtn: { flex: 1, height: 40, backgroundColor: colors.navy },

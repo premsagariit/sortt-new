@@ -3,7 +3,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import crypto from 'crypto';
 import { query, withUser, pool } from '../../lib/db';
-import { DbOrder, buildOrderDto } from '../../utils/orderDto';
+import { DbOrder, buildOrderDto, OrderDtoViewerType } from '../../utils/orderDto';
 import { ALLOWED_TRANSITIONS, IMMUTABLE_STATUSES } from '../../utils/orderStateMachine';
 import { mapProvider } from '../../providers/maps';
 import { orderCreateLimiter, redis } from '../../lib/redis';
@@ -34,6 +34,10 @@ const utapi = process.env.UPLOADTHING_TOKEN && !process.env.UPLOADTHING_TOKEN.st
   : null;
 
 const router = Router();
+
+const resolveViewerType = (userType?: string | null): OrderDtoViewerType | null => {
+  return userType === 'seller' || userType === 'aggregator' ? userType : null;
+};
 
 // Validation helpers
 const stripHtml = (text?: string) => text ? sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} }) : '';
@@ -179,12 +183,20 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
 
         // --- NEW: In-app notification for all matching aggregators ---
         const userIds = aggRes.rows.map(r => r.user_id);
+        const orderDisplayId = typeof order.order_number === 'number' && Number.isFinite(order.order_number)
+          ? `#${String(order.order_number).padStart(6, '0')}`
+          : `#${String(order.id).slice(0, 8).toUpperCase()}`;
         for (const uid of userIds) {
           await createNotification(
             uid,
             'New order near you!',
             'A new scrap listing is available in your area.',
-            'order'
+            'order',
+            {
+              order_id: order.id,
+              order_display_id: orderDisplayId,
+              kind: 'new_pickup_listing',
+            }
           );
         }
       } catch (pushErr) {
@@ -192,7 +204,9 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       }
     });
 
-    return res.status(201).json({ order: buildOrderDto(order, userId, req.user?.clerk_user_id) });
+    return res.status(201).json({
+      order: buildOrderDto(order, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+    });
   } catch (error: any) {
     if (error.message === 'unsupported_city') {
       return res.status(422).json({ error: 'unsupported_city' });
@@ -219,24 +233,29 @@ router.get('/', async (req, res) => {
     if (role === 'aggregator') {
       // Return orders accepted by this aggregator
       const baseQuery = `
-        SELECT o.*, 
+        SELECT o.*,
+               agg.name as aggregator_name,
+               agg.display_phone as aggregator_display_phone,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights,
+               COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
+               COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN users agg ON agg.id = o.aggregator_id
         WHERE o.aggregator_id = $1
       `;
       if (cursor) {
         result = await query(`
             ${baseQuery} AND o.created_at < $2
-            GROUP BY o.id
+            GROUP BY o.id, agg.name, agg.display_phone
             ORDER BY o.created_at DESC
             LIMIT $3
           `, [userId, cursor, limit + 1]);
       } else {
         result = await query(`
             ${baseQuery}
-            GROUP BY o.id
+            GROUP BY o.id, agg.name, agg.display_phone
             ORDER BY o.created_at DESC
             LIMIT $2
           `, [userId, limit + 1]);
@@ -244,24 +263,29 @@ router.get('/', async (req, res) => {
     } else {
       // Default: seller's own orders
       const baseQuery = `
-        SELECT o.*, 
+        SELECT o.*,
+               agg.name as aggregator_name,
+               agg.display_phone as aggregator_display_phone,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights,
+               COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
+               COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN users agg ON agg.id = o.aggregator_id
         WHERE o.seller_id = $1
       `;
       if (cursor) {
         result = await query(`
             ${baseQuery} AND o.created_at < $2
-            GROUP BY o.id
+            GROUP BY o.id, agg.name, agg.display_phone
             ORDER BY o.created_at DESC
             LIMIT $3
           `, [userId, cursor, limit + 1]);
       } else {
         result = await query(`
             ${baseQuery}
-            GROUP BY o.id
+            GROUP BY o.id, agg.name, agg.display_phone
             ORDER BY o.created_at DESC
             LIMIT $2
           `, [userId, limit + 1]);
@@ -275,7 +299,7 @@ router.get('/', async (req, res) => {
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].created_at : null;
 
     return res.json({
-      orders: rows.map(o => buildOrderDto(o, userId, req.user?.clerk_user_id)),
+      orders: rows.map(o => buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))),
       nextCursor,
       hasMore
     });
@@ -319,8 +343,9 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     params.push(limit + 1);
 
     const result = await query(`
-            SELECT o.*, 
-                   COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes
+            SELECT o.*,
+                   COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
+                   COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
             FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
             JOIN aggregator_material_rates r
@@ -350,7 +375,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
 
     // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
     return res.json({
-      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId, req.user?.clerk_user_id)),
+      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))),
       nextCursor: rows.length > 0 ? rows[rows.length - 1].created_at : null,
       hasMore
     });
@@ -575,7 +600,7 @@ router.get('/:id', async (req, res) => {
       const sellerOtp = await redis.get<string>(`otp:order_plain:${id}`);
       order.otp = sellerOtp ?? '';
     }
-    return res.json(buildOrderDto(order, userId, req.user?.clerk_user_id));
+    return res.json(buildOrderDto(order, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type)));
 
   } catch (e) {
     console.error('GET /api/orders/:id error:', e);
@@ -622,7 +647,9 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
       return res.status(403).json({ error: 'not_assigned_aggregator' });
     }
 
-    if (order.confirmed_value !== null && order.confirmed_value !== undefined) {
+    // Block re-finalization only when confirmed_value is a real positive amount.
+    // If confirmed_value = 0, it was set incorrectly (e.g. before rate validation existed) — allow correction.
+    if (order.confirmed_value !== null && order.confirmed_value !== undefined && Number(order.confirmed_value) > 0) {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'order_value_already_finalized' });
     }
@@ -727,7 +754,9 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
       [orderId]
     );
 
-    return res.status(200).json({ order: buildOrderDto(refreshed.rows[0], userId, req.user?.clerk_user_id) });
+    return res.status(200).json({
+      order: buildOrderDto(refreshed.rows[0], userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+    });
   } catch (e: any) {
     await client.query('ROLLBACK');
     console.error('POST /api/orders/:id/finalize-weighing error:', e);
@@ -795,14 +824,19 @@ router.patch('/:id/status', async (req, res) => {
         // --- NEW: Create in-app notification for the other party ---
         setImmediate(async () => {
           try {
-            const orderRes = await query('SELECT seller_id, aggregator_id FROM orders WHERE id = $1', [id]);
+            const orderRes = await query('SELECT seller_id, aggregator_id, order_number FROM orders WHERE id = $1', [id]);
             const order = orderRes.rows[0];
             if (!order) return;
 
             const otherPartyId = userId === order.seller_id ? order.aggregator_id : order.seller_id;
             if (otherPartyId) {
-              let title = `Order #${id.slice(0, 8)} updated`;
+              const formattedOrderNumber =
+                Number.isFinite(Number(order.order_number))
+                  ? String(order.order_number).padStart(6, '0')
+                  : id.slice(0, 8).toUpperCase();
+              let title = `Order #${formattedOrderNumber} updated`;
               let body = `Status changed to ${newStatus}`;
+              const orderDisplayId = `#${formattedOrderNumber}`;
 
               if (newStatus === 'accepted') {
                 title = 'Order Accepted!';
@@ -812,7 +846,11 @@ router.patch('/:id/status', async (req, res) => {
                 body = 'Pickup successful. Check your balance.';
               }
 
-              await createNotification(otherPartyId, title, body, 'order');
+              await createNotification(otherPartyId, title, body, 'order', {
+                order_id: id,
+                order_display_id: orderDisplayId,
+                kind: 'order_status_changed',
+              });
             }
           } catch (err) {
             console.error('Failed to create notification on status change:', err);
@@ -1113,10 +1151,17 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
   // Notification (identical pattern to PATCH handler)
   setImmediate(async () => {
     try {
-      const orderRes = await query('SELECT seller_id FROM orders WHERE id = $1', [orderId]);
+      const orderRes = await query('SELECT seller_id, order_number FROM orders WHERE id = $1', [orderId]);
       const order = orderRes.rows[0];
       if (!order) return;
-      await createNotification(order.seller_id, 'Order Accepted!', 'An aggregator is coming for your pickup.', 'order');
+      const orderDisplayId = Number.isFinite(Number(order.order_number))
+        ? `#${String(order.order_number).padStart(6, '0')}`
+        : `#${String(orderId).slice(0, 8).toUpperCase()}`;
+      await createNotification(order.seller_id, 'Order Accepted!', 'An aggregator is coming for your pickup.', 'order', {
+        order_id: orderId,
+        order_display_id: orderDisplayId,
+        kind: 'order_accepted',
+      });
     } catch (err) {
       console.error('Failed to create notification on accept:', err);
     }
@@ -1222,7 +1267,9 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
   `, [orderId]);
 
-  return res.status(200).json({ order: buildOrderDto(orderRes.rows[0], aggregatorId, req.user?.clerk_user_id) });
+  return res.status(200).json({
+    order: buildOrderDto(orderRes.rows[0], aggregatorId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+  });
 });
 
 // 7. POST /api/orders/:orderId/verify-otp

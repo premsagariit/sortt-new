@@ -1,22 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth, useSignIn } from '@clerk/clerk-expo';
+import {
+  Phone,
+  UserPlus,
+  LockKey,
+  ArrowLeft,
+} from 'phosphor-react-native';
 
 import { APP_NAME } from '../../constants/app';
-import { colors, radius, spacing } from '../../constants/tokens';
+import { colors, colorExtended, radius, spacing } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { Input } from '../../components/ui/Input';
 import { PrimaryButton } from '../../components/ui/Button';
-import { NavBar } from '../../components/ui/NavBar';
 import { safeBack } from '../../utils/navigation';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 
 type Step = 'phone' | 'otp';
 type Mode = 'login' | 'signup';
-
 type MeResponse = {
   user_type: 'seller' | 'aggregator' | null;
   name?: string | null;
@@ -31,7 +42,7 @@ type MeResponse = {
   aggregator_has_kyc_media?: boolean | null;
 };
 
-const OTP_SECONDS = 600;
+const OTP_SECONDS = 300; // 5 minutes
 
 const formatTime = (seconds: number) => {
   const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -72,7 +83,6 @@ export default function PhoneScreen() {
   const router = useRouter();
   const { signOut } = useAuth();
   const { signIn, setActive } = useSignIn();
-
   const setSession = useAuthStore((s) => s.setSession);
 
   const [step, setStep] = useState<Step>('phone');
@@ -83,14 +93,24 @@ export default function PhoneScreen() {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(OTP_SECONDS);
   const [canResend, setCanResend] = useState(false);
+  const [otpExpired, setOtpExpired] = useState(false);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // OTP input boxes refs
+  const otpInputRefs = useRef<TextInput[]>([]);
+
+  // Timer refs
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resendUnlockRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimers = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (resendIntervalRef.current) {
+      clearInterval(resendIntervalRef.current);
+      resendIntervalRef.current = null;
     }
     if (resendUnlockRef.current) {
       clearTimeout(resendUnlockRef.current);
@@ -102,15 +122,14 @@ export default function PhoneScreen() {
     clearTimers();
     setCountdown(OTP_SECONDS);
     setCanResend(false);
+    setOtpExpired(false);
 
-    intervalRef.current = setInterval(() => {
+    countdownIntervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearTimers();
-          setStep('phone');
-          setOtp('');
-          setError('OTP expired. Please request a new one.');
-          return OTP_SECONDS;
+          setOtpExpired(true);
+          return 0;
         }
         return prev - 1;
       });
@@ -135,12 +154,46 @@ export default function PhoneScreen() {
     setError(null);
     setCountdown(OTP_SECONDS);
     setCanResend(false);
+    setOtpExpired(false);
     clearTimers();
   };
 
   const normalizedPhone = phone.replace(/\D/g, '').slice(0, 10);
   const canSendOtp = normalizedPhone.length === 10;
-  const canVerifyOtp = otp.trim().length === 6;
+  const canVerifyOtp = otp.trim().length === 6 && !otpExpired;
+
+  const handleOtpChange = (index: number, value: string) => {
+    const digits = value.replace(/\D/g, '');
+    
+    // Distribute digits across boxes on paste
+    if (digits.length > 1) {
+      const otpArray = digits.slice(0, 6).split('');
+      setOtp(otpArray.join(''));
+      otpArray.forEach((digit, i) => {
+        if (otpInputRefs.current[i]) {
+          otpInputRefs.current[i].setNativeProps({ text: digit });
+        }
+      });
+      if (otpArray.length === 6 && otpInputRefs.current[5]) {
+        otpInputRefs.current[5]?.focus();
+      }
+      return;
+    }
+
+    // Single digit: auto-focus next box
+    const newOtp = otp.slice(0, index) + digits + otp.slice(index + 1);
+    setOtp(newOtp);
+
+    if (digits && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (index: number, key: string) => {
+    if (key === 'Backspace' && !otp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
 
   async function handleSendOtp() {
     setError(null);
@@ -185,6 +238,7 @@ export default function PhoneScreen() {
           }
         }
       } catch {
+        // Clerk session setup failed, but we can still navigate
       }
 
       if (is_new_user) {
@@ -229,105 +283,236 @@ export default function PhoneScreen() {
     setError(null);
     setCountdown(OTP_SECONDS);
     setCanResend(false);
+    setOtpExpired(false);
   }
 
   async function handleResendOtp() {
     if (!canResend || isLoading) return;
+    setOtp('');
+    otpInputRefs.current.forEach(ref => {
+      if (ref) ref.setNativeProps({ text: '' });
+    });
+    setError(null);
     await handleSendOtp();
   }
 
+  const lastFourDigits = normalizedPhone.slice(-5).padStart(5, 'X');
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <NavBar title="Phone Verification" variant="light" onBack={() => safeBack('/(auth)/onboarding')} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* HERO SECTION */}
+        <View style={styles.hero}>
+          {/* Decorative background circles */}
+          <View style={styles.heroCircle1} />
+          <View style={styles.heroCircle2} />
 
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.content}>
-          <Text variant="heading" style={styles.title}>Welcome to {APP_NAME}</Text>
-          <Text variant="caption" color={colors.muted} style={styles.subtitle}>
-            Log in or create your account with WhatsApp OTP.
-          </Text>
+          {step === 'otp' && (
+            <Pressable
+              style={styles.backButton}
+              onPress={() => {
+                clearTimers();
+                safeBack('/(auth)/phone');
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ArrowLeft size={22} color="white" weight="regular" />
+            </Pressable>
+          )}
 
-          {step === 'phone' ? (
-            <View style={styles.tabsWrap}>
-              <Pressable
-                onPress={() => handleModeChange('login')}
-                style={[styles.tab, mode === 'login' ? styles.tabActive : styles.tabInactive]}
-              >
-                <Text variant="label" style={mode === 'login' ? styles.tabActiveText : styles.tabInactiveText}>Log In</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleModeChange('signup')}
-                style={[styles.tab, mode === 'signup' ? styles.tabActive : styles.tabInactive]}
-              >
-                <Text variant="label" style={mode === 'signup' ? styles.tabActiveText : styles.tabInactiveText}>Sign Up</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          <View style={[styles.phoneRow, step === 'otp' && styles.phoneRowDisabled]}>
-            <View style={styles.prefixPill}>
-              <Numeric size={14} color={colors.navy}>+91</Numeric>
-            </View>
-            <View style={styles.phoneInputWrap}>
-              <Input
-                value={normalizedPhone}
-                onChangeText={(value) => setPhone(value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="Enter mobile number"
-                keyboardType="number-pad"
-                maxLength={10}
-                editable={step === 'phone'}
-                mono
-              />
-            </View>
+          {/* Icon circle */}
+          <View style={styles.iconCircle}>
+            {step === 'phone' && mode === 'login' && (
+              <Phone size={22} color="white" weight="regular" />
+            )}
+            {step === 'phone' && mode === 'signup' && (
+              <UserPlus size={22} color="white" weight="regular" />
+            )}
+            {step === 'otp' && (
+              <LockKey size={22} color="white" weight="regular" />
+            )}
           </View>
 
-          {step === 'otp' ? (
-            <View>
-              <Input
-                value={otp}
-                onChangeText={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter OTP"
-                keyboardType="number-pad"
-                maxLength={6}
-                mono
-              />
+          {/* Headline */}
+          <Text style={styles.heroHeadline}>
+            {step === 'phone' && mode === 'login' ? 'Welcome back' : ''}
+            {step === 'phone' && mode === 'signup' ? 'Create account' : ''}
+            {step === 'otp' ? 'Enter OTP' : ''}
+          </Text>
 
-              <View style={styles.metaRow}>
-                <Pressable onPress={handleChangeNumber}>
-                  <Text variant="caption" color={colors.navy}>Change Number</Text>
-                </Pressable>
-                <Text variant="caption" color={colors.muted}>Expires in {formatTime(countdown)}</Text>
+          {/* Subtitle */}
+          <Text style={styles.heroSubtitle}>
+            {step === 'phone' && mode === 'login' && 'Enter your mobile number to log in via WhatsApp OTP'}
+            {step === 'phone' && mode === 'signup' && 'Join as a seller or scrap aggregator in your city'}
+            {step === 'otp' && (
+              <>
+                {'Sent to +91 '}
+                <Numeric style={styles.otpPhoneNumber}>{lastFourDigits}</Numeric>
+                {' via WhatsApp'}
+              </>
+            )}
+          </Text>
+        </View>
+
+        {/* TAB SWITCHER (phone states only) */}
+        {step === 'phone' && (
+          <View style={styles.tabContainer}>
+            <Pressable
+              onPress={() => handleModeChange('login')}
+              style={[styles.tabButton, mode === 'login' && styles.tabButtonActive]}
+            >
+              <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>
+                Log In
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleModeChange('signup')}
+              style={[styles.tabButton, mode === 'signup' && styles.tabButtonActive]}
+            >
+              <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>
+                Sign Up
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* BODY CONTENT */}
+        <View style={styles.body}>
+          {step === 'phone' ? (
+            <>
+              {/* Phone input section */}
+              <View style={styles.phoneInputSection}>
+                <Text style={styles.phoneInputLabel}>Mobile Number</Text>
+                <View style={styles.phoneInputRow}>
+                  <View style={styles.countryBox}>
+                    <Text style={styles.countryText}>🇮🇳 +91</Text>
+                  </View>
+                  <TextInput
+                    style={styles.phoneInput}
+                    value={normalizedPhone}
+                    onChangeText={(value) => setPhone(value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="Enter 10-digit number"
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    placeholderTextColor={colors.muted}
+                  />
+                </View>
               </View>
 
-              <Pressable disabled={!canResend} onPress={handleResendOtp} style={styles.resendWrap}>
-                <Text variant="caption" color={canResend ? colors.teal : colors.muted}>
-                  {canResend ? 'Resend OTP' : 'Resend available after 00:30'}
+              {/* Info strip */}
+              <View style={styles.infoStrip}>
+                <View style={styles.infoDot} />
+                <Text style={styles.infoText}>
+                  An OTP will be sent to your WhatsApp. Standard rates apply.
                 </Text>
-              </Pressable>
-            </View>
-          ) : null}
+              </View>
 
-          {error ? (
-            <Text variant="caption" color={colors.red} style={styles.errorText}>{error}</Text>
-          ) : null}
-
-          <View style={styles.buttonWrap}>
-            {step === 'phone' ? (
+              {/* CTA button */}
               <PrimaryButton
-                label="Send OTP"
+                label="Send OTP via WhatsApp"
                 onPress={handleSendOtp}
                 loading={isLoading}
                 disabled={!canSendOtp}
+                style={styles.ctaButton}
               />
-            ) : (
+
+              {/* Error message */}
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              {/* Terms line */}
+              <View style={styles.termsLine}>
+                <Text style={styles.termsText}>By continuing, you agree to our </Text>
+                <Pressable onPress={() => router.push('/(shared)/terms-of-service')}>
+                  <Text style={styles.termsLink}>Terms of Service</Text>
+                </Pressable>
+                <Text style={styles.termsText}> & </Text>
+                <Pressable onPress={() => router.push('/(shared)/privacy-policy')}>
+                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              {/* OTP input boxes */}
+              <View style={styles.otpBoxesContainer}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(ref) => {
+                      if (ref) otpInputRefs.current[i] = ref;
+                    }}
+                    style={[
+                      styles.otpBox,
+                      otp[i] && styles.otpBoxFilled,
+                    ]}
+                    value={otp[i] || ''}
+                    onChangeText={(value) => handleOtpChange(i, value)}
+                    onKeyPress={({ nativeEvent }) => {
+                      if (nativeEvent.key === 'Backspace') {
+                        handleOtpKeyPress(i, nativeEvent.key);
+                      }
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    placeholderTextColor={colors.muted}
+                  />
+                ))}
+              </View>
+
+              {/* Timer and change number row */}
+              <View style={styles.timerRow}>
+                <Pressable onPress={handleChangeNumber}>
+                  <View style={styles.changeNumberLink}>
+                    <Text style={styles.changeNumberText}>← Change number</Text>
+                  </View>
+                </Pressable>
+                <View style={styles.expireColumn}>
+                  <Text style={styles.expireLabel}>Expires in</Text>
+                  <Numeric style={styles.expireTime}>
+                    {formatTime(countdown)}
+                  </Numeric>
+                </View>
+              </View>
+
+              {/* OTP expired message */}
+              {otpExpired && (
+                <Text style={styles.expiredText}>
+                  OTP expired. Please request a new one.
+                </Text>
+              )}
+
+              {/* Resend timer */}
+              {!canResend ? (
+                <Text style={styles.resendWaitText}>
+                  Resend in <Numeric style={styles.resendTimer}>00:30</Numeric>
+                </Text>
+              ) : (
+                <Pressable onPress={handleResendOtp} disabled={isLoading}>
+                  <Text style={styles.resendLink}>Resend OTP</Text>
+                </Pressable>
+              )}
+
+              {/* Verify CTA */}
               <PrimaryButton
                 label="Verify OTP"
                 onPress={handleVerifyOtp}
                 loading={isLoading}
                 disabled={!canVerifyOtp}
+                style={styles.ctaButton}
               />
-            )}
-          </View>
+
+              {/* Error message */}
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              {/* Bottom note */}
+              <Text style={styles.bottomNote}>
+                Your number is only used for authentication and is never shared.
+              </Text>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -337,86 +522,296 @@ export default function PhoneScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.navy,
   },
   container: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    padding: spacing.md,
+
+  // HERO SECTION
+  hero: {
+    backgroundColor: colors.navy,
+    minHeight: 180,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
   },
-  title: {
+  heroCircle1: {
+    position: 'absolute',
+    right: -30,
+    top: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(26, 107, 99, 0.18)',
+  },
+  heroCircle2: {
+    position: 'absolute',
+    right: 20,
+    top: 10,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(26, 107, 99, 0.12)',
+  },
+  backButton: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    padding: spacing.sm,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.input,
+    backgroundColor: colors.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  heroHeadline: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: spacing.xs,
+  },
+  heroSubtitle: {
+    fontSize: 12,
+    color: colors.whiteAlpha70,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  otpPhoneNumber: {
+    fontFamily: 'DMMono',
+    fontSize: 12,
+  },
+
+  // TAB SWITCHER
+  tabContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: radius.card,
+    padding: 3,
+    marginHorizontal: spacing.md,
     marginTop: spacing.md,
-    color: colors.navy,
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  tabsWrap: {
+    marginBottom: spacing.lg,
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.chip,
-    padding: spacing.xs,
-    marginBottom: spacing.md,
-    gap: spacing.xs,
   },
-  tab: {
+  tabButton: {
     flex: 1,
-    height: 40,
-    borderRadius: radius.chip,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.input,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabActive: {
+  tabButtonActive: {
     backgroundColor: colors.teal,
   },
-  tabInactive: {
-    backgroundColor: 'transparent',
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.whiteAlpha70,
   },
-  tabActiveText: {
-    color: colors.surface,
+  tabTextActive: {
+    color: 'white',
   },
-  tabInactiveText: {
-    color: colors.slate,
+
+  // BODY SECTION
+  body: {
+    backgroundColor: colors.bg,
+    flex: 1,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
-  phoneRow: {
+
+  // Phone input
+  phoneInputSection: {
+    marginBottom: spacing.lg,
+  },
+  phoneInputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: spacing.sm,
+  },
+  phoneInputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  phoneRowDisabled: {
-    opacity: 0.6,
-  },
-  prefixPill: {
-    height: 52,
-    minWidth: 56,
+  countryBox: {
+    width: 70,
+    height: 50,
+    backgroundColor: colors.surface,
     borderRadius: radius.input,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phoneInputWrap: {
+  countryText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  phoneInput: {
+    flex: 1,
+    height: 50,
+    backgroundColor: colors.surface,
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    fontSize: 15,
+    fontFamily: 'DMMono',
+    color: colors.navy,
+  },
+
+  // Info strip
+  infoStrip: {
+    backgroundColor: colorExtended.tealLight,
+    borderRadius: radius.input,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.teal,
+    marginRight: spacing.sm,
+  },
+  infoText: {
+    fontSize: 11,
+    color: colors.teal,
     flex: 1,
   },
-  metaRow: {
+
+  // CTA button
+  ctaButton: {
+    marginBottom: spacing.lg,
+  },
+
+  // Error message
+  errorText: {
+    fontSize: 12,
+    color: colors.red,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+
+  // Terms line
+  termsLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: spacing.md,
+  },
+  termsText: {
+    fontSize: 11,
+    color: colors.muted,
+  },
+  termsLink: {
+    fontSize: 11,
+    color: colors.teal,
+    fontWeight: '600',
+  },
+
+  // OTP INPUT SECTION
+  otpBoxesContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  otpBox: {
+    width: 44,
+    height: 52,
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderColor: colors.border,
+    textAlign: 'center',
+    fontSize: 22,
+    fontFamily: 'DMMono',
+    color: colors.navy,
+    backgroundColor: colors.surface,
+  },
+  otpBoxFilled: {
+    borderColor: colors.teal,
+    borderWidth: 1.5,
+    backgroundColor: colorExtended.tealLight,
+    color: colors.teal,
+  },
+
+  // Timer row
+  timerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.xs,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
-  resendWrap: {
-    marginTop: spacing.sm,
+  changeNumberLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  changeNumberText: {
+    fontSize: 12,
+    color: colors.slate,
+  },
+  expireColumn: {
     alignItems: 'flex-end',
   },
-  errorText: {
-    marginTop: spacing.sm,
+  expireLabel: {
+    fontSize: 11,
+    color: colors.slate,
   },
-  buttonWrap: {
-    marginTop: spacing.lg,
+  expireTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.navy,
+  },
+
+  // OTP expired message
+  expiredText: {
+    fontSize: 12,
+    color: colors.red,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+
+  // Resend
+  resendWaitText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  resendTimer: {
+    fontSize: 12,
+    fontFamily: 'DMMono',
+    color: colors.muted,
+  },
+  resendLink: {
+    fontSize: 12,
+    color: colors.teal,
+    fontWeight: '600',
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+
+  // Bottom note
+  bottomNote: {
+    fontSize: 11,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
 });

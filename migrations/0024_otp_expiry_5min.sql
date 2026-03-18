@@ -1,0 +1,3 @@
+-- 0024: OTP expiry reduced to 5 minutes (300s).
+-- TTL enforced in Redis only (backend/src/routes/auth.ts).
+-- No schema change required.

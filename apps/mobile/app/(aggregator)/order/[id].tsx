@@ -18,7 +18,7 @@ export default function AggregatorOrderByIdScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { orders, fetchOrder } = useOrderStore();
+  const { orders, fetchOrder, refreshAggregatorOrder } = useOrderStore();
   const storeOrder = orders.find((o) => o.orderId === id);
 
   const newOrders = useAggregatorStore((s) => s.newOrders);
@@ -202,23 +202,13 @@ export default function AggregatorOrderByIdScreen() {
             <View style={styles.tableHeader}>
               <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
               <Text variant="caption" style={[styles.col, styles.colWeight]}>WEIGHT</Text>
-              <Text variant="caption" style={[styles.col, styles.colYourRate]}>YOUR RATE</Text>
-              <Text variant="caption" style={[styles.col, styles.colLineTotal]}>TOTAL</Text>
             </View>
             {items.map((item, idx) => (
               <View key={`${item.material}-${idx}`} style={[styles.tableRow, idx === items.length - 1 && { borderBottomWidth: 0 }]}>
                 <Text variant="label" color={colors.navy} style={[styles.col, styles.colMaterial]}>{item.material}</Text>
                 <Numeric size={14} style={[styles.col, styles.colWeight, { color: colors.teal }]}>{item.weight} kg</Numeric>
-                <Text variant="caption" color={colors.amber} style={[styles.col, styles.colYourRate]}>
-                  {typeof item.yourRate === 'number' ? `₹${item.yourRate}/kg` : '—'}
-                </Text>
-                <Numeric size={14} color={colors.navy} style={[styles.col, styles.colLineTotal]}>₹{item.lineTotal}</Numeric>
               </View>
             ))}
-            <View style={styles.totalRow}>
-              <Text variant="label" color={colors.navy} style={{ fontFamily: 'DMSans-Bold' }}>Total Estimated</Text>
-              <Numeric size={24} color={colors.navy}>₹{totalEst}</Numeric>
-            </View>
           </View>
 
           <View style={styles.sectionHeader}>
@@ -292,6 +282,7 @@ export default function AggregatorOrderByIdScreen() {
             setIsBusy(true);
             try {
               await acceptOrderApi(internalOrderId);
+              await refreshAggregatorOrder(internalOrderId);
               router.replace({ pathname: '/(aggregator)/active-order-detail', params: { id: internalOrderId } } as any);
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to accept order');
@@ -394,30 +385,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   colMaterial: {
-    flex: 2,
+    flex: 3,
   },
   colWeight: {
-    flex: 1.5,
-    textAlign: 'center',
-  },
-  colYourRate: {
-    flex: 1.7,
-    textAlign: 'center',
-    fontFamily: 'DMSans-Bold',
-  },
-  colLineTotal: {
-    flex: 1.3,
+    flex: 2,
     textAlign: 'right',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: '#FAFAFA',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   locationCard: {
     padding: spacing.md,

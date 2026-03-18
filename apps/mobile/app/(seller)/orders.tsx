@@ -72,29 +72,53 @@ export default function SellerOrdersScreen() {
 
   const showInitialSkeleton = isLoading && orders.length === 0;
 
-  // Filter client-side from store
-  const displayOrders = orders.filter(order => {
-    if (activeFilter === 'All') return true;
-    if (activeFilter === 'Active') return ACTIVE_STATUSES.includes(order.status);
-    if (activeFilter === 'Completed') return order.status === 'completed';
-    if (activeFilter === 'Cancelled') return order.status === 'cancelled';
-    return true;
-  });
+  // Filter + sort client-side from store (stable: only reruns when orders or filter changes)
+  const displayOrders = useMemo(() => {
+    const filtered = orders.filter(order => {
+      if (activeFilter === 'All') return true;
+      if (activeFilter === 'Active') return ACTIVE_STATUSES.includes(order.status);
+      if (activeFilter === 'Completed') return order.status === 'completed';
+      if (activeFilter === 'Cancelled') return order.status === 'cancelled';
+      return true;
+    });
+    // Latest first: completed/cancelled use updatedAt (≈ completion/cancellation time);
+    // all others use createdAt for a stable, non-repositioning sort
+    return [...filtered].sort((a, b) => {
+      const useUpdated = activeFilter === 'Completed' || activeFilter === 'Cancelled';
+      const tA = useUpdated ? new Date(a.updatedAt).getTime() : new Date(a.createdAt).getTime();
+      const tB = useUpdated ? new Date(b.updatedAt).getTime() : new Date(b.createdAt).getTime();
+      return tB - tA;
+    });
+  }, [orders, activeFilter]);
 
   const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
   const hasActiveOrder = activeOrders.length > 0;
   const firstActive = activeOrders[0];
 
   const calculateEstimate = useCallback((order: any) => {
-    if (order?.status === 'completed') {
-      if (typeof order?.confirmedTotal === 'number' && Number.isFinite(order.confirmedTotal)) return order.confirmedTotal;
-      if (typeof order?.confirmed_amount === 'number' && Number.isFinite(order.confirmed_amount)) return order.confirmed_amount;
-      if (typeof order?.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount)) return order.confirmedAmount;
+    // For weighing_in_progress and completed: show the aggregator's confirmed value
+    if (['weighing_in_progress', 'completed'].includes(order?.status)) {
+      if (typeof order?.confirmedTotal === 'number' && Number.isFinite(order.confirmedTotal) && order.confirmedTotal > 0) return order.confirmedTotal;
+      if (typeof order?.confirmed_amount === 'number' && Number.isFinite(order.confirmed_amount) && order.confirmed_amount > 0) return order.confirmed_amount;
+      if (typeof order?.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount) && order.confirmedAmount > 0) return order.confirmedAmount;
+      // Compute from orderItems preserved in the store from a previous detail fetch
+      if (Array.isArray(order?.orderItems) && order.orderItems.length > 0) {
+        const fromItems = order.orderItems.reduce((sum: number, item: any) => {
+          const w = Number(item.confirmedWeightKg ?? item.estimatedWeightKg ?? 0);
+          const r = Number(item.ratePerKg ?? 0);
+          return sum + w * r;
+        }, 0);
+        if (fromItems > 0) return fromItems;
+      }
     }
-    if (typeof order?.estimatedTotal === 'number' && Number.isFinite(order.estimatedTotal)) return order.estimatedTotal;
-    if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total)) return order.estimated_total;
-    return getOrderDisplayAmount(order);
-  }, []);
+    if (typeof order?.estimatedTotal === 'number' && Number.isFinite(order.estimatedTotal) && order.estimatedTotal > 0) return order.estimatedTotal;
+    if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total) && order.estimated_total > 0) return order.estimated_total;
+    const fromDisplay = getOrderDisplayAmount(order);
+    if (fromDisplay > 0) return fromDisplay;
+    // Fallback: compute from live market rates × per-material estimated weights
+    const weights: Record<string, number> = order?.estimatedWeights ?? {};
+    return rates.reduce((sum, r) => sum + (Number(weights[r.material_code] ?? 0) * Number(r.rate_per_kg ?? 0)), 0);
+  }, [rates]);
 
   // Format date string from ISO
   const formatDate = (iso: string) => {
@@ -201,7 +225,11 @@ export default function SellerOrdersScreen() {
           displayOrders.map(order => (
             <Pressable
               key={order.orderId}
-              onPress={() => router.push(`/(seller)/order/${order.orderId}` as any)}
+              onPress={() => router.push(
+                order.status === 'completed'
+                  ? (`/(seller)/order/receipt/${order.orderId}` as any)
+                  : (`/(seller)/order/${order.orderId}` as any)
+              )}
               accessible
               accessibilityRole="button"
               accessibilityLabel={`Order ${order.orderId}, status ${order.status}`}
@@ -212,7 +240,7 @@ export default function SellerOrdersScreen() {
                 status={order.status}
                 materials={order.materials}
                 amountRupees={calculateEstimate(order)}
-                aggregator="—"
+                aggregator={order.aggregatorName || 'Aggregator'}
                 date={formatDate(order.createdAt)}
               />
             </Pressable>

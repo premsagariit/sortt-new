@@ -75,15 +75,18 @@ export function OrderCard({
   style,
 }: OrderCardProps) {
   const isCompleted = status === 'completed';
-  const isActive = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(status);
-  
+
   const statusColor = isCompleted ? colors.teal : colors.amber;
 
   const statusText = 
     status === 'created' ? 'Waiting for aggregator' :
-    status === 'completed' ? `by ${aggregator || 'Aggregator'}` :
-    aggregator ? `${aggregator}` :
-    'Waiting for aggregator';
+    status === 'accepted' ? 'Pickup accepted' :
+    status === 'en_route' ? 'Partner on the way' :
+    status === 'arrived' ? 'Partner arrived' :
+    status === 'weighing_in_progress' ? 'Weighing in progress' :
+    status === 'completed' ? 'Completed' :
+    status === 'cancelled' ? 'Cancelled' :
+    'Disputed';
 
   return (
     <BaseCard style={[{ padding: 0, overflow: 'hidden' }, style] as any}>
@@ -114,7 +117,7 @@ export function OrderCard({
         <View style={styles.orderFooter}>
           <View style={styles.footerLeft}>
             <Text variant="caption" color={colors.muted} numberOfLines={1}>
-              {isCompleted ? 'Paid to wallet' : `Est. ₹${amountRupees} value`}
+              {isCompleted ? 'Final value' : `Est. ₹${amountRupees} value`}
             </Text>
             {date && (
               <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>

@@ -39,17 +39,23 @@ export interface DbOrder {
 
 import { getChannelHmacPrefix } from './channelHelper';
 
-export function buildOrderDto(order: DbOrder, requestingUserId: string, requestingUserClerkId?: string) {
+export type OrderDtoViewerType = 'seller' | 'aggregator';
+
+export function buildOrderDto(
+  order: DbOrder,
+  requestingUserId: string,
+  requestingUserClerkId?: string,
+  viewerType?: OrderDtoViewerType | null
+) {
   const canSeeAddress =
     order.seller_id === requestingUserId ||
     order.aggregator_id === requestingUserId;
 
-  // SP1: phone visible to BOTH seller and aggregator, but only post-acceptance.
+  // SP1: phone visibility matrix uses status + explicit viewerType.
   const postAccepted = !['created', 'cancelled'].includes(order.status);
-  const canSeeOtherPartyPhone =
-    postAccepted &&
-    (order.seller_id === requestingUserId ||
-     order.aggregator_id === requestingUserId);
+  const normalizedViewerType: OrderDtoViewerType | null =
+    viewerType === 'seller' || viewerType === 'aggregator' ? viewerType : null;
+  const canExposePhones = postAccepted && normalizedViewerType !== null;
 
   const canSeeOrderOtp =
     requestingUserId === order.seller_id &&
@@ -101,6 +107,8 @@ export function buildOrderDto(order: DbOrder, requestingUserId: string, requesti
         amount: item.amount ?? 0,
       }));
 
+  const normalizedPickupLocality = order.pickup_locality ?? null;
+
   return {
     ...order,
     order_display_id: orderDisplayId,
@@ -115,10 +123,13 @@ export function buildOrderDto(order: DbOrder, requestingUserId: string, requesti
     display_amount: displayAmount,
     is_final_amount: isFinalAmount,
     pickup_address: canSeeAddress ? order.pickup_address : null,
+    pickup_locality: normalizedPickupLocality,
+    pickupLocality: normalizedPickupLocality,
+    locality: normalizedPickupLocality,
     seller_name: order.seller_name,
-    seller_phone: (requestingUserId === order.aggregator_id) && canSeeOtherPartyPhone ? (order.seller_display_phone ?? null) : null,
+    seller_phone: canExposePhones ? (order.seller_display_phone ?? null) : null,
     aggregator_name: order.aggregator_name,
-    aggregator_phone: (requestingUserId === order.seller_id) && canSeeOtherPartyPhone ? (order.aggregator_display_phone ?? null) : null,
+    aggregator_phone: canExposePhones ? (order.aggregator_display_phone ?? null) : null,
     material_codes: order.material_codes || [],
     estimated_weights: order.estimated_weights || {},
     order_items: normalizedOrderItems,

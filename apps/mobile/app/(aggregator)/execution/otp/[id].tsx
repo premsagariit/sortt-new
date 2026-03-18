@@ -27,7 +27,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { CheckCircle, ShieldCheck, Info, ArrowRight, Copy, Scales } from 'phosphor-react-native';
+import { ShieldCheck, Info, Scales } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
@@ -108,12 +108,15 @@ export default function AggregatorOtpScreen() {
     try {
       // Real API call via aggregator store
       await verifyOtpApi(id!, otp);
-      
-      // Success -> Go to receipt
-      // We use router.replace so they can't go "back" to the OTP screen
+
+      // Success -> animated completion screen, then receipt
       router.replace({
-        pathname: '/(aggregator)/execution/receipt/[id]' as any,
-        params: { id }
+        pathname: '/(shared)/order-complete',
+        params: {
+          orderId: id,
+          amount: String(totalAmount),
+          fallback: id ? `/(aggregator)/execution/receipt/${id}` : '/(aggregator)/orders',
+        },
       });
     } catch (err: any) {
       console.error('OTP Verification failed:', err);
@@ -216,7 +219,7 @@ export default function AggregatorOtpScreen() {
                       ]}
                     >
                       <Text variant="heading" color={digit ? colors.navy : colors.border}>
-                        {digit || '×'}
+                        {digit || ''}
                       </Text>
                     </View>
                   );

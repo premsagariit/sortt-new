@@ -31,6 +31,33 @@ export default function SellerOTPDisplayScreen() {
     }, [id, fetchOrder]);
 
     useEffect(() => {
+        if (!id) return;
+
+        const interval = setInterval(() => {
+            fetchOrder(id, true);
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [id, fetchOrder]);
+
+    useEffect(() => {
+        if (!id || order?.status !== 'completed') return;
+
+        const completedAmount = Number(
+            order?.confirmedTotal ?? order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedTotal ?? order?.estimatedAmount ?? 0
+        );
+
+        router.replace({
+            pathname: '/(shared)/order-complete',
+            params: {
+                orderId: order?.orderId ?? id,
+                amount: String(completedAmount),
+                fallback: `/(seller)/order/receipt/${id}`,
+            },
+        });
+    }, [id, order?.status, order?.orderId, order?.confirmedTotal, order?.displayAmount, order?.confirmedAmount, order?.estimatedTotal, order?.estimatedAmount, router]);
+
+    useEffect(() => {
         const onBackPress = () => true;
         const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
         return () => subscription.remove();
@@ -158,7 +185,7 @@ const styles = StyleSheet.create({
     },
     infoBanner: {
         flexDirection: 'row',
-        backgroundColor: '#E6FFFA', // Light teal
+        backgroundColor: colors.tealLight,
         padding: spacing.md,
         borderRadius: radius.card,
         gap: 12,

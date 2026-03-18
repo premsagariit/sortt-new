@@ -47,11 +47,21 @@ import { getMobileRealtimeProvider } from '../lib/realtime';
 
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
+  const [isTokenReady, setIsTokenReady] = useState(false);
   
   useEffect(() => {
+    // Set token getter IMMEDIATELY on first render with auth context available
     setApiTokenGetter(getToken);
     setGlobalClerkSignOut(signOut);
+    // Mark as ready so child routes can render
+    setIsTokenReady(true);
   }, [getToken, signOut]);
+
+  // ⚠️ CRITICAL: Do not render children until token is configured
+  // This prevents race condition where API calls fire before Bearer token is attached
+  if (!isTokenReady) {
+    return null; // Clerk is initializing, children will render as soon as token is ready
+  }
 
   return <>{children}</>;
 }

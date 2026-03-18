@@ -97,10 +97,10 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         const otp = crypto.randomInt(100000, 999999).toString();
         const otpHmac = computeHmac(otp, OTP_HMAC_SECRET);
 
-        // Store OTP HMAC in Redis (600s TTL)
+        // Store OTP HMAC in Redis (300s TTL)
         if (redis) {
-            await redis.set(`otp:phone:${phoneHmac}`, otpHmac, { ex: 600 });
-            await redis.set(`otp:mode:${phoneHmac}`, mode, { ex: 600 });
+            await redis.set(`otp:phone:${phoneHmac}`, otpHmac, { ex: 300 });
+            await redis.set(`otp:mode:${phoneHmac}`, mode, { ex: 300 });
         }
 
         // Increment Meta Counter & alert if nearing quota
@@ -151,7 +151,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         if (process.env.NODE_ENV !== 'production') {
             console.log(`[OTP DEV] Testing Code for ${normalizedPhone.slice(-4)}: ${otp}`);
         }
-        const expiresAt = new Date(Date.now() + 600 * 1000); // 10 min, matches Redis TTL
+        const expiresAt = new Date(Date.now() + 300 * 1000); // 5 min, matches Redis TTL
 
         // Audit Log (HMAC is not persisted - Security X3)
         await query(

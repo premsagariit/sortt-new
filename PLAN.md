@@ -548,6 +548,152 @@
 - [x] **G8.1** — Full auth flow on physical device: phone entry → WhatsApp OTP → OTP entry → lands on correct home screen (seller or aggregator) based on `user_type`.
 - [x] **G8.2** — `authStore.clerkToken` is populated after successful OTP verify. API requests include `Authorization: Bearer` header (verify via Charles Proxy or backend request log).
 - [x] **G8.3** — Dual push tokens saved: `device_tokens` table has both `expo` and `fcm`/`apns` row for the test device after login.
+
+---
+
+## ✅ UI POLISH & CONSISTENCY OVERHAUL (Phases 1–6) — [COMPLETE — 2026-03-19]
+
+> **Goal:** All seller and aggregator screens refined for consistency, UX clarity, and data integrity after backend wiring.
+> **Scope:** 6 coordinated implementation phases + 5 post-implementation bug fixes across mobile routes.
+> **Date:** 2026-03-11 to 2026-03-19 | **Status:** All phases complete, all validation gates passed.
+
+### Phase 1: Tab Hygiene & Hidden Route Controls — [COMPLETE]
+- [x] **Seller tab layout hygiene** (`apps/mobile/app/(seller)/_layout.tsx`):
+  - Added `href: null` to `listing` and `receipt` stacks to prevent accidental tab bar leakage.
+  - Receipt page (`order/receipt/[id]`) hidden from navigation — accessible only via direct route from orders list.
+- [x] **Back button standardization**:
+  - Seller receipt: `CaretLeft` icon with zero margin, transparent background (app standard).
+  - No extra `marginBottom` or padding applied to hero buttons.
+- [x] Type validation: `pnpm type-check` passed.
+
+### Phase 2: Seller Order Detail → Receipt Refactor — [COMPLETE]
+- [x] **Seller order detail** (`apps/mobile/app/(seller)/order/[id].tsx`):
+  - Refactored layout sequence: status timeline section, payment summary, seller details card (merged from separate card), material breakdown.
+  - Ratings block removed (moved to receipt page only).
+  - Order status drives conditional rendering: created/accepted vs. pickup-accepted states shown explicitly.
+- [x] **Seller receipt page** (`apps/mobile/app/(seller)/order/receipt/[id].tsx`):
+  - New dedicated route for completed orders. Serves as terminal receipt page.
+  - Captures timeline, ratings prompt, media gallery (scrap photos with API fetch fallback).
+  - Routes: `/orders` → completed tab → receipt page (no mixed detail/receipt).
+- [x] **Seller orders list routing** (`apps/mobile/app/(seller)/orders.tsx`):
+  - Completed orders button routes to `/order/receipt/[id]` instead of detail page.
+- [x] Type validation: `pnpm type-check` passed.
+
+### Phase 3: Aggregator Privacy & Table Enforcement — [COMPLETE]
+- [x] **Aggregator order detail (pre-acceptance)** (`apps/mobile/app/(aggregator)/order/[id].tsx`):
+  - Material table simplified to 2 columns only: **Material** | **Weight (kg)**.
+  - Removed rate column, total weight row (privacy compliance — SP1).
+  - No seller phone or address exposed pre-acceptance.
+- [x] **Aggregator active order detail (post-acceptance)** (`apps/mobile/app/(aggregator)/active-order-detail.tsx`):
+  - Full address revealed post-acceptance.
+  - Material table: 2 columns only (**Material** | **Weight**). No rates or totals shown.
+  - Seller phone hidden (text removed). Functional call icon in navigate action only, disabled if phone unavailable.
+- [x] **Aggregator navigate screen** (`apps/mobile/app/(aggregator)/execution/navigate.tsx`):
+  - Seller phone number text hidden (compliance V24).
+  - Functional `Linking.openURL('tel:...')` only — call action preserved for driver convenience.
+  - Seller info card shows name only, no number display.
+- [x] Type validation: `pnpm type-check` passed.
+
+### Phase 4: Weighing Rate Integrity — [COMPLETE]
+- [x] **Aggregator weighing screen** (`apps/mobile/app/(aggregator)/execution/weighing/[id].tsx`):
+  - Rates fetched on screen focus via `useFocusEffect` (not mount) — ensures live data on re-focus.
+  - Rate source precedence: `orderItem.ratePerKg` → liveRates endpoint → local storeRates → configRates.
+  - Material code normalized before lookup (handles partial/mis-matched codes).
+  - Running total: DM Mono, amber color, updated live as weights entered.
+- [x] Type validation: `pnpm type-check` passed.
+
+### Phase 5: Order Card Harmonization — [COMPLETE]
+- [x] **Aggregator orders list** (`apps/mobile/app/(aggregator)/orders.tsx`):
+  - Removed seller name/phone from card display (privacy).
+  - Removed rating from completed orders card.
+  - Updated status labels: "Waiting" → "Accepted", "Done" → "Completed" (role-agnostic naming).
+  - Emphasized order number (larger font, bold).
+  - Value hidden on active orders, visible on completed only (data consistency post-finalization).
+- [x] **Order card component** (`apps/mobile/components/ui/Card.tsx`):
+  - Updated text copy: removed "Paid to wallet" label.
+  - Changed status label from "Done" to "Completed".
+- [x] Type validation: `pnpm type-check` passed.
+
+### Phase 6: OTP Receipt Routing Consistency — [COMPLETE]
+- [x] **Aggregator OTP screen** (`apps/mobile/app/(aggregator)/execution/otp/[id].tsx`):
+  - Updated `handleVerify` success routing: OTP success → `/(shared)/order-complete` (animated 5-sec screen) → fallback to receipt.
+  - Prevents "unwanted green receipt" UX from OTP jumping directly to aggregator receipt.
+- [x] **Animated completion screen** (`apps/mobile/app/(shared)/order-complete.tsx`):
+  - 5000ms (5-second) auto-dismiss trigger using fallback parameter.
+  - Lottie success animation with scale/opacity transitions.
+  - Configurable fallback destination (caller controls where to land).
+- [x] Type validation: `pnpm type-check` passed.
+
+### Bug Fixes — [ALL COMPLETE — 2026-03-19]
+
+#### Bug #1: Seller Receipt Review Input Overlap [FIXED 2026-03-18]
+- **Issue:** Review textarea (`minHeight: 96`) had insufficient bottom margin (`spacing.sm = 8px`), overlapping submit button on scroll.
+- **Fix:** 
+  - Added `maxHeight: 160` constraint to review input.
+  - Increased `marginBottom` from `spacing.sm` to `spacing.md/lg` (16–24px).
+  - Submit button now has clear visual separation.
+- **Files:** `apps/mobile/app/(seller)/order/receipt/[id].tsx`
+
+#### Bug #2: Unwanted Green Aggregator Receipt After OTP [FIXED 2026-03-18]
+- **Issue:** OTP verify routed directly to `/(aggregator)/execution/receipt`, showing teal background mid-flow (jarring UX).
+- **Fix:**
+  - Added intermediate `/(shared)/order-complete` animated screen (success animation + 5-sec delay).
+  - OTP success now routes: OTP → animated completion → receipt (smooth transition).
+  - Fallback parameter points to aggregator receipt for seamless navigation.
+- **Files:** `apps/mobile/app/(aggregator)/execution/otp/[id].tsx`, `apps/mobile/app/(shared)/order-complete.tsx`
+
+#### Bug #3: Aggregator Receipt Values Showing ₹0 [FIXED 2026-03-18]
+- **Issue:** Order values displayed as ₹0 on aggregator receipt (incomplete value resolution chain).
+- **Root Cause:** Value resolution logic missing `confirmedTotal` and `confirmedAmount` checks; rates array empty.
+- **Fix:**
+  - Implemented comprehensive value chain: `draft` → `confirmedTotal` → `confirmedAmount` → `displayAmount` → `estimatedAmount` → computed.
+  - Added rates fetch on component mount via `/api/rates` endpoint.
+  - Updated weightItems fallback calculation to use fetched rates instead of hardcoded 0.
+- **Files:** `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
+
+#### Bug #4: Material Rates Zero in Aggregator Receipt [FIXED 2026-03-18]
+- **Issue:** Fallback calculation: `ratePerKg: Number(rates.find(...)?.rate_per_kg ?? 0)` — rates array was empty, always defaulting to 0.
+- **Fix:**
+  - Added `useEffect` to fetch `/api/rates` on component mount.
+  - Connected rates state to weightItems calculation.
+  - Rates now populated before material breakdown rendering.
+- **Files:** `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
+
+#### Bug #5: Aggregator Receipt Back Icon Inconsistency [FIXED 2026-03-18]
+- **Issue:** Aggregator receipt back button had `marginBottom: spacing.sm` (8px), seller receipt had none (inconsistent styling).
+- **Fix:**
+  - Removed `marginBottom: spacing.sm` from aggregator heroBackButton container.
+  - Back icon now matches seller receipt styling exactly (transparent, margin-free).
+- **Files:** `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
+
+### 🚦 POST-POLISH VALIDATION GATE — [GATE PASSED 2026-03-19]
+- [x] **G-POLISH-1** — All 6 phases applied with zero TypeScript errors.
+- [x] **G-POLISH-2** — All 5 bug fixes verified and validated.
+- [x] **G-POLISH-3** — Seller receipt: review input no longer overlaps submit button on vertical scroll.
+- [x] **G-POLISH-4** — Aggregator OTP: success shows 5-sec animated transition, then receipt (no jarring page switch).
+- [x] **G-POLISH-5** — Aggregator receipt: order values display correctly (not ₹0), material rates populated from API.
+- [x] **G-POLISH-6** — Back button styling consistent across seller and aggregator receipts.
+- [x] **G-POLISH-7** — Aggregator tables enforced: 2 columns (Material, Weight) pre-acceptance; seller phone hidden except in navigate action.
+- [x] **G-POLISH-8** — `pnpm type-check` across all workspace projects passes with zero errors.
+
+**Summary:**
+- Phase 1: Hidden routes, back button hygiene.
+- Phase 2: Seller order refactor, dedicated receipt page created.
+- Phase 3: Aggregator privacy tables (2-column enforcement), seller phone hidden.
+- Phase 4: Weighing screen rate fetching (DB-first on focus), material code normalization.
+- Phase 5: Order card deduplication, label/styling harmonization.
+- Phase 6: OTP routing through animated completion screen.
+- Bugs 1–5: Input overlap, unwanted page, ₹0 values, rate ₹0, back icon — all resolved & validated.
+
+**Current Status:** All 6 implementation phases deployed. All 5 bug fixes live. Ready for next work stream (Days 9–10: Core Order Routes / API wiring).
+
+---
+
+## ⏳ DAY 9–10 — Core Order Routes + Media + Supporting Routes (PENDING)
+> **Goal:** POST/GET/PATCH/DELETE `/api/orders` routes live. Order creation, status updates, media operations functional. All payment/transaction routes wired.
+> **Prerequisite:** Phases 1–6 of UI polish complete ✅ (confirmed 2026-03-19).
+> **Time Estimate:** ~5 hours across both days.
+> **Status:** [BLOCKED — awaiting assignment]
 - [x] **G8.4** — 401 interceptor: expire/clear the token manually → next API call → app routes to phone screen.
 - [x] **G8.5** — Aggregator onboarding: complete all 4 wizard steps with real data → profile + rates written to DB → `kyc-pending` screen shown.
 - [x] **G8.6** — `EXPO_PUBLIC_API_URL` is the only base URL used — grep `apps/mobile/lib/api.ts` for any hardcoded Azure domain → 0 results.
@@ -1183,9 +1329,12 @@
 
 ### ✅ Order Data Integrity Overhaul (2026-03-18)
 - Backend accept route now snapshots aggregator rates into `order_items.rate_per_kg` + `amount` within the same accept transaction.
-- Order DTO contract now exposes canonical `order_items`, `estimated_total`, `confirmed_total`, and `seller_has_rated` for seller/aggregator detail flows.
-- Aggregator post-accept flow now navigates with `router.replace` to active detail context and keeps New→Active transitions store-driven.
-- Seller order detail now uses status-aware weight/rate rendering and completed-only rating submission block.
+- Order DTO contract now exposes canonical `order_items`, `estimated_total`, `confirmed_total`, `seller_has_rated`, and locality compatibility aliases for list/detail parity.
+- GET `/api/orders` list contract now includes aggregator identity fields and computed totals for seller/aggregator views.
+- Notifications now carry structured order metadata and route to role-specific order detail screens from the shared notifications inbox.
+- Aggregator post-accept flow now navigates with `router.replace` to active detail context after canonical order refresh.
+- Seller order detail now uses status-aware weight/rate rendering, completed-only rating submission with post-submit refresh, and seller-only own-contact card.
+- Aggregator order history removes legacy service-fee deduction; receipt/seller detail spacing polish completed.
 
 ### ✅ Completed (Days 1–3)
 - [x] Day 1 — Foundation & Design System *(2026-02-26)*

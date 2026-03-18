@@ -87,10 +87,12 @@ export interface NewOrderRequest {
   estimatedKg: number;
   postedMinutesAgo: number;
   estimatedPrice: number;
+  estimatedWeights: Record<string, number>;
   sellerType: string;
   rating: number;
   isHighValue?: boolean;
   window: string;
+  createdAt: string;
 }
 
 interface AggregatorStoreState {
@@ -246,10 +248,12 @@ function mapFeedOrder(o: any): NewOrderRequest {
     estimatedKg: typeof o.estimated_weight_kg === 'number' ? o.estimated_weight_kg : 0,
     postedMinutesAgo,
     estimatedPrice: typeof o.estimated_value === 'number' ? o.estimated_value : 0,
+    estimatedWeights: (o.estimated_weights && typeof o.estimated_weights === 'object') ? o.estimated_weights : {},
     window: windowLabel,
     sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
     rating: typeof o.seller_rating === 'number' ? o.seller_rating : 4.5,
     isHighValue: (o.estimated_value ?? 0) > 500,
+    createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
   };
 }
 

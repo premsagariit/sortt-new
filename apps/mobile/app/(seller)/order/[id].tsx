@@ -13,7 +13,8 @@ import {
   Clock,
   MapPin,
   Warning,
-  Star,
+  NavigationArrow,
+  ImageSquare,
 } from 'phosphor-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,8 +22,6 @@ import { colors, spacing, radius } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { StatusChip } from '../../../components/ui/StatusChip';
-import { PrimaryButton } from '../../../components/ui/Button';
-import { Input } from '../../../components/ui/Input';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useOrderStore } from '../../../store/orderStore';
 import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
@@ -30,6 +29,7 @@ import { safeBack } from '../../../utils/navigation';
 import { api } from '../../../lib/api';
 import { OrderTimeline } from '../../../components/order/OrderTimeline';
 import { ContactCard } from '../../../components/order/ContactCard';
+import { useAuthStore } from '../../../store/authStore';
 
 const OTP_ACTIVE_STATUSES = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'];
 
@@ -46,27 +46,38 @@ export default function SellerOrderDetailScreen() {
   const orders = useOrderStore((s: any) => s.orders);
   const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
   const isLoading = useOrderStore((s: any) => s.isLoading);
+  const authUserId = useAuthStore((s: any) => s.userId);
+  const authName = useAuthStore((s: any) => s.name);
+  const authPhone = useAuthStore((s: any) => s.phoneNumber);
 
   const [rates, setRates] = React.useState<any[]>([]);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
-  const [ratingScore, setRatingScore] = React.useState<number>(0);
-  const [ratingReview, setRatingReview] = React.useState('');
-  const [ratingSubmitting, setRatingSubmitting] = React.useState(false);
-  const [ratingError, setRatingError] = React.useState<string | null>(null);
-  const [ratingSubmitted, setRatingSubmitted] = React.useState(false);
 
   const order = orders.find((o: any) => o.orderId === id);
   const hasSellerAction = !!(order && OTP_ACTIVE_STATUSES.includes(order.status));
+  const ownContactName = (typeof authName === 'string' && authName.trim().length > 0)
+    ? authName.trim()
+    : (order?.sellerName || 'You');
+  const ownContactPhone = (typeof order?.sellerPhone === 'string' && order.sellerPhone.trim().length > 0)
+    ? order.sellerPhone.trim()
+    : (typeof authPhone === 'string' && authPhone.trim().length > 0)
+    ? authPhone.trim()
+    : null;
 
   React.useEffect(() => {
-    api.get('/api/rates')
-      .then(res => setRates(res.data.rates || []))
-      .catch(() => {});
+    if (!id) return;
 
-    if (id) {
-      fetchOrder(id);
-    }
+    // ⚠️ CRITICAL: Fetch order AND rates in parallel instead of sequentially
+    // This ensures rates are available before mappedItems useMemo runs
+    (async () => {
+      await Promise.all([
+        fetchOrder(id),
+        api.get('/api/rates')
+          .then(res => setRates(res.data.rates || []))
+          .catch(() => setRates([])),
+      ]);
+    })();
   }, [id, fetchOrder]);
 
   React.useEffect(() => {
@@ -104,12 +115,32 @@ export default function SellerOrderDetailScreen() {
   }, [id]);
 
   React.useEffect(() => {
-    if (order?.sellerHasRated) {
-      setRatingSubmitted(true);
+    if (!id) return;
+    if (order?.status === 'completed') {
+      const completedAmount =
+        Number(order?.confirmedTotal ?? order?.displayAmount ?? order?.confirmedAmount ?? order?.estimatedTotal ?? order?.estimatedAmount ?? 0);
+
+      router.replace({
+        pathname: '/(shared)/order-complete',
+        params: {
+          orderId: order?.orderId ?? id,
+          amount: String(completedAmount),
+          fallback: `/(seller)/order/receipt/${id}`,
+        },
+      });
     }
-  }, [order?.sellerHasRated]);
+  }, [id, order?.status, order?.orderId, order?.confirmedTotal, order?.displayAmount, order?.confirmedAmount, order?.estimatedTotal, order?.estimatedAmount]);
 
   const isCompleted = order?.status === 'completed';
+  const hasAcceptedFlow = !!order && ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
+
+  const toTitleCase = React.useCallback((value: string) => {
+    return String(value || '')
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }, []);
 
   const mappedItems = useMemo<SellerOrderItemRow[]>(() => {
     if (Array.isArray(order?.orderItems) && order.orderItems.length > 0) {
@@ -162,32 +193,6 @@ export default function SellerOrderDetailScreen() {
     return computed > 0 ? computed : (order?.confirmedAmount ?? order?.estimatedAmount ?? 0);
   }, [mappedItems, order?.displayAmount, order?.confirmedAmount, order?.estimatedAmount, order?.estimatedTotal, order?.confirmedTotal, isCompleted]);
 
-  const canShowRatingBlock = order.status === 'completed';
-
-  const submitRating = React.useCallback(async () => {
-    if (!order?.orderId || !order?.aggregatorId || ratingScore < 1 || ratingSubmitting) return;
-    setRatingSubmitting(true);
-    setRatingError(null);
-    try {
-      await api.post('/api/ratings', {
-        order_id: order.orderId,
-        ratee_id: order.aggregatorId,
-        score: ratingScore,
-        review: ratingReview.trim().slice(0, 500),
-      });
-      setRatingSubmitted(true);
-    } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 409) {
-        setRatingSubmitted(true);
-      } else {
-        setRatingError("Couldn't submit review. Please try again.");
-      }
-    } finally {
-      setRatingSubmitting(false);
-    }
-  }, [order?.orderId, order?.aggregatorId, ratingScore, ratingReview, ratingSubmitting]);
-
   if (isLoading && !order) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -239,6 +244,18 @@ export default function SellerOrderDetailScreen() {
           </View>
         )}
 
+        {hasAcceptedFlow && (
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <NavigationArrow size={16} color={colors.navy} />
+              <Text variant="label" color={colors.slate}>LIVE TRACKING</Text>
+            </View>
+            <View style={styles.mapPlaceholderCard}>
+              <Text variant="caption" color={colors.muted}>Aggregator tracking available in active flow.</Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.card}>
           <ContactCard
             name={order.aggregatorName || 'Finding Partner...'}
@@ -258,16 +275,47 @@ export default function SellerOrderDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <View style={styles.row}>
-            <View style={styles.locationIcon}>
-              <MapPin size={24} color={colors.red} weight="fill" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text variant="label" style={{ fontFamily: 'DMSans-SemiBold' }}>Pickup Location</Text>
-              <Text variant="body" color={colors.slate} numberOfLines={3}>
-                {order.pickupAddress || order.pickupLocality}
-              </Text>
-            </View>
+          <View style={styles.cardHeaderRow}>
+            <ImageSquare size={16} color={colors.navy} />
+            <Text variant="label" color={colors.slate}>SCRAP IMAGE</Text>
+          </View>
+          {mediaUrls.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+              {mediaUrls.map((url, idx) => (
+                <Image
+                  key={idx}
+                  source={{ uri: url }}
+                  style={styles.scrapPhoto}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <EmptyState
+              icon={<ImageSquare size={44} color={colors.muted} weight="thin" />}
+              heading="No scrap photo available"
+              body="Pickup image is not attached for this order."
+            />
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <MapPin size={16} color={colors.navy} />
+            <Text variant="label" color={colors.slate}>SELLER DETAILS</Text>
+          </View>
+          <View style={styles.ownContactRow}>
+            <Text variant="caption" color={colors.muted}>Name</Text>
+            <Text variant="body" color={colors.slate}>{ownContactName}</Text>
+          </View>
+          <View style={styles.ownContactRow}>
+            <Text variant="caption" color={colors.muted}>Phone</Text>
+            <Text variant="body" color={colors.slate}>{ownContactPhone || 'Not available'}</Text>
+          </View>
+          <View style={styles.detailRowAddress}>
+            <Text variant="caption" color={colors.muted}>Pickup Address</Text>
+            <Text variant="body" color={colors.slate} style={styles.pickupAddressValue}>
+              {order.pickupAddress || order.pickupLocality || 'Address unavailable'}
+            </Text>
           </View>
         </View>
 
@@ -280,7 +328,7 @@ export default function SellerOrderDetailScreen() {
             <View key={`${item.material_code}-${index}`} style={styles.itemRow}>
               <View style={{ flex: 1 }}>
                 <Text variant="body" style={{ color: colors.slate, fontFamily: 'DMSans-Medium' }}>
-                  {item.material_label}
+                  {toTitleCase(item.material_label)}
                 </Text>
                 <Text variant="caption" color={colors.muted}>
                   Rate: {typeof item.price_per_kg === 'number' ? `₹${item.price_per_kg}/kg` : '—'}
@@ -301,67 +349,6 @@ export default function SellerOrderDetailScreen() {
           history={order.history || []}
           currentStatus={order.status}
         />
-
-        {canShowRatingBlock && (
-          <View style={styles.card}>
-            <Text variant="subheading" style={{ color: colors.navy, marginBottom: spacing.sm }}>Rate your experience</Text>
-
-            {ratingSubmitted ? (
-              <Text variant="body" color={colors.teal}>Review submitted</Text>
-            ) : (
-              <>
-                <View style={styles.ratingStarsRow}>
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Pressable key={star} onPress={() => setRatingScore(star)} style={styles.ratingStarPressable}>
-                      <Star
-                        size={26}
-                        color={star <= ratingScore ? colors.amber : colors.border}
-                        weight={star <= ratingScore ? 'fill' : 'regular'}
-                      />
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Input
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                  value={ratingReview}
-                  onChangeText={setRatingReview}
-                  placeholder="Optional review"
-                  style={styles.reviewInput}
-                />
-
-                {ratingError ? (
-                  <Text variant="caption" color={colors.red} style={{ marginBottom: spacing.sm }}>
-                    {ratingError}
-                  </Text>
-                ) : null}
-
-                <PrimaryButton
-                  label={ratingSubmitting ? 'Submitting...' : 'Submit Review'}
-                  onPress={submitRating}
-                  disabled={ratingSubmitting || ratingScore < 1}
-                />
-              </>
-            )}
-          </View>
-        )}
-
-        {mediaUrls.length > 0 && (
-          <View style={styles.photoSection}>
-            <Text variant="subheading" style={{ marginBottom: spacing.sm }}>Scrap Photos</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {mediaUrls.map((url, idx) => (
-                <Image
-                  key={idx}
-                  source={{ uri: url }}
-                  style={styles.scrapPhoto}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         {!['completed', 'cancelled', 'disputed'].includes(order.status) && (
           <Pressable
@@ -409,6 +396,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   card: {
     backgroundColor: colors.surface,
@@ -416,7 +404,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginBottom: spacing.sm,
+  },
+  mapPlaceholderCard: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
   },
   itemHeaderRow: {
     flexDirection: 'row',
@@ -439,26 +443,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
   },
-  ratingStarsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
+  detailRowAddress: {
+    paddingTop: spacing.xs,
   },
-  ratingStarPressable: {
-    minWidth: 48,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewInput: {
-    minHeight: 96,
-    textAlignVertical: 'top',
-    paddingTop: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  pickupAddressValue: {
+    marginTop: 2,
+    lineHeight: 20,
   },
   cardFooter: {
     flexDirection: 'row',
@@ -466,6 +456,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.bg,
+  },
+  ownContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
   },
   metaRow: {
     flexDirection: 'row',
@@ -485,18 +481,6 @@ const styles = StyleSheet.create({
   warningTextContainer: {
     marginLeft: spacing.sm,
     flex: 1,
-  },
-  locationIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.redLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  photoSection: {
-    marginTop: spacing.md,
   },
   scrapPhoto: {
     width: 120,

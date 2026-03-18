@@ -94,8 +94,8 @@
 │   │   │   │   ├── _layout.tsx # Aggregator tab layout and route shell
 │   │   │   │   ├── home.tsx # Aggregator dashboard/feed home
 │   │   │   │   ├── orders.tsx # Aggregator order list across status tabs
-│   │   │   │   ├── active-order-detail.tsx # Active accepted order detail/actions
-│   │   │   │   ├── order-history-detail.tsx # Historical/completed order detail view
+│   │   │   │   ├── active-order-detail.tsx # Active accepted order detail/actions (store-backed, no mock fixtures)
+│   │   │   │   ├── order-history-detail.tsx # Historical/completed order detail view (legacy service fee removed)
 │   │   │   │   ├── price-index.tsx # Aggregator market price index page
 │   │   │   │   ├── earnings.tsx # Aggregator earnings analytics page
 │   │   │   │   ├── edit-profile.tsx # Aggregator profile edit form
@@ -124,7 +124,7 @@
 │   │   │       ├── _layout.tsx # Shared stack layout wrapper
 │   │   │       ├── help.tsx # Help/support information page
 │   │   │       ├── language.tsx # Language selection page
-│   │   │       ├── notifications.tsx # Notifications center page
+│   │   │       ├── notifications.tsx # Notifications center page with role-based order deep-link handling
 │   │   │       ├── privacy-policy.tsx # Privacy policy content page
 │   │   │       ├── terms-of-service.tsx # Terms of service content page
 │   │   │       ├── terms-privacy.tsx # Combined legal terms/privacy helper page
@@ -184,7 +184,7 @@
 │   │   │   ├── authStore.ts # Auth/session state and onboarding flags
 │   │   │   ├── chatStore.ts # Chat threads/messages state and actions
 │   │   │   ├── listingStore.ts # Seller listing wizard draft state
-│   │   │   ├── notificationStore.ts # Notification state and read/unread updates
+│   │   │   ├── notificationStore.ts # Notification state/read updates with metadata payload typing
 │   │   │   ├── orderStore.ts # Shared order state mapping and lifecycle actions
 │   │   │   └── uiStore.ts # Global UI state (modals, flags, view toggles)
 │   │   └── utils

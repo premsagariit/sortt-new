@@ -254,10 +254,17 @@ export const useOrderStore = create<OrderStoreState>()(
               sellerPhone: newOrder.sellerPhone || old.sellerPhone,
               aggregatorName: newOrder.aggregatorName || old.aggregatorName,
               aggregatorPhone: newOrder.aggregatorPhone || old.aggregatorPhone,
-              estimatedWeights: (newOrder.estimatedWeights && Object.keys(newOrder.estimatedWeights).length > 0) 
-                ? newOrder.estimatedWeights 
+              estimatedWeights: (newOrder.estimatedWeights && Object.keys(newOrder.estimatedWeights).length > 0)
+                ? newOrder.estimatedWeights
                 : old.estimatedWeights,
               history: (newOrder.history && newOrder.history.length > 0) ? newOrder.history : old.history,
+              // List endpoint omits order_items/line_items — preserve them from a prior detail fetch
+              orderItems: (Array.isArray(newOrder.orderItems) && newOrder.orderItems.length > 0)
+                ? newOrder.orderItems
+                : old.orderItems,
+              lineItems: (Array.isArray(newOrder.lineItems) && newOrder.lineItems.length > 0)
+                ? newOrder.lineItems
+                : old.lineItems,
             };
           });
 

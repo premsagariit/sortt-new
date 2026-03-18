@@ -113,8 +113,11 @@ pnpm dev:backend
 
 ✅ Order data integrity overhaul applied (2026-03-18):
 - Accept route now snapshots aggregator material rates into `order_items.rate_per_kg` and `order_items.amount` atomically.
-- Order DTO now includes canonical `order_items`, `estimated_total`, `confirmed_total`, and `seller_has_rated` fields.
-- Aggregator accept flow now routes directly to active-order-detail with replace semantics; seller detail now uses status-aware weights and completed-only rating UI.
+- Order DTO now includes canonical `order_items`, `estimated_total`, `confirmed_total`, `seller_has_rated`, and locality compatibility aliases.
+- Aggregator accept flow now routes directly to active-order-detail with replace semantics and refreshes canonical order state before transition.
+- Notifications now persist structured metadata (`order_id`, `order_display_id`, `kind`) and mobile notifications route users directly to role-specific order detail screens.
+- Seller detail now uses status-aware weights, completed-only rating UI with post-submit refresh, and seller-only own-contact card sourced from auth state.
+- Aggregator order-history no longer subtracts legacy service fee; receipt and seller detail spacing polish completed.
 
 ✅ README setup unchanged:
 - No new environment variables were introduced.

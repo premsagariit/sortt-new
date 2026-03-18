@@ -62,7 +62,14 @@ export default function SellerLayout() {
         />
       ))}
       <Tabs.Screen name="prices" options={{ href: null }} />
+      {/* <Tabs.Screen name="listing" options={{ href: null }} /> */}
+      <Tabs.Screen name="listing/index" options={{ href: null }} />
+      <Tabs.Screen name="listing/step1" options={{ href: null }} />
+      <Tabs.Screen name="listing/step2" options={{ href: null }} />
+      <Tabs.Screen name="listing/step3" options={{ href: null }} />
+      <Tabs.Screen name="listing/step4" options={{ href: null }} />
       <Tabs.Screen name="order/[id]" options={{ href: null }} />
+      <Tabs.Screen name="order/receipt/[id]" options={{ href: null }} />
       <Tabs.Screen name="order/otp/[id]" options={{ href: null }} />
       <Tabs.Screen name="agg-profile" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />

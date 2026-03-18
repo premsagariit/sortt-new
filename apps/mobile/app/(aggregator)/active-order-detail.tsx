@@ -9,7 +9,6 @@ import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { MapPin, Clock, Hash, NavigationArrow, CheckCircle } from 'phosphor-react-native';
 import { useOrderStore } from '../../store/orderStore';
 import { getOrderDisplayAmount } from '../../store/orderStore';
-import { useAggregatorStore } from '../../store/aggregatorStore';
 import { safeBack } from '../../utils/navigation';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 
@@ -34,43 +33,63 @@ export default function ActiveOrderDetailScreen() {
     const storeOrder = orders.find(o => o.orderId === id);
 
     React.useEffect(() => {
-        if (id && !storeOrder) {
+        if (id) {
             fetchOrder(id, true);
         }
-    }, [id, storeOrder, fetchOrder]);
+    }, [id, fetchOrder]);
 
-    const internalOrderId = storeOrder?.orderId ?? id ?? 'ACTIVE-001';
+    const internalOrderId = storeOrder?.orderId ?? id ?? '';
     const displayOrderNumber = storeOrder?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
 
-    // Seed fallback matching SEED_ACTIVE_ORDERS in orders.tsx
-    const MOCK_ORDER = {
+    const itemRows = React.useMemo(() => {
+        if (Array.isArray(storeOrder?.orderItems) && storeOrder.orderItems.length > 0) {
+            return storeOrder.orderItems.map((item) => {
+                const weight = Number(item.confirmedWeightKg ?? item.estimatedWeightKg ?? 0);
+                const rate = Number(item.ratePerKg ?? 0);
+                const amount = Number(item.amount ?? (weight * rate));
+                return {
+                    material: item.materialLabel || item.materialCode,
+                    weight,
+                    rate,
+                    amount,
+                };
+            });
+        }
+
+        return Object.entries(storeOrder?.estimatedWeights ?? {}).map(([materialCode, value]) => ({
+            material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
+            weight: Number(value ?? 0),
+            rate: 0,
+            amount: 0,
+        }));
+    }, [storeOrder?.orderItems, storeOrder?.estimatedWeights]);
+
+    const computedTotal = itemRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const activeOrder = {
         id: displayOrderNumber,
-        distance: '1.4 km',
-        locality: storeOrder?.pickupLocality ?? 'Madhapur area',
-        address: storeOrder?.pickupAddress ?? 'Plot 42, Road No. 3, Jubilee Hills, Hyderabad - 500033',
-        window: 'Today · 10 AM — 12 PM',
+        distance: '—',
+        locality: storeOrder?.pickupLocality ?? '—',
+        address: storeOrder?.pickupAddress ?? 'Address available after acceptance',
+        window: storeOrder?.window ?? 'Flexible',
         status: storeOrder?.status ?? 'accepted',
-        items: [
-            { material: 'Paper', weight: 15, rate: 12, yourRate: 14 },
-            { material: 'Plastic', weight: 8, rate: 8, yourRate: 9 },
-        ],
-        totalEst: storeOrder ? getOrderDisplayAmount(storeOrder as any) : 0,
+        items: itemRows,
+        totalEst: storeOrder ? getOrderDisplayAmount(storeOrder as any) : computedTotal,
     };
 
     const statusLabel =
-        MOCK_ORDER.status === 'en_route' ? 'On the Way' :
-            MOCK_ORDER.status === 'arrived' ? 'Arrived' :
-                MOCK_ORDER.status === 'weighing_in_progress' ? 'Weighing' :
+        activeOrder.status === 'en_route' ? 'On the Way' :
+            activeOrder.status === 'arrived' ? 'Arrived' :
+                activeOrder.status === 'weighing_in_progress' ? 'Weighing' :
                     'Accepted';
 
     const statusColor =
-        MOCK_ORDER.status === 'arrived' || MOCK_ORDER.status === 'weighing_in_progress'
+        activeOrder.status === 'arrived' || activeOrder.status === 'weighing_in_progress'
             ? colors.teal : colors.navy;
 
     const routeToExecutionStage = () => {
         if (!internalOrderId) return;
 
-        if (MOCK_ORDER.status === 'weighing_in_progress') {
+        if (activeOrder.status === 'weighing_in_progress') {
             router.push({
                 pathname: '/(aggregator)/execution/otp/[id]',
                 params: { id: internalOrderId },
@@ -78,7 +97,7 @@ export default function ActiveOrderDetailScreen() {
             return;
         }
 
-        if (MOCK_ORDER.status === 'arrived') {
+        if (activeOrder.status === 'arrived') {
             router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
             return;
         }
@@ -95,14 +114,14 @@ export default function ActiveOrderDetailScreen() {
             <View style={styles.summaryItem}>
                 <Hash size={16} color={colors.muted} />
                 <Text variant="label" color={colors.navy} style={styles.monoText}>
-                    {MOCK_ORDER.id}
+                    {activeOrder.id}
                 </Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
                 <NavigationArrow size={16} color={colors.muted} weight="fill" />
                 <Text variant="label" color={colors.navy} style={styles.monoText}>
-                    {MOCK_ORDER.distance} away
+                    {activeOrder.distance} away
                 </Text>
             </View>
             <View style={styles.summaryDivider} />
@@ -122,32 +141,20 @@ export default function ActiveOrderDetailScreen() {
             <View style={styles.tableHeader}>
                 <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
                 <Text variant="caption" style={[styles.col, styles.colWeight]}>WEIGHT</Text>
-                <Text variant="caption" style={[styles.col, styles.colRate]}>RATE</Text>
-                <Text variant="caption" style={[styles.col, styles.colYourRate]}>AT YOUR RATE</Text>
             </View>
-            {MOCK_ORDER.items.map((item, idx) => (
+            {activeOrder.items.map((item, idx) => (
                 <View
                     key={item.material}
-                    style={[styles.tableRow, idx === MOCK_ORDER.items.length - 1 && { borderBottomWidth: 0 }]}
+                    style={[styles.tableRow, idx === activeOrder.items.length - 1 && { borderBottomWidth: 0 }]}
                 >
                     <Text variant="label" color={colors.navy} style={[styles.col, styles.colMaterial]}>
                         {item.material}
                     </Text>
                     <Numeric size={14} style={[styles.col, styles.colWeight, { color: colors.teal }]}>
-                        {item.weight} kg
-                    </Numeric>
-                    <Numeric size={14} color={colors.muted} style={[styles.col, styles.colRate]}>
-                        ₹{item.rate}
-                    </Numeric>
-                    <Numeric size={14} color={colors.amber} style={[styles.col, styles.colYourRate]}>
-                        ₹{item.yourRate}
+                        {item.weight.toFixed(1)} kg
                     </Numeric>
                 </View>
             ))}
-            <View style={styles.totalRow}>
-                <Text variant="label" color={colors.navy} style={{ fontFamily: 'DMSans-Bold' }}>Total Estimated</Text>
-                <Numeric size={24} color={colors.navy}>₹{MOCK_ORDER.totalEst}</Numeric>
-            </View>
         </View>
     );
 
@@ -159,16 +166,16 @@ export default function ActiveOrderDetailScreen() {
                     <View style={styles.localityHeader}>
                         <MapPin size={18} color={colors.teal} weight="fill" />
                         <Text variant="subheading" color={colors.navy} style={styles.localityText}>
-                            {MOCK_ORDER.locality}
+                            {activeOrder.locality}
                         </Text>
                     </View>
                     <Text variant="caption" color={colors.slate} style={styles.addressText}>
-                        {MOCK_ORDER.address}
+                        {activeOrder.address}
                     </Text>
                     <View style={styles.windowInfo}>
                         <Clock size={14} color={colors.muted} />
                         <Text variant="caption" color={colors.muted} style={{ marginLeft: 4 }}>
-                            {MOCK_ORDER.window}
+                            {activeOrder.window}
                         </Text>
                     </View>
                 </View>
@@ -188,7 +195,7 @@ export default function ActiveOrderDetailScreen() {
                             <MapPin size={36} color={colors.teal} weight="fill" />
                         </View>
                         <Text variant="caption" color={colors.slate} style={styles.mapCaption}>
-                            {MOCK_ORDER.locality}
+                            {activeOrder.locality}
                         </Text>
                     </View>
                     <View style={styles.navigateBanner}>
@@ -242,9 +249,9 @@ export default function ActiveOrderDetailScreen() {
                 />
                 <PrimaryButton
                     label={
-                        MOCK_ORDER.status === 'weighing_in_progress'
+                        activeOrder.status === 'weighing_in_progress'
                             ? 'Continue OTP'
-                            : MOCK_ORDER.status === 'arrived'
+                            : activeOrder.status === 'arrived'
                                 ? 'Start Weighing'
                                 : 'Navigate'
                     }
@@ -325,20 +332,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     col: { flex: 1 },
-    colMaterial: { flex: 2 },
-    colWeight: { flex: 1.5, textAlign: 'center' },
-    colRate: { flex: 1, textAlign: 'center' },
-    colYourRate: { flex: 2, textAlign: 'right' },
-    totalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.md,
-        backgroundColor: '#FAFAFA',
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-    },
+    colMaterial: { flex: 3 },
+    colWeight: { flex: 2, textAlign: 'right' },
 
     locationCard: { padding: spacing.md, gap: spacing.md },
     locationContent: {

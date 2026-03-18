@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Globe, Phone, ChatCenteredText, MapTrifold, CaretLeft, MapPin } from 'phosphor-react-native';
+import { Globe, Phone, ChatCenteredText, MapPin } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
@@ -58,7 +58,7 @@ export default function NavigateScreen() {
 
     const isEnRoute = order?.status === 'en_route';
     const displaySeller = order?.sellerName ?? 'Seller';
-    const displayPhone = order?.sellerPhone ?? 'Phone unavailable';
+    const displayPhone = order?.sellerPhone ?? null;
     const displayAddress = order?.pickupAddress ?? 'Address unavailable';
     const displayCoords = order?.pickupLat != null && order?.pickupLng != null
         ? `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`
@@ -104,11 +104,19 @@ export default function NavigateScreen() {
                             <Text variant="body" style={styles.addressText}>
                                 {displayAddress}
                             </Text>
-                            <Text variant="caption" color={colors.muted} style={{ marginTop: 4 }}>
-                                {displayPhone}
-                            </Text>
                         </View>
-                        <TouchableOpacity style={styles.callButton}>
+                        <TouchableOpacity
+                            style={[styles.callButton, !displayPhone && styles.callButtonDisabled]}
+                            disabled={!displayPhone}
+                            onPress={async () => {
+                                if (!displayPhone) return;
+                                const telUrl = `tel:${displayPhone}`;
+                                const canOpen = await Linking.canOpenURL(telUrl);
+                                if (canOpen) {
+                                    await Linking.openURL(telUrl);
+                                }
+                            }}
+                        >
                             <Phone size={24} color={colors.teal} weight="fill" />
                         </TouchableOpacity>
                     </View>
@@ -215,6 +223,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: spacing.xs,
+    },
+    callButtonDisabled: {
+        opacity: 0.5,
     },
     bottomBar: {
         position: 'absolute',

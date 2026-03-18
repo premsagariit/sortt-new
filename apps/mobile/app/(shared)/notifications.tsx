@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Pressable, Animated, PanResponder, Dimensions, RefreshControl } from 'react-native';
 import { Bell, Trash } from 'phosphor-react-native';
 import { formatDistanceToNow } from 'date-fns';
+import { useRouter } from 'expo-router';
 
 import { colors, spacing } from '../../constants/tokens';
 import { safeBack } from '../../utils/navigation';
@@ -9,6 +10,7 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useNotificationStore, NotificationItem } from '../../store/notificationStore';
+import { useAuthStore } from '../../store/authStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = -80;
@@ -16,10 +18,10 @@ const SWIPE_THRESHOLD = -80;
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom SwipeableRow using PanResponder
 // ─────────────────────────────────────────────────────────────────────────────
-function SwipeableRow({ item, onDelete, onMarkRead, children }: {
+function SwipeableRow({ item, onDelete, onPress, children }: {
     item: NotificationItem,
     onDelete: (id: string) => void,
-    onMarkRead: (id: string) => void,
+    onPress: (item: NotificationItem) => void,
     children: React.ReactNode
 }) {
     const scrollX = useRef(new Animated.Value(0)).current;
@@ -84,7 +86,7 @@ function SwipeableRow({ item, onDelete, onMarkRead, children }: {
             >
                 <Pressable
                     style={styles.row}
-                    onPress={() => onMarkRead(item.id)}
+                    onPress={() => onPress(item)}
                 >
                     {children}
                 </Pressable>
@@ -94,6 +96,8 @@ function SwipeableRow({ item, onDelete, onMarkRead, children }: {
 }
 
 export default function NotificationsScreen() {
+    const router = useRouter();
+    const userType = useAuthStore(s => s.userType);
     const { 
         notifications, 
         loading, 
@@ -107,11 +111,31 @@ export default function NotificationsScreen() {
         fetchNotifications();
     }, [fetchNotifications]);
 
+    const handleNotificationPress = useCallback(async (item: NotificationItem) => {
+        await markAsRead(item.id);
+
+        const orderId = typeof item.data?.order_id === 'string' && item.data.order_id.trim().length > 0
+            ? item.data.order_id
+            : null;
+
+        if (item.type !== 'order' || !orderId) return;
+
+        if (userType === 'aggregator') {
+            router.push({
+                pathname: '/(aggregator)/order/[id]',
+                params: { id: orderId }
+            } as any);
+            return;
+        }
+
+        router.push(`/(seller)/order/${orderId}` as any);
+    }, [markAsRead, router, userType]);
+
     const renderItem = ({ item }: { item: NotificationItem }) => (
         <SwipeableRow
             item={item}
             onDelete={deleteNotification}
-            onMarkRead={markAsRead}
+            onPress={handleNotificationPress}
         >
             <View style={styles.unreadIndicatorContainer}>
                 {!item.is_read && <View style={styles.unreadDot} />}
