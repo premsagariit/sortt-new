@@ -7,6 +7,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: sortt-backend-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,10 +63,48 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_1B224F6A492B4A5EBF38EFC55F89FEC6 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DBEA10DC933642F29D45F2302830F36F }}
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: Warmup delay before deployment
+        run: sleep 20
+
+      - name: Deploy to Azure Web App (attempt 1)
+        id: deploy-attempt-1
+        continue-on-error: true
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'sortt-backend'
           slot-name: 'Production'
           package: .
+
+      - name: Backoff before retry 2
+        if: steps.deploy-attempt-1.outcome == 'failure'
+        run: sleep 45
+
+      - name: Deploy to Azure Web App (attempt 2)
+        id: deploy-attempt-2
+        if: steps.deploy-attempt-1.outcome == 'failure'
+        continue-on-error: true
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'sortt-backend'
+          slot-name: 'Production'
+          package: .
+
+      - name: Backoff before retry 3
+        if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+        run: sleep 90
+
+      - name: Deploy to Azure Web App (attempt 3)
+        id: deploy-attempt-3
+        if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+        continue-on-error: true
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'sortt-backend'
+          slot-name: 'Production'
+          package: .
+
+      - name: Fail if all deploy attempts failed
+        if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure' && steps.deploy-attempt-3.outcome == 'failure'
+        run: |
+          echo "Azure deployment failed after 3 attempts."
+          exit 1
