@@ -134,7 +134,7 @@ export default function AggregatorOtpScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <NavBar
         title="Payment Confirmation"
-        onBack={() => router.back()}
+        onBack={() => router.replace('/(aggregator)/orders')}
       />
 
       <ScrollView

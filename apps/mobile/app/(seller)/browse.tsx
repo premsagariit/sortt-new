@@ -241,6 +241,7 @@ export default function SellerBrowseScreen() {
           return agg.name.toLowerCase().includes(q) || agg.materials.some(m => m.toLowerCase().includes(q));
         })}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
         renderItem={renderAggregator}
@@ -264,6 +265,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: spacing.xxl,
+    flexGrow: 1,
   },
   mapButton: {
     backgroundColor: colors.navy,

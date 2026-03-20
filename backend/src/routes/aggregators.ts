@@ -185,6 +185,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
     let intervalExpr = "INTERVAL '30 days'";
     if (period === 'today') intervalExpr = "INTERVAL '1 day'";
     else if (period === 'week') intervalExpr = "INTERVAL '7 days'";
+    const isAllTime = period === 'all';
 
     try {
         // ⚠️ CRITICAL: Parallelize 3 queries instead of sequential awaits
@@ -204,7 +205,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
                  WHERE o.aggregator_id = $1
                    AND o.status = 'completed'
                    AND o.deleted_at IS NULL
-                   AND o.created_at >= NOW() - ${intervalExpr}`,
+                   ${isAllTime ? '' : `AND o.created_at >= NOW() - ${intervalExpr}`}`,
                 [userId]
             ),
             query(
@@ -216,7 +217,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
                  WHERE o.aggregator_id = $1
                    AND o.status = 'completed'
                    AND o.deleted_at IS NULL
-                   AND o.created_at >= NOW() - ${intervalExpr}
+                   ${isAllTime ? '' : `AND o.created_at >= NOW() - ${intervalExpr}`}
                  GROUP BY oi.material_code
                  ORDER BY amount DESC`,
                 [userId]
@@ -229,7 +230,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
                  WHERE o.aggregator_id = $1
                    AND o.status = 'completed'
                    AND o.deleted_at IS NULL
-                   AND o.created_at >= NOW() - ${intervalExpr}
+                   ${isAllTime ? '' : `AND o.created_at >= NOW() - ${intervalExpr}`}
                  GROUP BY DATE_TRUNC('day', o.created_at)
                  ORDER BY DATE_TRUNC('day', o.created_at) ASC`,
                 [userId]

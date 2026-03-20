@@ -192,7 +192,7 @@ export default function Step4Screen() {
       <View style={styles.content}>
         <WizardStepIndicator currentStep={4} />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Earnings Card */}
           <View style={styles.earningsCard}>
             <View style={styles.earningsHeaderRow}>

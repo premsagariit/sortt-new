@@ -11,6 +11,7 @@ import { useOrderStore } from '../../store/orderStore';
 import { getOrderDisplayAmount } from '../../store/orderStore';
 import { safeBack } from '../../utils/navigation';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
+import { useOrderChannel } from '../../hooks/useOrderChannel';
 
 /**
  * app/(aggregator)/active-order-detail.tsx
@@ -31,6 +32,11 @@ export default function ActiveOrderDetailScreen() {
     const [showCancelModal, setShowCancelModal] = React.useState(false);
 
     const storeOrder = orders.find(o => o.orderId === id);
+    useOrderChannel(
+        storeOrder?.orderId ?? id ?? '',
+        storeOrder?.orderChannelToken ?? null,
+        storeOrder?.chatChannelToken ?? null
+    );
 
     React.useEffect(() => {
         if (id) {

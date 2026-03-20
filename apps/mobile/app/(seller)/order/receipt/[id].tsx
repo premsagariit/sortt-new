@@ -26,6 +26,8 @@ import { colors, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
 import { EmptyState } from '../../../../components/ui/EmptyState';
 import { useOrderStore } from '../../../../store/orderStore';
+import { useAuthStore } from '../../../../store/authStore';
+import { useChatStore } from '../../../../store/chatStore';
 import { ContactCard } from '../../../../components/order/ContactCard';
 import { OrderTimeline } from '../../../../components/order/OrderTimeline';
 import { PrimaryButton } from '../../../../components/ui/Button';
@@ -57,6 +59,11 @@ export default function SellerOrderReceiptScreen() {
   const orders = useOrderStore((s: any) => s.orders);
   const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
   const isLoading = useOrderStore((s: any) => s.isLoading);
+  const receiptUserId = useAuthStore((s: any) => s.userId);
+  const chatUnread = useChatStore((state) => {
+    if (!receiptUserId || !id) return 0;
+    return (state.messages[id] ?? []).filter(m => m.senderId !== receiptUserId && !m.read).length;
+  });
 
   const [rates, setRates] = React.useState<any[]>([]);
   const [ratingScore, setRatingScore] = React.useState<number>(0);
@@ -306,6 +313,7 @@ export default function SellerOrderReceiptScreen() {
               role="Aggregator"
               userType="aggregator"
               onChat={order.aggregatorId ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
+              unreadCount={chatUnread}
             />
           </View>
 

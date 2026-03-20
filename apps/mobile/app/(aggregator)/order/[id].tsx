@@ -9,6 +9,8 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { Globe, Lock, MapPin, Clock, Hash, NavigationArrow } from 'phosphor-react-native';
 import { getOrderDisplayAmount, useOrderStore } from '../../../store/orderStore';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { useAuthStore } from '../../../store/authStore';
+import { useChatStore } from '../../../store/chatStore';
 import { ContactCard } from '../../../components/order/ContactCard';
 import { safeBack } from '../../../utils/navigation';
 import { Alert } from 'react-native';
@@ -25,6 +27,12 @@ export default function AggregatorOrderByIdScreen() {
   const materialsCfg = useAggregatorStore((s) => s.materials);
   const acceptOrderApi = useAggregatorStore((s) => s.acceptOrderApi);
   const dismissNewOrder = useAggregatorStore((s) => s.dismissNewOrder);
+
+  const aggUserId = useAuthStore((s: any) => s.userId);
+  const chatUnread = useChatStore((state) => {
+    if (!aggUserId || !id) return 0;
+    return (state.messages[id] ?? []).filter(m => m.senderId !== aggUserId && !m.read).length;
+  });
 
   const [rates, setRates] = useState<any[]>([]);
   const [isBusy, setIsBusy] = useState(false);
@@ -188,6 +196,7 @@ export default function AggregatorOrderByIdScreen() {
                 role="Seller"
                 userType="seller"
                 onChat={storeOrder.sellerId ? () => router.push(`/(shared)/chat/${storeOrder.orderId}` as any) : undefined}
+                unreadCount={chatUnread}
               />
             </View>
           )}

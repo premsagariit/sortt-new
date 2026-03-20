@@ -9,6 +9,14 @@ export interface PushTokenResponse {
 }
 
 export async function registerForPushNotificationsAsync(): Promise<PushTokenResponse | null> {
+  // Remote push (getExpoPushTokenAsync) was removed from Expo Go in SDK 53.
+  // Calling it in Expo Go causes expo-notifications to log an ERROR before throwing.
+  // Skip entirely in Expo Go — use a development build for push notification testing.
+  if (Constants.appOwnership === 'expo') {
+    console.log('[Push] Skipping push registration — not supported in Expo Go SDK 53+. Use a dev build.');
+    return null;
+  }
+
   // expo-notifications remote push support was removed from Expo Go in SDK 53.
   // Expo push tokens still work in Expo Go for local notifications,
   // but getDevicePushTokenAsync (FCM/APNs) requires an EAS dev/prod build.

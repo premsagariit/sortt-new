@@ -5,7 +5,7 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — UI Polish & Bug Fixes Complete (2026-03-19)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 13 Realtime + Push Complete (2026-03-20)
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 
@@ -45,19 +45,14 @@ Days 4–5  → Database + PostgreSQL schema         [GATE PASSED 2026-03-08]
 Day 6     → Express backend foundation           [GATE PASSED 2026-03-09]
 Day 7     → Auth routes + OTP + Scheduler        [GATE PASSED 2026-03-09]
 Day 8     → Mobile auth wiring + Clerk           [GATE PASSED 2026-03-10]
-Days 9–10 → Core order routes + API wiring       [BLOCKED — awaiting assignment]
-
-🔄 IN PROGRESS:
-UI Polish Phases 1–6 + Bug Fixes         [COMPLETE — 2026-03-19]
-  - 6 coordinated implementation phases across seller/aggregator screens
-  - 5 post-implementation bug fixes (input overlap, unwanted page, ₹0 values, rate ₹0, icon styling)
-  - All validation gates passed
+Day 9     → Core order routes                    [GATE PASSED 2026-03-13]
+Days 10–12 → Supporting routes + mobile API wiring + atomic ops [GATE PASSED]
+Day 13    → Ably realtime + push notifications   [GATE PASSED 2026-03-20]
+UI Polish + refinements                          [COMPLETE — 2026-03-20]
 
 ⏳ NEXT:
-Days 9–10 → Core Order Routes API wiring (order creation, status updates, media, transactions)
-Days 11–12 → Atomic ops + First-accept-wins + OTP completion
-Days 13–15 → Realtime + AI + Invoice generation + Price scraper
-Days 16–17 → Web Portal + Admin + Security audit
+Days 14–15 → Provider abstractions + AI + invoice + scraper
+Days 16–17 → Web portal + admin + security audit
 ```
 
 **Rules that follow from this:**
@@ -225,11 +220,11 @@ Switch providers via environment variables: `MAP_PROVIDER`, `REALTIME_PROVIDER`,
 - Never accept `radius` parameter from client — always derive from `aggregator_profiles.operating_radius_km` or server-side city bounding box. Hard cap: `MAX_SEARCH_RADIUS_KM = 50`.
 
 ### 3.3 Realtime — WebSocket Connection Culling
-- Subscribe to channels **only** on `useFocusEffect` (screen focus).
-- Always unsubscribe on screen unmount: `return () => { supabase.removeChannel(channel); }`.
-- On app background: `AppState.addEventListener → supabase.removeAllChannels()`.
+- Subscribe to channels on focused screens only (`useFocusEffect`/focus-gated `useEffect`).
+- Always unsubscribe listeners on screen blur/unmount.
+- On app background: `AppState.addEventListener` must call `disconnectRealtime()` to close Ably client.
 - Monitor daily: if approaching 150 connections (75% of 200 limit), audit immediately.
-- Chat channel naming: `order:{order_id}:chat:{hmac_sha256(order_id+user_id+OTP_HMAC_SECRET)[:8]}` — prevents channel existence metadata leakage (V32).
+- Mobile must consume backend-provided channel tokens (`orderChannelToken`, `chatChannelToken`) and never reconstruct private channel names client-side (V32).
 
 ### 3.4 Race Condition Prevention (First-Accept-Wins)
 - `accept-order` Edge Function MUST use `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction.
@@ -390,6 +385,10 @@ MAP_PROVIDER                  # "google" | "ola" — switches IMapProvider impl
 
 # Push
 EXPO_ACCESS_TOKEN
+
+# Ably
+ABLY_API_KEY                  # Backend-only. NEVER in mobile env/bundle.
+EXPO_PUBLIC_ABLY_AUTH_URL     # Mobile token endpoint: ${EXPO_PUBLIC_API_URL}/api/realtime/token
 
 # Provider Switches
 REALTIME_PROVIDER             # "supabase" | "ably" | "soketi"
@@ -757,6 +756,16 @@ Do not delete old entries. Append only.
 - **[2026-03-09, updated 2026-03-10] HMAC-SHA256 for OTP Hashing:** Raw OTPs must never be persisted. Only the HMAC-SHA256 hash (using `OTP_HMAC_SECRET`) should be stored in Redis for verification. The `otp_log` table should store only the `phone_hash` and `expires_at`, with `otp_hmac` made nullable and kept empty to prevent any leakage of verification material in the audit log. Verification is purely Redis-driven via TTL. Affects: `backend/src/routes/auth.ts`.
 
 - **[2026-03-10] Auth Router Mounting Order:** The `authRouter` (containing `/request-otp` and `/verify-otp`) must be mounted in `index.ts` BEFORE the global Clerk `authMiddleware`. This ensures that public OTP routes are accessible without a JWT. Additionally, these routes should be explicitly listed in the middleware exemption list in `middleware/auth.ts` as a secondary guard. Affects: `backend/src/index.ts`, `backend/src/middleware/auth.ts`.
+
+- **[2026-03-20] Day 13 channel contract fix (V32):** Mobile must subscribe using backend-provided full channel tokens (`orderChannelToken`, `chatChannelToken`) and must never build private channel names from raw `orderId`. This eliminates channel-pattern drift and keeps backend `channelHelper.ts` as source of truth. Affects: `apps/mobile/hooks/useOrderChannel.ts`, `backend/src/utils/channelHelper.ts`, `backend/src/utils/orderDto.ts`.
+
+- **[2026-03-20] Ably Token Auth hard rule:** `ABLY_API_KEY` remains backend-only; mobile authenticates only via `GET /api/realtime/token` using Clerk JWT. `EXPO_PUBLIC_ABLY_AUTH_URL` is allowed in mobile env; `EXPO_PUBLIC_ABLY_KEY` must not be used. Affects: `backend/src/routes/realtime.ts`, `backend/src/lib/realtime.ts`, `apps/mobile/lib/realtime.ts`, `apps/mobile/.env.example`.
+
+- **[2026-03-20] Realtime cleanup pattern on app background:** Closing the singleton Ably client via `disconnectRealtime()` in root AppState handler is the stable cleanup pattern; listener-only cleanup on individual screens is not sufficient for background lifecycle culling. Affects: `apps/mobile/app/_layout.tsx`, `apps/mobile/lib/realtime.ts`.
+
+- **[2026-03-20] Forward-only execution workflow refinement:** Aggregator execution screens must redirect stale stages to orders (or current expected stage) and use `router.replace` for back actions to prevent reopening old stage pages after status progression. Affects: `apps/mobile/app/(aggregator)/execution/navigate.tsx`, `apps/mobile/app/(aggregator)/execution/weighing/[id].tsx`, `apps/mobile/app/(aggregator)/execution/otp/[id].tsx`.
+
+- **[2026-03-20] Chat unread/read-state UX refinement:** Unread badge counts should be derived from `chatStore.messages[orderId]`, and read acknowledgements should sync via `PATCH /api/messages/read` + `messages_read` realtime event so delivery ticks update without manual refresh. Affects: `apps/mobile/store/chatStore.ts`, `backend/src/routes/messages.ts`, `apps/mobile/components/ui/MessageBubble.tsx`, `apps/mobile/components/order/ContactCard.tsx`.
 
 - **[2026-03-10] @sortt/storage Stub for Day 7:** While the project architecture requires `@sortt/storage` for file operations, Day 7 uses a local `IStorageProvider` implementation (Uploadthing wrapper) directly to unblock KYC testing. The shared package `@sortt/storage` remains a stub and will be fully implemented in Day 14. Affects: `backend/src/routes/aggregators.ts`.
 

@@ -11,9 +11,10 @@ interface ContactCardProps {
   role: string;
   userType: 'seller' | 'aggregator';
   onChat?: () => void;
+  unreadCount?: number;
 }
 
-export function ContactCard({ name, phone, role, userType, onChat }: ContactCardProps) {
+export function ContactCard({ name, phone, role, userType, onChat, unreadCount }: ContactCardProps) {
   return (
     <View style={styles.container}>
       <Avatar name={name} userType={userType} size="lg" />
@@ -23,9 +24,18 @@ export function ContactCard({ name, phone, role, userType, onChat }: ContactCard
       </View>
       <View style={styles.actions}>
         {onChat && (
-          <Pressable style={styles.iconBtn} onPress={onChat}>
-            <ChatCircleDots size={24} color={colors.navy} weight="regular" />
-          </Pressable>
+          <View style={styles.chatBtnWrapper}>
+            <Pressable style={styles.iconBtn} onPress={onChat}>
+              <ChatCircleDots size={24} color={colors.navy} weight="regular" />
+            </Pressable>
+            {!!unreadCount && unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text variant="caption" color={colors.surface} style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : String(unreadCount)}
+                </Text>
+              </View>
+            )}
+          </View>
         )}
         {phone && (
           <Pressable 
@@ -67,5 +77,27 @@ const styles = StyleSheet.create({
   },
   callBtn: {
     backgroundColor: colors.teal,
+  },
+  chatBtnWrapper: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.red,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
+  badgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: 'DMSans-Bold',
   },
 });

@@ -55,6 +55,7 @@ export default function MarketRatesScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         style={{ backgroundColor: colors.bg }}
+        showsVerticalScrollIndicator={false}
       >
         {/* Locality Average Hint */}
         <View style={styles.hintCard}>

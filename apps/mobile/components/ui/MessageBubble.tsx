@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { Check, Checks, Clock } from 'phosphor-react-native';
 import { Text, Numeric } from './Typography';
 import { colors, spacing } from '../../constants/tokens';
 
@@ -9,9 +10,21 @@ export interface MessageBubbleProps {
     isOwn: boolean;
     senderName?: string;
     isSystemMessage?: boolean;
+    status?: 'sending' | 'sent' | 'read';
 }
 
-export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage }: MessageBubbleProps) {
+function DeliveryTick({ status }: { status: 'sending' | 'sent' | 'read' }) {
+    if (status === 'sending') {
+        return <Clock size={12} color="rgba(255,255,255,0.5)" weight="regular" />;
+    }
+    if (status === 'read') {
+        return <Checks size={13} color={colors.teal} weight="bold" />;
+    }
+    // 'sent'
+    return <Check size={13} color="rgba(255,255,255,0.6)" weight="bold" />;
+}
+
+export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage, status }: MessageBubbleProps) {
     if (isSystemMessage) {
         return (
             <View style={styles.systemContainer}>
@@ -35,9 +48,16 @@ export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage }
                 <Text variant="body" color={isOwn ? colors.surface : colors.navy}>
                     {body}
                 </Text>
-                <Numeric size={10} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.muted} style={styles.time}>
-                    {time}
-                </Numeric>
+                <View style={styles.metaRow}>
+                    <Numeric size={10} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.muted}>
+                        {time}
+                    </Numeric>
+                    {isOwn && status && (
+                        <View style={styles.tickContainer}>
+                            <DeliveryTick status={status} />
+                        </View>
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -86,8 +106,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
-    time: {
+    metaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         alignSelf: 'flex-end',
+        gap: 3,
         marginTop: 2,
+    },
+    tickContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

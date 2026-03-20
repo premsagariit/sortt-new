@@ -4,7 +4,9 @@ import { CaretDown, CaretUp, CheckCircle, Clock, MapPin, Package, CurrencyInr } 
 import { Text, Numeric } from '../ui/Typography';
 import { colors, spacing, radius } from '../../constants/tokens';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+const isNewArchitectureEnabled = !!(global as any).nativeFabricUIManager;
+
+if (Platform.OS === 'android' && !isNewArchitectureEnabled && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 

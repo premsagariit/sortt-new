@@ -37,13 +37,14 @@ import {
 } from '@expo-google-fonts/dm-mono';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
-import { api, setApiTokenGetter } from '../lib/api';
+import { api, setApiTokenGetter, setApiUnauthorizedHandler } from '../lib/api';
 import { useAuthStore, type AuthState, setGlobalClerkSignOut } from '../store/authStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
 import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';
 import { NotificationWatcher } from '../components/ui/NotificationWatcher';
-import { getMobileRealtimeProvider } from '../lib/realtime';
+import { PushTokenRegistrar } from '../components/ui/PushTokenRegistrar';
+import { disconnectRealtime } from '../lib/realtime';
 
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
@@ -52,9 +53,14 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Set token getter IMMEDIATELY on first render with auth context available
     setApiTokenGetter(getToken);
+    setApiUnauthorizedHandler(() => useAuthStore.getState().signOut());
     setGlobalClerkSignOut(signOut);
     // Mark as ready so child routes can render
     setIsTokenReady(true);
+
+    return () => {
+      setApiUnauthorizedHandler(null);
+    };
   }, [getToken, signOut]);
 
   // ⚠️ CRITICAL: Do not render children until token is configured
@@ -192,9 +198,8 @@ export default function RootLayout() {
     const subscription = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'background' || state === 'inactive') {
         try {
-          const provider = getMobileRealtimeProvider();
-          provider.removeAllChannels();
-          console.log('[AppState] Removed all Ably channels on app background');
+          disconnectRealtime();
+          console.log('[AppState] Disconnected Ably client on app background');
         } catch (err) {
           console.warn('[AppState] Failed to cleanup realtime channels:', err);
         }
@@ -222,6 +227,7 @@ export default function RootLayout() {
     <ClerkProvider publishableKey={clerkPublishableKey!} tokenCache={tokenCache}>
       <ApiClientConfigurator>
         <NotificationWatcher />
+        <PushTokenRegistrar />
         <OfflineAwareNavigator
           isOnline={isOnline}
           isRetrying={isRetrying}

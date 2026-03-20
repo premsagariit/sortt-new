@@ -20,6 +20,7 @@ import { House, MapPin, Calendar, Bell, ArrowRight, Wallet, ArrowUp, Tray } from
 import { APP_NAME } from '../../constants/app';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
+import { useListingStore } from '../../store/listingStore';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../lib/api';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -111,7 +112,30 @@ export default function SellerHomeScreen() {
     }, [fetchOrders, fetchRates])
   );
 
-  const calculateEstimate = useCallback((order: any) => getOrderDisplayAmount(order), []);
+  const calculateEstimate = useCallback((order: any) => {
+    if (['weighing_in_progress', 'completed'].includes(order?.status)) {
+      if (typeof order?.confirmedTotal === 'number' && Number.isFinite(order.confirmedTotal) && order.confirmedTotal > 0) return order.confirmedTotal;
+      if (typeof order?.confirmed_amount === 'number' && Number.isFinite(order.confirmed_amount) && order.confirmed_amount > 0) return order.confirmed_amount;
+      if (typeof order?.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount) && order.confirmedAmount > 0) return order.confirmedAmount;
+      if (Array.isArray(order?.orderItems) && order.orderItems.length > 0) {
+        const fromItems = order.orderItems.reduce((sum: number, item: any) => {
+          const weight = Number(item.confirmedWeightKg ?? item.estimatedWeightKg ?? 0);
+          const rate = Number(item.ratePerKg ?? 0);
+          return sum + weight * rate;
+        }, 0);
+        if (fromItems > 0) return fromItems;
+      }
+    }
+
+    if (typeof order?.estimatedTotal === 'number' && Number.isFinite(order.estimatedTotal) && order.estimatedTotal > 0) return order.estimatedTotal;
+    if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total) && order.estimated_total > 0) return order.estimated_total;
+
+    const fromDisplay = getOrderDisplayAmount(order);
+    if (fromDisplay > 0) return fromDisplay;
+
+    const weights: Record<string, number> = order?.estimatedWeights ?? {};
+    return rates.reduce((sum, r) => sum + (Number(weights[r.material_code] ?? 0) * Number(r.rate_per_kg ?? 0)), 0);
+  }, [rates]);
 
 
   const titleOpacity = scrollY.interpolate({
@@ -158,7 +182,8 @@ export default function SellerHomeScreen() {
   }, [fetchOrders, fetchRates]);
 
 
-  const handleCreateListing = () => router.push('/(seller)/listing/step1');
+  const resetListing = useListingStore((s) => s.resetListing);
+  const handleCreateListing = () => { resetListing(); router.push('/(seller)/listing/step1'); };
   const handleNotifications = () => router.push('/(shared)/notifications' as any);
   const handleMarketRates = () => router.push('/(seller)/prices');
   const handleMyOrders = () => router.push('/(seller)/orders');
@@ -313,6 +338,7 @@ export default function SellerHomeScreen() {
       <Animated.FlatList
         data={recentOrders}
         keyExtractor={(item) => item.orderId}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
         onScroll={Animated.event(
@@ -512,6 +538,7 @@ const styles = StyleSheet.create({
   listContent: {
     backgroundColor: colors.bg,
     paddingBottom: spacing.xxl,
+    flexGrow: 1,
   },
   listContentPad: {
     padding: spacing.md,

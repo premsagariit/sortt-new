@@ -32,6 +32,7 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { NotificationBell } from '../../components/ui/NotificationBell';
 import type { MaterialCode } from '../../components/ui/MaterialChip';
 import { api } from '../../lib/api';
+import { useAggregatorFeedChannel } from '../../hooks/useAggregatorFeedChannel';
 
 // ── Note: Feed is now sourced from aggregatorStore.newOrders ────────
 
@@ -75,12 +76,14 @@ export default function AggregatorHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { isOnline, updateOnlineStatus, earnings, profile, primaryArea, fetchFeed, fetchAggregatorProfile, fetchAggregatorEarnings, error } = useAggregatorStore();
+  const { isOnline, updateOnlineStatus, earnings, profile, primaryArea, fetchFeed, fetchAggregatorProfile, fetchAggregatorEarnings, fetchAggregatorRates, error } = useAggregatorStore();
   const lastFeedSyncAt = useAggregatorStore((s) => s.lastFeedSyncAt);
   const lastFeedError = useAggregatorStore((s) => s.lastFeedError);
   const aggregatorName = useAuthStore((s: any) => s.name);
   const fetchMe = useAuthStore((s: any) => s.fetchMe);
   const userType = useAuthStore((s: any) => s.userType);
+
+  useAggregatorFeedChannel();
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
   const displayName = aggregatorName || profile?.name || MOCK_AGG_NAME;
@@ -89,8 +92,8 @@ export default function AggregatorHomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void fetchMe(); // Always — breaks the circular dependency where userType starts null
       if (userType === 'aggregator') {
-        void fetchMe();
         void fetchAggregatorProfile();
       }
     }, [userType, fetchMe, fetchAggregatorProfile])
@@ -140,12 +143,13 @@ export default function AggregatorHomeScreen() {
     // Only show loading state if we have no data yet (silent skeleton pattern)
     const shouldShowLoader = !silent && screenState !== 'populated';
     if (shouldShowLoader) setScreenState('loading');
-    
+
     try {
       const [, , ratesRes] = await Promise.all([
         fetchFeed(silent),
-        fetchAggregatorEarnings('today'),
+        fetchAggregatorEarnings('all'),
         api.get('/api/rates').catch(() => null),
+        fetchAggregatorRates(),
       ]);
       if (ratesRes) {
         const map: Record<string, number> = {};
@@ -158,7 +162,7 @@ export default function AggregatorHomeScreen() {
     } catch {
       if (screenState !== 'populated') setScreenState('error');
     }
-  }, [fetchFeed, screenState]);
+  }, [fetchFeed, fetchAggregatorRates, screenState]);
 
   useEffect(() => {
     // Only run heartbeat and polling if aggregator
@@ -344,6 +348,7 @@ export default function AggregatorHomeScreen() {
   // ── Screen State ──────────────────────────────────────────────────
   // Use newOrders from store so Dismiss causes immediate re-render
   const activeFeed = useAggregatorStore((s) => s.newOrders);
+  const allTimeEarnings = useAggregatorStore((s) => s.earningsByPeriod.all);
 
   const renderHeader = () => (
     <View>
@@ -377,11 +382,11 @@ export default function AggregatorHomeScreen() {
           {/* Stats Row */}
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹{Number(earnings.todayAmount ?? 0).toLocaleString('en-IN')}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Today</Text>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹{Number(allTimeEarnings?.total_earned ?? 0).toLocaleString('en-IN')}</Numeric>
+              <Text variant="caption" style={styles.heroStatLabel}>Earnings</Text>
             </View>
             <View style={styles.heroStatCard}>
-              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{Number(earnings.todayPickups ?? 0)}</Numeric>
+              <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{Number(allTimeEarnings?.orders_completed ?? 0)}</Numeric>
               <Text variant="caption" style={styles.heroStatLabel}>Pickups</Text>
             </View>
             <View style={styles.heroStatCard}>

@@ -2,10 +2,32 @@ import express from 'express';
 import { verifyToken } from '@clerk/backend';
 import { getChannelHmacPrefix } from '../utils/channelHelper';
 import { ablyRest } from '../providers/ablyProvider';
+import { createTokenRequest } from '../lib/realtime';
 
 const router = express.Router();
 
-// GET /api/realtime/ably-token
+// GET /api/realtime/token (NEW — standard endpoint with JWT middleware)
+// Requires Clerk JWT in Authorization header  
+router.get('/token', async (req, res) => {
+  try {
+    const clerkUserId = req.user?.clerk_user_id;
+    if (!clerkUserId) {
+      return res.status(401).json({ error: 'Unable to determine user' });
+    }
+
+    if (!ablyRest) {
+      return res.status(500).json({ error: 'Realtime is not configured on this server' });
+    }
+
+    const tokenRequest = await createTokenRequest(clerkUserId);
+    return res.status(200).json(tokenRequest);
+  } catch (error: any) {
+    console.error('[realtime] Token generation error:', error);
+    return res.status(500).json({ error: 'Failed to generate realtime token' });
+  }
+});
+
+// GET /api/realtime/ably-token (LEGACY)
 // Endpoint used by mobile client to retrieve short-lived Ably tokens
 router.get('/ably-token', async (req, res) => {
   try {

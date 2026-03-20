@@ -15,8 +15,9 @@ import axios from 'axios';
 import { UTApi } from 'uploadthing/server';
 import { createClerkClient } from '@clerk/backend';
 import { createNotification } from '../../lib/notifications';
-import { ablyRest } from '../../providers/ablyProvider';
 import { channelName } from '../../utils/channelHelper';
+import { sendPushToUsers } from '../../utils/pushNotifications';
+import { publishEvent } from '../../lib/realtime';
 
 // Multer for media uploads (5MB, images only)
 const upload = multer({
@@ -161,28 +162,24 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
 
         const tokens = aggRes.rows.map(r => r.expo_token).filter(t => t.startsWith('ExponentPushToken'));
 
-        if (tokens.length > 0) {
-          const messages = tokens.map(to => ({
-            to,
-            sound: 'default',
-            title: 'New pickup nearby',
-            body: 'A new scrap listing is available in your area.',
-          }));
-          const headers: any = {
-            'Accept': 'application/json',
-            'Accept-encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
-          };
-          if (process.env.EXPO_ACCESS_TOKEN) {
-            headers['Authorization'] = `Bearer ${process.env.EXPO_ACCESS_TOKEN}`;
-          }
-          await axios.post('https://exp.host/--/api/v2/push/send', messages, { headers }).catch(e => {
-            console.error('Push delivery error:', e.response?.data || e.message);
-          });
+        // Get user IDs for push notification
+        const userIds = aggRes.rows.map(r => r.user_id);
+
+        // Send push notifications using chunked expo-server-sdk (D2: generic copy, zero PII)
+        if (userIds.length > 0) {
+          await sendPushToUsers(
+            userIds,
+            'New scrap order available',
+            'A new scrap listing is available in your area.',
+            {
+              order_id: order.id,
+              city_code: geo.cityCode,
+              kind: 'new_order_listing'
+            }
+          );
         }
 
         // --- NEW: In-app notification for all matching aggregators ---
-        const userIds = aggRes.rows.map(r => r.user_id);
         const orderDisplayId = typeof order.order_number === 'number' && Number.isFinite(order.order_number)
           ? `#${String(order.order_number).padStart(6, '0')}`
           : `#${String(order.id).slice(0, 8).toUpperCase()}`;
@@ -201,6 +198,23 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
         }
       } catch (pushErr) {
         console.error('Best effort push failed:', pushErr);
+      }
+    });
+
+    // --- NEW: Publish to aggregator feed channel (orders:hyd:new) ---
+    setImmediate(async () => {
+      try {
+        const feedPayload = {
+          orderId: order.id,
+          cityCode: geo.cityCode,
+          locality: geo.locality,
+          materialCodes: material_codes,
+          createdAt: order.created_at || new Date().toISOString(),
+        };
+        await publishEvent('orders:hyd:new', 'new_order', feedPayload);
+      } catch (err) {
+        console.error('[Ably] Feed publish error:', err);
+        Sentry.captureException(err, { tags: { operation: 'feed_ably_publish' } });
       }
     });
 
@@ -821,7 +835,38 @@ router.patch('/:id/status', async (req, res) => {
 
         await client.query('COMMIT');
 
-        // --- NEW: Create in-app notification for the other party ---
+        // --- NEW: Publish Ably event for real-time status update (V37: skip if immutable) ---
+        if (!(IMMUTABLE_STATUSES as readonly string[]).includes(newStatus)) {
+          setImmediate(async () => {
+            try {
+              const fullOrderRes = await query(
+                'SELECT seller_id, aggregator_id FROM orders WHERE id = $1',
+                [id]
+              );
+              if (fullOrderRes.rows[0]) {
+                const order = fullOrderRes.rows[0];
+                const statusPayload = { status: newStatus, updatedAt: new Date().toISOString() };
+
+                // Publish to seller's private order channel
+                if (order.seller_id) {
+                  const sellerChannel = channelName(order.seller_id, 'order', id);
+                  await publishEvent(sellerChannel, 'status_updated', statusPayload);
+                }
+
+                // Publish to aggregator's private order channel
+                if (order.aggregator_id) {
+                  const aggChannel = channelName(order.aggregator_id, 'order', id);
+                  await publishEvent(aggChannel, 'status_updated', statusPayload);
+                }
+              }
+            } catch (err) {
+              console.error('[Ably] Status update publish error:', err);
+              Sentry.captureException(err, { tags: { operation: 'status_update_ably' } });
+            }
+          });
+        }
+
+        // --- NEW: Create in-app notification + push for the other party ---
         setImmediate(async () => {
           try {
             const orderRes = await query('SELECT seller_id, aggregator_id, order_number FROM orders WHERE id = $1', [id]);
@@ -841,6 +886,12 @@ router.patch('/:id/status', async (req, res) => {
               if (newStatus === 'accepted') {
                 title = 'Order Accepted!';
                 body = 'An aggregator is coming for your pickup.';
+              } else if (newStatus === 'en_route') {
+                title = 'Pickup is on the way';
+                body = 'The aggregator is heading to your location.';
+              } else if (newStatus === 'arrived') {
+                title = 'Aggregator has arrived';
+                body = 'Your aggregator is at the pickup location.';
               } else if (newStatus === 'completed') {
                 title = 'Order Completed';
                 body = 'Pickup successful. Check your balance.';
@@ -851,6 +902,14 @@ router.patch('/:id/status', async (req, res) => {
                 order_display_id: orderDisplayId,
                 kind: 'order_status_changed',
               });
+
+              // Push notification for seller on key status changes (D2: zero PII)
+              if (['en_route', 'arrived'].includes(newStatus) && otherPartyId === order.seller_id) {
+                await sendPushToUsers([otherPartyId], title, body, {
+                  order_id: id,
+                  kind: 'order_status_changed',
+                });
+              }
             }
           } catch (err) {
             console.error('Failed to create notification on status change:', err);
@@ -1068,7 +1127,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
   // Publish order status update to Ably (both seller and aggregator channels)
   setImmediate(async () => {
     try {
-      if (ablyRest && sellerId) {
+      if (sellerId) {
         const sellerChannel = channelName(sellerId, 'order', orderId);
         const aggChannel = channelName(aggregatorId, 'order', orderId);
         
@@ -1079,13 +1138,8 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
           timestamp: new Date().toISOString()
         };
         
-        ablyRest.channels.get(sellerChannel).publish('status_updated', statusPayload).catch(e => {
-          console.error(`[Ably] Failed to publish to seller ${sellerId} order channel:`, e);
-        });
-        
-        ablyRest.channels.get(aggChannel).publish('status_updated', statusPayload).catch(e => {
-          console.error(`[Ably] Failed to publish to aggregator ${aggregatorId} order channel:`, e);
-        });
+        await publishEvent(sellerChannel, 'status_updated', statusPayload);
+        await publishEvent(aggChannel, 'status_updated', statusPayload);
       }
     } catch (err) {
       console.error('[Ably] Accept status publish error:', err);
@@ -1148,7 +1202,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     Sentry.captureException(err);
   }
 
-  // Notification (identical pattern to PATCH handler)
+  // Notification + push on acceptance (D2: zero PII)
   setImmediate(async () => {
     try {
       const orderRes = await query('SELECT seller_id, order_number FROM orders WHERE id = $1', [orderId]);
@@ -1162,6 +1216,12 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
         order_display_id: orderDisplayId,
         kind: 'order_accepted',
       });
+      await sendPushToUsers(
+        [order.seller_id],
+        'Order Accepted!',
+        'An aggregator is on the way for your pickup.',
+        { order_id: orderId, kind: 'order_accepted' }
+      );
     } catch (err) {
       console.error('Failed to create notification on accept:', err);
     }
@@ -1372,7 +1432,7 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
         'SELECT seller_id FROM orders WHERE id = $1',
         [orderId]
       );
-      if (orderRes.rows[0] && ablyRest) {
+      if (orderRes.rows[0]) {
         const sellerId = orderRes.rows[0].seller_id;
         const sellerChannel = channelName(sellerId, 'order', orderId);
         const aggChannel = channelName(aggregatorId, 'order', orderId);
@@ -1383,13 +1443,8 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
           timestamp: new Date().toISOString()
         };
         
-        ablyRest.channels.get(sellerChannel).publish('status_updated', statusPayload).catch(e => {
-          console.error(`[Ably] Failed to publish to seller order channel:`, e);
-        });
-        
-        ablyRest.channels.get(aggChannel).publish('status_updated', statusPayload).catch(e => {
-          console.error(`[Ably] Failed to publish to aggregator order channel:`, e);
-        });
+        await publishEvent(sellerChannel, 'status_updated', statusPayload);
+        await publishEvent(aggChannel, 'status_updated', statusPayload);
       }
     } catch (err) {
       console.error('[Ably] Verify-OTP status publish error:', err);

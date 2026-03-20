@@ -1,6 +1,4 @@
 import axios, { AxiosError } from 'axios';
-import { useAuthStore } from '../store/authStore';
-
 import { Platform } from 'react-native';
 
 /**
@@ -27,9 +25,14 @@ export const api = axios.create({
 });
 
 let getToken: (() => Promise<string | null>) | null = null;
+let onUnauthorized: (() => Promise<void> | void) | null = null;
 
 export const setApiTokenGetter = (getter: () => Promise<string | null>) => {
   getToken = getter;
+};
+
+export const setApiUnauthorizedHandler = (handler: (() => Promise<void> | void) | null) => {
+  onUnauthorized = handler;
 };
 
 // Request interceptor — attaches Clerk JWT on every request
@@ -59,12 +62,16 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const errorBody = error.response?.data;
 
-    const logFn = status ? console.error : console.warn;
+    const logFn = !status || status >= 500 ? console.error : console.warn;
     logFn(`[API ERROR] ${method} ${path} | Status: ${status}`, errorBody || error.message);
 
     if (status === 401) {
       console.warn('[API] 401 Unauthorized — clearing auth state');
-      useAuthStore.getState().signOut();
+      if (onUnauthorized) {
+        Promise.resolve(onUnauthorized()).catch((handlerError) => {
+          console.error('[API] Unauthorized handler failed', handlerError);
+        });
+      }
     }
 
     return Promise.reject(error);

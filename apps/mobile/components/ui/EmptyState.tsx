@@ -78,17 +78,18 @@ export function EmptyState({
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    padding:        spacing.xl,
-    gap:            spacing.md,
+    width:           '100%',
+    minHeight:       220,
+    alignItems:      'center',
+    justifyContent:  'center',
+    padding:         spacing.xl,
+    gap:             spacing.md,
   },
   iconSlot: {
     width:           48,
     height:          48,
-    alignItems:     'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
   heading: {
     textAlign: 'center',

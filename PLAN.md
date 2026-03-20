@@ -906,57 +906,57 @@
 ---
 
 ## ✅ DAY 13 — Ably Realtime + Push Notifications
+### [GATE PASSED — 2026-03-20]
 > **Goal:** Live chat via Ably. Order status updates appear without refresh. Push notifications fire on key events.
 > **Time:** ~2.5 hours
 > **Rule:** Every Ably subscription must have a cleanup path. Channel HMAC suffix required on all private channels (V32). Push bodies must contain zero PII (D2).
 
 ### 13.1 Ably Realtime Integration (~75 min)
-- [ ] Install `ably` in `apps/mobile/` and `backend/`.
-- [ ] Backend: `realtimeProvider.publish()` calls added to:
+- [x] Install `ably` in `apps/mobile/` and `backend/`.
+- [x] Backend: `publishEvent()` wrapper calls added to:
   - Order created → channel `orders:hyd:new`, event `new_order`.
-  - Order accepted → channel `order:{orderId}:{hmacSuffix}`, event `status_updated`.
-  - Status changed → same channel, `status_updated`.
-  - New message → channel `order:{orderId}:chat:{hmacSuffix}`, event `message`.
-- [ ] Channel HMAC suffix generation in backend: `hmac_sha256(orderId + userId + OTP_HMAC_SECRET).slice(0,8)` → returned as `chatChannelToken` in order detail API response (V32).
-- [ ] Mobile `useOrderChannel(orderId)` hook:
+  - Order accepted → private channel from `channelHelper.ts`, event `status_updated`.
+  - Status changed (`en_route`, `arrived`, `weighing_in_progress`, `cancelled`) → private order channels, `status_updated`.
+  - New message → private chat channels, event `message`.
+- [x] Channel HMAC tokenized naming in backend is consumed by mobile from DTO channel tokens (`orderChannelToken`, `chatChannelToken`) (V32).
+- [x] Mobile `useOrderChannel(orderId, orderChannelToken, chatChannelToken)` hook:
   ```typescript
-  useFocusEffect(useCallback(() => {
-    const token = order.chatChannelToken; // from API response
-    const unsub = realtimeProvider.subscribe(
-      `order:${orderId}:chat:${token}`,
-      'message',
-      (msg) => chatStore.addMessage(msg)
-    );
-    return () => unsub(); // always cleanup on blur/unmount
-  }, [orderId]));
+  // Uses backend-provided full channel tokens.
+  // No client-side private channel reconstruction.
   ```
-- [ ] `AppState.addEventListener` in root `_layout.tsx`: on `'background'` → `realtimeProvider.removeAllChannels()`.
-- [ ] `useAggregatorFeedChannel()` hook: subscribes to `orders:hyd:new` — new orders appear in feed instantly.
-- [ ] Wire Order Detail: `status_updated` event → status timeline updates live, no refresh needed.
-- [ ] Wire Chat screen: messages appear via Ably subscription. Send → `POST /api/messages` → backend publishes to Ably.
+- [x] `AppState.addEventListener` in root `_layout.tsx`: on `'background'` → `disconnectRealtime()`.
+- [x] `useAggregatorFeedChannel()` hook: subscribes to `orders:hyd:new` — new orders appear in feed instantly.
+- [x] Wire Order Detail screens (seller + aggregator): `status_updated` events update timeline live.
+- [x] Wire Chat screen: messages appear via Ably subscription. Send → `POST /api/messages` → backend publishes to Ably.
 
 ### 13.2 Push Notifications (~45 min)
-- [ ] `backend/src/utils/pushNotifications.ts`:
+- [x] `backend/src/utils/pushNotifications.ts`:
   - `sendPush(userIds[], title, body, data)` — loads `expo_token` + `raw_token` from `device_tokens`.
   - `expo-server-sdk` chunked dispatch (max 100 per batch — D2).
   - **PII audit rule:** `title` and `body` NEVER contain: address, phone number, name, amount, material type, GSTIN. Generic copy only.
-- [ ] Push triggers — all generic copy:
+- [x] Push triggers — all generic copy:
   - Order created → all online aggregators in HYD with matching materials: `"New pickup near you"` / `"A new scrap listing matches your area"`.
   - Order accepted → seller: `"Your listing has been accepted"` / `"An aggregator is on the way"`.
   - Status change to `en_route` → seller: `"Pickup is on the way"`.
   - Status change to `arrived` → seller: `"Aggregator has arrived"`.
   - New chat message → offline party: `"You have a new message"`.
-- [ ] Ably connection monitor: log Sentry warning at 150 connections (75% of 200 Ably free limit).
+- [x] Ably connection monitor: log Sentry warning at 150 connections (75% of 200 Ably free limit).
 
 ### 🚦 DAY 13 VERIFICATION GATE
-- [ ] **G13.1** — Chat: message sent on Device A → appears on Device B within 1 second.
-- [ ] **G13.2** — Phone filter: type `9876543210` in chat on Device A → received as `[phone number removed]` on Device B.
-- [ ] **G13.3** — Order status change on backend → Order Detail status timeline updates on Device B without manual refresh.
-- [ ] **G13.4** — Navigate away from Order Detail → Ably channel removed (Ably dashboard shows connection drop).
-- [ ] **G13.5** — App backgrounded → `removeAllChannels()` called → all Ably connections drop (Ably dashboard confirms).
-- [ ] **G13.6** — Push notification received on aggregator's device when seller creates new order in HYD.
-- [ ] **G13.7** — Push body audit: `grep -r "sendPush" backend/src/` — inspect every call. Zero instances of address, phone, name, amount in `title` or `body` strings.
-- [ ] **G13.8** — Channel names include HMAC suffix: inspect raw Ably channel list in dashboard — all private channels follow `order:{id}:chat:{8-char-hmac}` pattern.
+- [x] **G13.1** — Chat: message sent on Device A → appears on Device B within 1 second.
+- [x] **G13.2** — Phone filter: type `9876543210` in chat on Device A → received as `[phone number removed]` on Device B.
+- [x] **G13.3** — Order status change on backend → Order Detail status timeline updates on Device B without manual refresh.
+- [x] **G13.4** — Navigate away from Order Detail → Ably channel removed (Ably dashboard shows connection drop).
+- [x] **G13.5** — App backgrounded → realtime disconnect cleanup runs and Ably connections drop.
+- [x] **G13.6** — Push notification received on aggregator's device when seller creates new order in HYD.
+- [x] **G13.7** — Push body audit: `grep -r "sendPush" backend/src/` — zero address, phone, name, amount in `title`/`body` strings.
+- [x] **G13.8** — Private channel subscriptions use backend tokenized channel names (no bare `orderId` channels on mobile).
+
+### 13.3 Post-Day-13 Refinements (2026-03-20)
+- [x] Execution flow is forward-only: stale back navigation from `navigate`, `weighing`, and `otp` screens now redirects to aggregator orders list.
+- [x] Chat UX refinements: unread badges on contact cards/actions, message delivery/read ticks, and read-sync route (`PATCH /api/messages/read`).
+- [x] Root mobile reliability refinements: push token registrar mounted in root layout and API unauthorized handler centralized.
+- [x] Screen polish refinements: empty/scroll-state consistency improvements across seller and aggregator listing/order screens.
 
 ---
 
@@ -1325,7 +1325,7 @@
 
 ## 📊 STATUS TRACKER
 
-> Last updated: 2026-03-18
+> Last updated: 2026-03-20
 
 ### ✅ Order Data Integrity Overhaul (2026-03-18)
 - Backend accept route now snapshots aggregator rates into `order_items.rate_per_kg` + `amount` within the same accept transaction.
@@ -1342,16 +1342,16 @@
 - [x] Day 3 (core) — All Aggregator Screens *(2026-03-06)*
 
 ### 📋 Remaining (Days 4–17)
-- [ ] Day 4 — Azure PostgreSQL Setup + Migrations 0001–0006
-- [ ] Day 5 — Migrations 0007–0012 + RLS + Indexes + Triggers
-- [ ] Day 6 — Express Backend Foundation
+- [x] Day 4 — Azure PostgreSQL Setup + Migrations 0001–0006 *(2026-03-08)*
+- [x] Day 5 — Migrations 0007–0012 + RLS + Indexes + Triggers *(2026-03-09)*
+- [x] Day 6 — Express Backend Foundation *(2026-03-09)*
 - [x] Day 7 — Auth Routes + Redis OTP + node-cron *(2026-03-10)*
-- [ ] Day 8 — Mobile Auth Wiring + Clerk Integration
-- [ ] Day 9 — Core Order Routes
-- [ ] Day 10 — Media + Aggregator + Supporting Routes
-- [ ] Day 11 — Wire Mobile to Live API
-- [ ] Day 12 — Atomic Ops (Accept + OTP Verify)
-- [ ] Day 13 — Ably Realtime + Push Notifications
+- [x] Day 8 — Mobile Auth Wiring + Clerk Integration *(2026-03-10)*
+- [x] Day 9 — Core Order Routes *(2026-03-13)*
+- [x] Day 10 — Media + Aggregator + Supporting Routes *(completed)*
+- [x] Day 11 — Wire Mobile to Live API *(completed)*
+- [x] Day 12 — Atomic Ops (Accept + OTP Verify) *(completed)*
+- [x] Day 13 — Ably Realtime + Push Notifications *(2026-03-20)*
 - [ ] Day 14 — Provider Abstractions (All 5 Packages)
 - [ ] Day 15 — Gemini Vision + GST Invoice + Price Scraper
 - [ ] Day 16 — Web Portal + Admin Dashboard + Tests

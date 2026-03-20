@@ -346,12 +346,23 @@ export default function AggregatorOrdersScreen() {
     );
   };
 
+  const activeTabItemCount =
+    activeTab === 'new'
+      ? filteredNewOrders.length
+      : activeTab === 'active'
+        ? activeOrders.length
+        : activeTab === 'completed'
+          ? completedOrders.length
+          : cancelledOrders.length;
+
   const renderEmptyState = (message: string) => (
-    <EmptyState
-      icon={<Package size={48} color={colors.muted} weight="thin" />}
-      heading={message}
-      body="Try again later or adjust filters."
-    />
+    <View style={styles.emptyStateWrap}>
+      <EmptyState
+        icon={<Package size={48} color={colors.muted} weight="thin" />}
+        heading={message}
+        body="Try again later or adjust filters."
+      />
+    </View>
   );
 
   return (
@@ -363,7 +374,13 @@ export default function AggregatorOrdersScreen() {
         {renderTabs()}
         {renderFilters()}
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            !isLoading && !error && activeTabItemCount === 0 && styles.scrollContentEmpty,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
         {error && (
           <View style={[styles.errorContainer, isLoading && { opacity: 0.7 }]}>
             <Text variant="body" style={styles.errorText}>
@@ -457,6 +474,7 @@ const styles = StyleSheet.create({
   filterText: { color: colors.slate, fontSize: 11, fontWeight: '600' },
   filterTextActive: { color: '#FFFFFF', fontFamily: 'DMSans-Bold' },
   scrollContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
+  scrollContentEmpty: { flexGrow: 1 },
   card: { padding: 0, overflow: 'hidden' },
   cardTopBar: { height: 2, backgroundColor: colors.border },
   cardContent: { padding: spacing.md },
@@ -479,6 +497,7 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, height: 40, backgroundColor: colors.navy },
   chatBtn: { flex: 1, height: 40 },
   carouselContainer: { height: 46 },
+  emptyStateWrap: { flex: 1, justifyContent: 'center' },
   emptyContent: { alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
   errorContainer: { 
     padding: 16, 

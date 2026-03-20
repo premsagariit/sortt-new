@@ -1,59 +1,50 @@
-import { useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { getMobileRealtimeProvider } from '../lib/realtime';
+import { useCallback } from 'react';
+import { getRealtimeClient } from '../lib/realtime';
 import { useAggregatorStore } from '../store/aggregatorStore';
+import type { MaterialCode } from '../components/ui/MaterialChip';
 
 /**
- * useAggregatorFeedChannel — Subscribe to new orders on focus
- * Listens to order feed channel for new_order events
- * Refreshes aggregator order list when new orders arrive
+ * Subscribe to public aggregator feed channel.
+ * Receives new order events and prepends to feed store.
  */
 export function useAggregatorFeedChannel() {
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-  const fetchAggregatorOrders = useAggregatorStore((s) => s.fetchAggregatorOrders);
-
-  const subscribe = useCallback(async () => {
-    try {
-      const provider = getMobileRealtimeProvider();
-      
-      // Subscribe to order feed channel for new orders
-      const unsubscribe = provider.subscribe(
-        'orders:hyd:new',      // feed channel (global, not per-user)
-        'new_order',            // event name
-        (payload: any) => {
-          // Refresh aggregator feed to pick up new order
-          fetchAggregatorOrders(false);
-        }
-      );
-
-      unsubscribeRef.current = unsubscribe;
-    } catch (err) {
-      console.error('[useAggregatorFeedChannel] Subscribe error:', err);
-    }
-  }, [fetchAggregatorOrders]);
-
-  const unsubscribe = useCallback(() => {
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
-  }, []);
-
-  // Subscribe on focus, unsubscribe on blur
   useFocusEffect(
     useCallback(() => {
-      subscribe();
-      
-      return () => {
-        unsubscribe();
-      };
-    }, [subscribe, unsubscribe])
-  );
+      const ably = getRealtimeClient();
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      unsubscribe();
-    };
-  }, [unsubscribe]);
+      // Public city feed channel (no HMAC suffix required)
+      const channel = ably.channels.get('orders:hyd:new');
+      channel.subscribe('new_order', (msg) => {
+        const payload = msg.data as {
+          orderId: string;
+          locality: string;
+          materialCodes: string[];
+          createdAt: string;
+        };
+
+        useAggregatorStore.getState().prependFeedOrder({
+          id: payload.orderId,
+          orderNumber: `#${String(payload.orderId).slice(0, 8).toUpperCase()}`,
+          locality: payload.locality,
+          distanceKm: 0,
+          materials: (payload.materialCodes ?? []) as MaterialCode[],
+          estimatedKg: 0,
+          postedMinutesAgo: 0,
+          estimatedPrice: 0,
+          estimatedWeights: {},
+          sellerType: 'individual',
+          rating: 0,
+          window: 'Flexible',
+          createdAt: payload.createdAt,
+        });
+      });
+
+      // .catch(() => {}) suppresses "Connection closed" rejections on app background
+      return () => {
+        channel.unsubscribe();
+        channel.detach().catch(() => {});
+      };
+    }, [])
+  );
 }

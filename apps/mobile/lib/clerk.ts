@@ -26,8 +26,13 @@ export const tokenCache = {
 };
 
 export const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const isTestPublishableKey = clerkPublishableKey?.startsWith('pk_test_') ?? false;
 
 if (!clerkPublishableKey) {
   console.warn('⚠️ Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env');
   console.log('Available env keys:', Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC_')));
+}
+
+if (!__DEV__ && isTestPublishableKey) {
+  throw new Error('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY uses a test key in production build. Replace with a pk_live_ key.');
 }

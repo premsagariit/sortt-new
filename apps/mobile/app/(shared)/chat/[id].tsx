@@ -1,17 +1,15 @@
 /**
  * app/(shared)/chat/[id].tsx
  * ──────────────────────────────────────────────────────────────────
- * Functional Chat Screen — Day 3 §3.6
- *
- * Implements FlatList, local mock state through Zustand, KeyboardAvoidingView,
- * dynamic alignments, and defense-in-depth regex for phone numbers.
+ * Live Chat Screen
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { PaperPlaneRight } from 'phosphor-react-native';
 
 import { colors, spacing } from '../../../constants/tokens';
@@ -21,6 +19,9 @@ import { MessageBubble } from '../../../components/ui/MessageBubble';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore, ChatMessage } from '../../../store/chatStore';
 import { safeBack } from '../../../utils/navigation';
+import { useOrderStore } from '../../../store/orderStore';
+import { useOrderChannel } from '../../../hooks/useOrderChannel';
+import { api } from '../../../lib/api';
 
 // Skeleton Loader State
 const SkeletonLoader = () => (
@@ -31,11 +32,11 @@ const SkeletonLoader = () => (
   </View>
 );
 
-// Empty / Error State
-const EmptyState = ({ isError = false }: { isError?: boolean }) => (
+// Empty State
+const EmptyState = () => (
   <View style={styles.emptyContainer}>
     <Text variant="body" color={colors.muted} style={{ textAlign: 'center' }}>
-      {isError ? 'Unable to load messages. Please try again later.' : 'No messages yet. Say hello!'}
+      No messages yet. Say hello!
     </Text>
   </View>
 );
@@ -57,14 +58,66 @@ export default function ChatScreen() {
 
   const userId = useAuthStore((state) => state.userId);
   const userType = useAuthStore((state) => state.userType);
-  const messages = useChatStore((state) => state.getMessages(orderId));
+
+  const order = useOrderStore((state: any) => state.orders.find((o: any) => o.orderId === orderId));
+  const fetchOrder = useOrderStore((state: any) => state.fetchOrder);
+
+  // Direct state access — more reliable Zustand re-render pattern than calling getMessages()
+  const messages = useChatStore((state) => state.messages[orderId] ?? []);
   const participants = useChatStore((state) => state.participants[orderId] || null);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const fetchMessages = useChatStore((state) => state.fetchMessages);
+  const markAllReceived = useChatStore((state) => state.markAllReceived);
   const isLoading = useChatStore((state) => state.isLoading);
 
   const [inputText, setInputText] = useState('');
+  const flatListRef = useRef<FlatList>(null);
 
-  // Derive other party name strictly from participants comparison to authStore.userId
+  // If channel tokens are missing, fetch the order detail to populate them
+  useEffect(() => {
+    if (orderId && orderId !== 'order-unknown') {
+      if (!order?.chatChannelToken || !order?.orderChannelToken) {
+        fetchOrder(orderId, false);
+      }
+    }
+  }, [orderId]);
+
+  // Load message history and mark as read on mount
+  useEffect(() => {
+    if (orderId && orderId !== 'order-unknown') {
+      fetchMessages(orderId);
+      // Mark other party's messages as read — triggers 'messages_read' Ably event on their device
+      api.patch('/api/messages/read', { order_id: orderId }).catch(() => {});
+    }
+  }, [orderId]);
+
+  // Re-mark as read each time screen is focused:
+  // 1. Notify the server so sender's ticks upgrade to double/teal
+  // 2. Clear the local unread badge on the ContactCard chat button
+  useFocusEffect(
+    useCallback(() => {
+      if (orderId && orderId !== 'order-unknown') {
+        api.patch('/api/messages/read', { order_id: orderId }).catch(() => {});
+        if (userId) markAllReceived(orderId, userId);
+      }
+    }, [orderId, userId])
+  );
+
+  // Auto-scroll to newest message when message count changes
+  const messageCount = messages.length;
+  useEffect(() => {
+    if (messageCount > 0) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, [messageCount]);
+
+  useOrderChannel(
+    orderId,
+    order?.orderChannelToken ?? null,
+    order?.chatChannelToken ?? null
+  );
+
+  // Derive other party name from participants
   let otherPartyName = 'Chat';
   if (participants && userId) {
     otherPartyName = userId === participants.sellerId
@@ -72,9 +125,7 @@ export default function ChatScreen() {
       : participants.sellerName;
   }
 
-  // Never block sending just because participants dict is missing
   const canSend = Boolean(userId || userType);
-  // Effective sender ID for outgoing messages
   const effectiveSenderId = userId ?? (userType === 'seller' ? 'user-seller-001' : 'user-agg-001');
 
   const handleSend = () => {
@@ -84,19 +135,18 @@ export default function ChatScreen() {
   };
 
   const renderItem = ({ item }: { item: ChatMessage }) => {
-    // isOwn: prefer userId exact match; fall back to userType for pre-auth dev testing
     const isOwn = userId
       ? item.senderId === userId
       : (userType === 'seller'
         ? item.senderId === 'user-seller-001'
         : item.senderId === 'user-agg-001');
-    let senderName: string | undefined = undefined;
 
+    let senderName: string | undefined = undefined;
     if (!isOwn && participants) {
       senderName = item.senderId === participants.sellerId ? participants.sellerName : participants.aggregatorName;
     }
 
-    // Apply V26 Regex: defense in depth before render
+    // V26: phone number defense-in-depth before render
     const V26_REGEX = /(?:\+91|0)?[6-9]\d{9}/;
     const isSystemMessage = V26_REGEX.test(item.body);
     const body = isSystemMessage ? 'Phone sharing blocked for your safety' : item.body;
@@ -109,6 +159,7 @@ export default function ChatScreen() {
           isOwn={isOwn}
           senderName={senderName}
           isSystemMessage={isSystemMessage}
+          status={isOwn ? (item.status ?? 'sent') : undefined}
         />
       </View>
     );
@@ -131,6 +182,7 @@ export default function ChatScreen() {
             <SkeletonLoader />
           ) : (
             <FlatList
+              ref={flatListRef}
               data={[...messages].reverse()}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
@@ -225,7 +277,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    transform: [{ scaleY: -1 }], // Counteract FlatList inverted
+    transform: [{ scaleY: -1 }],
   },
   inputArea: {
     padding: spacing.md,
@@ -247,8 +299,6 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     maxHeight: 100,
-    // Provide a sensible fallback if DMSans-Regular isn't cached/loaded correctly on init,
-    // though the project should have it installed
     fontFamily: 'DMSans-Regular',
     color: colors.slate,
     fontSize: 14,

@@ -1,6 +1,5 @@
-// Scaffold — backend wired on Day 7 per @PLAN.md
-// No Realtime subscription here. All actions are local state only.
 import { create } from 'zustand';
+import { api } from '../lib/api';
 
 export interface ChatMessage {
   id: string;
@@ -9,6 +8,7 @@ export interface ChatMessage {
   body: string;
   sentAt: string;
   read: boolean;
+  status?: 'sending' | 'sent' | 'read';
 }
 
 // Mock Order Participants
@@ -19,15 +19,6 @@ export const MOCK_PARTICIPANTS = {
   aggregatorName: 'Global Scrap'
 };
 
-const createMockMessages = (orderId: string): ChatMessage[] => [
-  { id: `msg-1-${orderId}`, orderId, senderId: 'user-agg-001', body: 'Hello! I am on my way to your location.', sentAt: new Date(Date.now() - 360000).toISOString(), read: true },
-  { id: `msg-2-${orderId}`, orderId, senderId: 'user-seller-001', body: 'Great, thanks! I have some extra newspaper as well.', sentAt: new Date(Date.now() - 300000).toISOString(), read: true },
-  { id: `msg-3-${orderId}`, orderId, senderId: 'user-agg-001', body: 'Sure, I can take that. Will be there in 5-8 mins.', sentAt: new Date(Date.now() - 120000).toISOString(), read: true },
-  { id: `msg-4-${orderId}`, orderId, senderId: 'user-seller-001', body: 'Should I keep it outside?', sentAt: new Date(Date.now() - 60000).toISOString(), read: true },
-  { id: `msg-5-${orderId}`, orderId, senderId: 'user-agg-001', body: 'Yes, that would be helpful.', sentAt: new Date(Date.now() - 30000).toISOString(), read: true },
-  { id: `msg-6-${orderId}`, orderId, senderId: 'user-seller-001', body: 'Ok, see you soon.', sentAt: new Date().toISOString(), read: false },
-];
-
 interface ChatStoreState {
   messages: Record<string, ChatMessage[]>; // keyed by orderId
   participants: Record<string, typeof MOCK_PARTICIPANTS>;
@@ -35,34 +26,44 @@ interface ChatStoreState {
 
   // Actions
   getMessages: (orderId: string) => ChatMessage[];
+  fetchMessages: (orderId: string) => Promise<void>;
   sendMessage: (orderId: string, content: string, senderId: string) => void;
   setMessages: (orderId: string, msgs: ChatMessage[]) => void;
   appendMessage: (orderId: string, msg: ChatMessage) => void;
+  updateMessageStatus: (messageId: string, orderId: string, status: 'sending' | 'sent' | 'read') => void;
+  markSentMessagesAsRead: (orderId: string, ownSenderId: string) => void;
+  // Mark all received (other-party) messages as locally read — resets unread badge
+  markAllReceived: (orderId: string, ownUserId: string) => void;
   setLoading: (v: boolean) => void;
   reset: () => void;
 }
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
-  messages: {
-    'order-mock-001': createMockMessages('order-mock-001'),
-    'ORD-2841': createMockMessages('ORD-2841'),
-    'ORD-2790': createMockMessages('ORD-2790'),
-    'ORD-1001': createMockMessages('ORD-1001'),
-    'ORD-7777': createMockMessages('ORD-7777'),
-  },
-  participants: {
-    'order-mock-001': MOCK_PARTICIPANTS,
-    'ORD-2841': MOCK_PARTICIPANTS,
-    'ORD-2790': MOCK_PARTICIPANTS,
-    'ORD-1001': MOCK_PARTICIPANTS,
-    'ORD-7777': MOCK_PARTICIPANTS,
-  },
+  messages: {},
+  participants: {},
   isLoading: false,
 
   getMessages: (orderId) => {
-    // If the order exists, return it, otherwise fallback to a mock array to prevent UI crashes 
-    // during development. In production, this would trigger a fetch if missing.
     return get().messages[orderId] || [];
+  },
+
+  fetchMessages: async (orderId) => {
+    try {
+      const res = await api.get('/api/messages', { params: { order_id: orderId } });
+      const msgs: ChatMessage[] = (res.data.messages ?? []).map((m: any) => ({
+        id: m.id,
+        orderId,
+        senderId: m.sender_id,
+        body: m.content,
+        sentAt: m.created_at,
+        read: Boolean(m.read_at),
+        // Messages with read_at set were already read by the other party
+        status: m.read_at ? 'read' : 'sent',
+      }));
+      get().setMessages(orderId, msgs);
+    } catch (err) {
+      console.error('[chatStore] fetchMessages error:', err);
+    }
   },
 
   sendMessage: (orderId, content, senderId) => {
@@ -70,17 +71,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       ? crypto.randomUUID()
       : `msg-local-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const newMsg: ChatMessage = {
+    // Optimistic update with 'sending' status
+    get().appendMessage(orderId, {
       id,
       orderId,
       senderId,
       body: content,
       sentAt: new Date().toISOString(),
-      read: false
-    };
+      read: false,
+      status: 'sending',
+    });
 
-    // Optimistic update
-    get().appendMessage(orderId, newMsg);
+    // Call backend — publishes Ably event so recipient receives via useOrderChannel
+    api.post('/api/messages', { order_id: orderId, content })
+      .then(() => {
+        // Update to 'sent' once confirmed in DB
+        get().updateMessageStatus(id, orderId, 'sent');
+      })
+      .catch((err) => {
+        console.error('[chatStore] sendMessage API error:', err);
+      });
   },
 
   setMessages: (orderId, msgs) =>
@@ -89,6 +99,30 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   appendMessage: (orderId, msg) => {
     const existing = get().messages[orderId] ?? [];
     set({ messages: { ...get().messages, [orderId]: [...existing, msg] } });
+  },
+
+  updateMessageStatus: (messageId, orderId, status) => {
+    const msgs = get().messages[orderId] ?? [];
+    const updated = msgs.map(m => m.id === messageId ? { ...m, status } : m);
+    set({ messages: { ...get().messages, [orderId]: updated } });
+  },
+
+  markSentMessagesAsRead: (orderId, ownSenderId) => {
+    const msgs = get().messages[orderId] ?? [];
+    const updated = msgs.map(m =>
+      m.senderId === ownSenderId && (m.status === 'sent' || m.status === 'sending')
+        ? { ...m, status: 'read' as const, read: true }
+        : m
+    );
+    set({ messages: { ...get().messages, [orderId]: updated } });
+  },
+
+  markAllReceived: (orderId, ownUserId) => {
+    const msgs = get().messages[orderId] ?? [];
+    const updated = msgs.map(m =>
+      m.senderId !== ownUserId && !m.read ? { ...m, read: true } : m
+    );
+    set({ messages: { ...get().messages, [orderId]: updated } });
   },
 
   setLoading: (v) => set({ isLoading: v }),

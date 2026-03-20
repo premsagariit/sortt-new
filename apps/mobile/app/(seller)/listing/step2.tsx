@@ -114,7 +114,7 @@ export default function Step2Screen() {
       <View style={styles.content}>
         <WizardStepIndicator currentStep={2} />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text variant="heading">Add a photo & enter weights</Text>
             <Text variant="caption" color={colors.muted}>Photo is required · AI will analyse your scrap pile</Text>

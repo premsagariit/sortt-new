@@ -14,9 +14,11 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { StatusBar } from 'expo-status-bar';
 import { safeBack } from '../../utils/navigation';
+import { useListingStore } from '../../store/listingStore';
 
 export default function AggregatorProfileScreen() {
   const router = useRouter();
+  const resetListing = useListingStore((s) => s.resetListing);
 
   return (
     <View style={styles.container}>
@@ -30,6 +32,7 @@ export default function AggregatorProfileScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         style={{ backgroundColor: colors.bg }}
+        showsVerticalScrollIndicator={false}
       >
         {/* Anti-gap filler for top overscroll */}
         <View style={styles.overscrollFiller} />
@@ -170,7 +173,7 @@ export default function AggregatorProfileScreen() {
       <View style={styles.bottomBar}>
         <PrimaryButton
           label="List Scrap for Pickup"
-          onPress={() => router.push('/(seller)/listing/step1')}
+          onPress={() => { resetListing(); router.push('/(seller)/listing/step1'); }}
         />
       </View>
     </View>

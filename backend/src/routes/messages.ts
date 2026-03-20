@@ -3,8 +3,9 @@ import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { createNotification } from '../lib/notifications';
-import { ablyRest } from '../providers/ablyProvider';
 import { channelName } from '../utils/channelHelper';
+import { sendPushToUsers } from '../utils/pushNotifications';
+import { publishEvent } from '../lib/realtime';
 
 const router = Router();
 
@@ -69,25 +70,23 @@ router.post('/', async (req: Request, res: Response) => {
                 
         // Publish to both seller and aggregator Ably channels if Ably is configured
                 // WARN 2: Lock event name to 'message' (no 'new_message' alternatives)
-                if (ablyRest) {
-                    try {
-                        const sellerChannel = channelName(order.seller_clerk, 'chat', order_id);
-                        const payload = {
-                            id: msg.id,
-                            order_id,
-                            sender_id: senderId,
-                            content: cleanContent,
-                            created_at: msg.created_at
-                        };
-                        ablyRest.channels.get(sellerChannel).publish('message', payload);
-                        
-                        if (order.aggregator_id && order.agg_clerk) {
-                            const aggChannel = channelName(order.agg_clerk, 'chat', order_id);
-                            ablyRest.channels.get(aggChannel).publish('message', payload);
-                        }
-                    } catch (ablyErr) {
-                        console.error('Ably message publish failed:', ablyErr);
+                try {
+                    const sellerChannel = channelName(order.seller_clerk, 'chat', order_id);
+                    const payload = {
+                        id: msg.id,
+                        order_id,
+                        sender_id: senderId,
+                        content: cleanContent,
+                        created_at: msg.created_at
+                    };
+                    await publishEvent(sellerChannel, 'message', payload);
+
+                    if (order.aggregator_id && order.agg_clerk) {
+                        const aggChannel = channelName(order.agg_clerk, 'chat', order_id);
+                        await publishEvent(aggChannel, 'message', payload);
                     }
+                } catch (ablyErr) {
+                    console.error('Ably message publish failed:', ablyErr);
                 }
 
                 if (recipientId) {
@@ -96,6 +95,14 @@ router.post('/', async (req: Request, res: Response) => {
                         'New Message',
                         cleanContent.length > 50 ? cleanContent.substring(0, 47) + '...' : cleanContent,
                         'message'
+                    );
+
+                    // NEW: Send push notification (D2: generic copy, zero PII)
+                    await sendPushToUsers(
+                        [recipientId],
+                        'New message',
+                        'You have a new message',
+                        { order_id, kind: 'new_message' }
                     );
                 }
             } catch (err) {
@@ -110,6 +117,66 @@ router.post('/', async (req: Request, res: Response) => {
         });
     } catch (e: any) {
         console.error('POST /api/messages error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PATCH /api/messages/read
+// Body: { order_id }
+// Marks all messages from the other party as read, notifies them via Ably
+router.patch('/read', async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const { order_id } = req.body;
+        if (!order_id || typeof order_id !== 'string') {
+            return res.status(400).json({ error: 'order_id is required' });
+        }
+
+        const orderRes = await query(`
+            SELECT o.seller_id, o.aggregator_id,
+                   s.clerk_user_id AS seller_clerk,
+                   a.clerk_user_id AS agg_clerk
+            FROM orders o
+            LEFT JOIN users s ON s.id = o.seller_id
+            LEFT JOIN users a ON a.id = o.aggregator_id
+            WHERE o.id = $1 AND o.deleted_at IS NULL
+        `, [order_id]);
+
+        if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+        const order = orderRes.rows[0];
+        if (order.seller_id !== userId && order.aggregator_id !== userId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        // Mark all unread messages sent by the OTHER party as read
+        await query(
+            `UPDATE messages SET read_at = NOW()
+             WHERE order_id = $1 AND sender_id != $2 AND read_at IS NULL`,
+            [order_id, userId]
+        );
+
+        // Notify the sender (other party) via their order channel so they see double ticks
+        setImmediate(async () => {
+            try {
+                const otherClerkId = userId === order.seller_id ? order.agg_clerk : order.seller_clerk;
+                if (otherClerkId) {
+                    const otherOrderChannel = channelName(otherClerkId, 'order', order_id);
+                    await publishEvent(otherOrderChannel, 'messages_read', {
+                        order_id,
+                        read_by: userId,
+                    });
+                }
+            } catch (err) {
+                console.error('[messages/read] Ably publish error:', err);
+            }
+        });
+
+        return res.json({ success: true });
+    } catch (e: any) {
+        console.error('PATCH /api/messages/read error:', e);
         Sentry.captureException(e);
         return res.status(500).json({ error: 'Internal server error' });
     }

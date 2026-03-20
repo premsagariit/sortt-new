@@ -116,7 +116,7 @@ interface AggregatorStoreState {
   earnings: AggregatorEarnings;
   profile: AggregatorProfile | null;
   materialRates: AggregatorRate[];
-  earningsByPeriod: Record<'today' | 'week' | 'month', AggregatorEarningsPayload | null>;
+  earningsByPeriod: Record<'today' | 'week' | 'month' | 'all', AggregatorEarningsPayload | null>;
   executionDraftByOrderId: Record<string, ExecutionDraft>;
   isProfileLoading: boolean;
   isRatesLoading: boolean;
@@ -153,6 +153,7 @@ interface AggregatorStoreState {
   dismissOrder: (orderId: string) => void;
   dismissNewOrder: (orderId: string) => void;
   acceptNewOrder: (orderId: string) => void;
+  prependFeedOrder: (order: NewOrderRequest) => void;
 
   /** Active tab: Cancel — calls orderStore, moves to cancelled */
   cancelOrder: (orderId: string) => void;
@@ -180,7 +181,7 @@ interface AggregatorStoreState {
   /** GET /api/aggregators/rates or fallback /api/rates */
   fetchAggregatorRates: () => Promise<void>;
   /** GET /api/aggregators/earnings?period=... */
-  fetchAggregatorEarnings: (period: 'today' | 'week' | 'month') => Promise<void>;
+  fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates business_name, operating_area */
   updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates */
@@ -278,6 +279,30 @@ function computeOrderAmount(order: any): number {
   return 0;
 }
 
+// Returns true if right now falls within the aggregator's scheduled working hours
+function isWithinWorkingHours(schedule: DaySchedule[]): boolean {
+  if (!schedule || schedule.length === 0) return true;
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const now = new Date();
+  const todayEntry = schedule.find(s => s.day === dayNames[now.getDay()]);
+  if (!todayEntry || !todayEntry.isOpen) return false;
+  const parseTime = (t: string): number => {
+    const m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!m) return -1;
+    let h = parseInt(m[1]);
+    const min = parseInt(m[2]);
+    const ap = m[3].toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return h * 60 + min;
+  };
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const start = parseTime(todayEntry.start);
+  const end = parseTime(todayEntry.end);
+  if (start === -1 || end === -1) return true;
+  return cur >= start && cur <= end;
+}
+
 export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   fullName: '',
   businessName: '',
@@ -297,7 +322,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
   profile: null,
   materialRates: [],
-  earningsByPeriod: { today: null, week: null, month: null },
+  earningsByPeriod: { today: null, week: null, month: null, all: null },
   executionDraftByOrderId: {},
   isProfileLoading: false,
   isRatesLoading: false,
@@ -339,6 +364,19 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   dismissNewOrder: (orderId) => set((state) => ({
     newOrders: state.newOrders.filter(o => o.id !== orderId),
   })),
+
+  prependFeedOrder: (order) => set((state) => {
+    const exists = state.newOrders.some(existing => existing.id === order.id);
+    if (exists) {
+      return {};
+    }
+
+    // Prepend new order and cap feed at 50 items
+    return {
+      newOrders: [order, ...state.newOrders].slice(0, 50),
+      lastFeedSyncAt: new Date().toISOString(),
+    };
+  }),
 
   acceptNewOrder: (orderId) => set((state) => {
     const order = state.newOrders.find(o => o.id === orderId);
@@ -412,7 +450,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     earnings: { todayAmount: 0, todayPickups: 0, weekAmount: 0, weekPickups: 0 },
     profile: null,
     materialRates: [],
-    earningsByPeriod: { today: null, week: null, month: null },
+    earningsByPeriod: { today: null, week: null, month: null, all: null },
     executionDraftByOrderId: {},
     isProfileLoading: false,
     isRatesLoading: false,
@@ -508,7 +546,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         businessName: businessName ?? '',
         primaryArea: operatingArea ?? '',
         weeklySchedule: parsedSchedule,
-        isOnline,
+        isOnline: isWithinWorkingHours(parsedSchedule),
         isProfileLoading: false,
         profileError: null,
       });

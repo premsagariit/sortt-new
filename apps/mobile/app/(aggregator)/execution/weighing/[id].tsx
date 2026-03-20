@@ -97,6 +97,20 @@ export default function WeighingScreen() {
         }, [id, fetchOrder, fetchAggregatorRates])
     );
 
+    useEffect(() => {
+        if (!id || !order) return;
+
+        // Guard stale screens when order has moved to another stage.
+        if (order.status === 'accepted' || order.status === 'en_route') {
+            router.replace({ pathname: '/(aggregator)/execution/navigate', params: { id } } as any);
+            return;
+        }
+
+        if (['completed', 'cancelled', 'disputed'].includes(order.status)) {
+            router.replace('/(aggregator)/orders');
+        }
+    }, [id, order?.status]);
+
     const liveRateMap = useMemo(() => {
         const map = new Map<string, number>();
         for (const rate of liveRates) {
@@ -245,7 +259,7 @@ export default function WeighingScreen() {
             <NavBar
                 title="Weighing"
                 variant="light"
-                onBack={() => safeBack(`/(aggregator)/execution/navigate?id=${id}` as any)}
+                onBack={() => router.replace('/(aggregator)/orders')}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent}>

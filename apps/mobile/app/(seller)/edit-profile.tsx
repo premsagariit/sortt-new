@@ -75,6 +75,7 @@ export default function EditProfile() {
         style={styles.scroll} 
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* Avatar Section */}
         <View style={styles.avatarSection}>

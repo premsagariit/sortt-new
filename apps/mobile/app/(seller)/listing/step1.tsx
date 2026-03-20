@@ -76,7 +76,7 @@ export default function Step1Screen() {
       <View style={styles.content}>
         <WizardStepIndicator currentStep={1} />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text variant="heading">What are you selling?</Text>
             <Text variant="caption" color={colors.muted}>Select all that apply</Text>

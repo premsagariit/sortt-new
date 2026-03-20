@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ls \"/c/Users/Prem Sagar/Downloads/Sortt/.claude/worktrees/agent-a573fecc/apps/mobile/app/\\(shared\\)/chat/\")"
     ]
   }
 }

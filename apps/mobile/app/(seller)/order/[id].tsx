@@ -30,6 +30,8 @@ import { api } from '../../../lib/api';
 import { OrderTimeline } from '../../../components/order/OrderTimeline';
 import { ContactCard } from '../../../components/order/ContactCard';
 import { useAuthStore } from '../../../store/authStore';
+import { useChatStore } from '../../../store/chatStore';
+import { useOrderChannel } from '../../../hooks/useOrderChannel';
 
 const OTP_ACTIVE_STATUSES = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'];
 
@@ -49,12 +51,21 @@ export default function SellerOrderDetailScreen() {
   const authUserId = useAuthStore((s: any) => s.userId);
   const authName = useAuthStore((s: any) => s.name);
   const authPhone = useAuthStore((s: any) => s.phoneNumber);
+  const chatUnread = useChatStore((state) => {
+    if (!authUserId || !id) return 0;
+    return (state.messages[id] ?? []).filter(m => m.senderId !== authUserId && !m.read).length;
+  });
 
   const [rates, setRates] = React.useState<any[]>([]);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
 
   const order = orders.find((o: any) => o.orderId === id);
+  useOrderChannel(
+    order?.orderId ?? id ?? '',
+    order?.orderChannelToken ?? null,
+    order?.chatChannelToken ?? null
+  );
   const hasSellerAction = !!(order && OTP_ACTIVE_STATUSES.includes(order.status));
   const ownContactName = (typeof authName === 'string' && authName.trim().length > 0)
     ? authName.trim()
@@ -263,6 +274,7 @@ export default function SellerOrderDetailScreen() {
             role="Aggregator"
             userType="aggregator"
             onChat={order.aggregatorId ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
+            unreadCount={chatUnread}
           />
           <View style={styles.cardFooter}>
             <View style={styles.metaRow}>

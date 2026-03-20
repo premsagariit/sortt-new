@@ -209,9 +209,13 @@ export default function SellerOrdersScreen() {
       {/* Order List */}
       <ScrollView
         style={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        bounces={showInitialSkeleton || displayOrders.length > 0}
+        alwaysBounceVertical={false}
+        scrollEnabled={showInitialSkeleton || displayOrders.length > 0}
         contentContainerStyle={[
           styles.listContent,
-          !showInitialSkeleton && displayOrders.length === 0 && styles.listEmpty,
+          !showInitialSkeleton && displayOrders.length === 0 && styles.listEmptyContainer,
         ]}
       >
         {showInitialSkeleton ? (
@@ -345,8 +349,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  listEmpty: {
-    flex: 1,
+  listEmptyContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
   },
 });

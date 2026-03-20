@@ -5,7 +5,7 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -17,7 +17,6 @@ import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
-import { useAuthStore } from '../../../store/authStore';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { safeBack } from '../../../utils/navigation';
@@ -30,7 +29,6 @@ const TIMES = [
   { label: 'Afternoon · 4–6 PM', value: 'afternoon_4_6' },
   { label: 'Evening · 6 PM+', value: 'evening_6_plus' },
 ];
-const DEFAULT_ADDRESS = 'Flat 4B, Shanti Apartments, Road No. 5, Banjara Hills, Hyderabad 500034';
 
 export default function Step3Screen() {
   const {
@@ -44,7 +42,6 @@ export default function Step3Screen() {
     setAddressLine,
   } = useListingStore();
 
-  const locality = useAuthStore((s) => s.locality);
   const [showDatePicker, setShowDatePicker] = React.useState(false);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
@@ -56,12 +53,6 @@ export default function Step3Screen() {
     }
   };
 
-  // Pre-fill address if empty
-  useEffect(() => {
-    if (!addressLine && locality) {
-      setAddressLine(DEFAULT_ADDRESS);
-    }
-  }, [locality, addressLine, setAddressLine]);
 
   // Validation
   const canProceed =
@@ -79,7 +70,7 @@ export default function Step3Screen() {
       <View style={styles.content}>
         <WizardStepIndicator currentStep={3} />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text variant="heading">Pickup preference</Text>
           </View>
@@ -119,7 +110,7 @@ export default function Step3Screen() {
               <Text variant="subheading" style={styles.sectionTitle}>Pickup Address</Text>
               <TextInput
                 style={styles.addressArea}
-                value={addressLine || DEFAULT_ADDRESS}
+                value={addressLine}
                 onChangeText={setAddressLine}
                 placeholder="Enter complete address"
                 multiline

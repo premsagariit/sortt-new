@@ -41,6 +41,7 @@
 │   │   ├── metro.config.js # Metro bundler resolver/transform config
 │   │   ├── expo-env.d.ts # Expo-specific type declarations
 │   │   ├── .env # Mobile runtime environment variables
+│   │   ├── .env.example # Mobile environment variable template
 │   │   ├── assets
 │   │   │   ├── avatar_placeholder.png # Default avatar placeholder asset
 │   │   │   └── images
@@ -156,6 +157,7 @@
 │   │   │       ├── NavBar.tsx # Top navigation bar component
 │   │   │       ├── NetworkErrorScreen.tsx # Offline screen for in-app routes
 │   │   │       ├── NotificationBell.tsx # Notification icon/badge component
+│   │   │       ├── PushTokenRegistrar.tsx # Root-level push token registration helper
 │   │   │       ├── NotificationWatcher.tsx # Notification polling/subscription helper
 │   │   │       ├── ProgressBar.tsx # Progress indicator component
 │   │   │       ├── SkeletonLoader.tsx # Skeleton loading placeholder component
@@ -170,15 +172,15 @@
 │   │   │   ├── app.ts # Mobile app constants and static labels
 │   │   │   └── tokens.ts # Design tokens (colors/spacing/radius/typography)
 │   │   ├── hooks
-│   │   │   ├── useAggregatorFeedChannel.ts # Aggregator feed realtime subscription hook
+│   │   │   ├── useAggregatorFeedChannel.ts # Aggregator feed Ably subscription hook (`orders:hyd:new`)
 │   │   │   ├── useNetworkStatus.ts # Online/offline connectivity state hook
-│   │   │   ├── useOrderChannel.ts # Order-specific realtime channel hook
+│   │   │   ├── useOrderChannel.ts # Order/chat Ably subscription hook using backend channel tokens
 │   │   │   └── usePhotoCapture.ts # Camera/gallery capture helper hook
 │   │   ├── lib
-│   │   │   ├── api.ts # Axios API client and auth header wiring
+│   │   │   ├── api.ts # Axios API client with auth + centralized 401 handler
 │   │   │   ├── clerk.ts # Clerk SDK configuration and token cache
 │   │   │   ├── push.ts # Push notification registration/utilities
-│   │   │   └── realtime.ts # Realtime client initialization/wrappers
+│   │   │   └── realtime.ts # Ably token-auth singleton client + disconnect helper
 │   │   ├── store
 │   │   │   ├── aggregatorStore.ts # Aggregator state/actions (feed, orders, rates, profile)
 │   │   │   ├── authStore.ts # Auth/session state and onboarding flags
@@ -239,6 +241,7 @@
 │   │   │   ├── db.ts # PostgreSQL query/pool helpers
 │   │   │   ├── redis.ts # Redis client and limiter utilities
 │   │   │   ├── notifications.ts # Notification dispatch abstractions
+│   │   │   ├── realtime.ts # Ably publish/token wrapper helpers
 │   │   │   └── storage.ts # File storage helper abstractions
 │   │   ├── middleware
 │   │   │   ├── auth.ts # Clerk token verification and user loading middleware
@@ -264,7 +267,8 @@
 │   │       ├── channelHelper.ts # Channel naming/access helper utilities
 │   │       ├── orderDto.ts # Order response normalization/sanitization helpers
 │   │       ├── orderStateMachine.ts # Allowed order state transition rules
-│   │       └── pushHelper.ts # Push notification helper functions
+│   │       ├── pushHelper.ts # Legacy push helper (superseded by pushNotifications.ts)
+│   │       └── pushNotifications.ts # Chunked expo-server-sdk push notifications utility
 │   └── uploads # Runtime uploaded media directory (gitignored)
 │
 ├── packages # Shared workspace libraries
