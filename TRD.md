@@ -118,7 +118,7 @@ Every tool listed below is either free, open-source, or covered by student credi
 | Auth | **Clerk** — Phone OTP (enable India in Clerk Dashboard → SMS Settings) | Free up to 10,000 MAU |
 | OTP Delivery | **Meta WhatsApp Cloud API** — called directly from Express backend | 1,000 free auth conversations/month |
 | Realtime | **Ably** via `IRealtimeProvider` — India edge nodes | 6M messages/month, 200 concurrent connections free |
-| Storage | **Uploadthing** via `IStorageProvider` — file uploads with Expo support | Free tier — 2GB storage, 500 uploads/month |
+| Storage | **Cloudflare R2** via `IStorageProvider` — S3-compatible private object storage, India PoPs | Free tier — 10GB storage, 1M ops/month, zero egress fees |
 | Push Notifications | Expo Push Service (server SDK) | Unlimited |
 | Rate Limiting + OTP Store | Upstash Redis via `@upstash/ratelimit` | 10,000 req/day free |
 | AI — Image Analysis | Gemini Flash Vision via `IAnalysisProvider` | 1,500 req/day free |
@@ -161,8 +161,9 @@ Client Apps (Mobile / Web)
          │       India edge nodes
          │       HMAC-suffixed channel names (V32)
          │
-         ├──▶ Uploadthing (Storage — via IStorageProvider)
-         │       Private files, expiring signed URLs
+         ├──▶ Cloudflare R2 (Storage — via IStorageProvider)
+         │       S3-compatible, India PoPs, private files, zero egress
+         │       Expiring presigned URLs (300s default — D1)
          │       EXIF stripped by Express before upload (V18)
          │
          ├──▶ Clerk (Auth session validation)
@@ -180,9 +181,9 @@ Client Apps (Mobile / Web)
 2. Custom backend queries PostgreSQL for online aggregators in the same `city_code` who handle the listed materials → dispatches push via Expo Push Service to all matching aggregators.
 3. Aggregator accepts → Express route runs `BEGIN; SELECT ... FOR UPDATE SKIP LOCKED WHERE id=$order_id AND status='created'; UPDATE ...; COMMIT;` (first-accept-wins). `Status→'accepted'`. Backend dispatches push to seller.
 4. Aggregator updates En Route → Custom backend updates `status→'en_route'` → publishes event to Ably channel → seller's app receives real-time update.
-5. Aggregator uploads scale photo → EXIF stripped by Express via `sharp` → uploaded to Uploadthing → Custom backend generates OTP, stores HMAC in Upstash Redis (TTL 10 min) → calls Meta WhatsApp Cloud API directly → OTP delivered to seller as WhatsApp authentication template message (free up to 1,000 conversations/month).
+5. Aggregator uploads scale photo → EXIF stripped by Express via `sharp` → uploaded to Cloudflare R2 via `IStorageProvider.upload()` → Custom backend generates OTP, stores HMAC in Upstash Redis (TTL 10 min) → calls Meta WhatsApp Cloud API directly → OTP delivered to seller as WhatsApp authentication template message (free up to 1,000 conversations/month).
 6. Seller reviews full transaction summary (material breakdown, confirmed weight, total amount) → Seller shares OTP with aggregator → Aggregator submits OTP → Express route validates: checks `aggregator_id = req.user.id`, validates OTP HMAC from Redis, updates `status='completed'` in a single transaction. `Status→'completed'` — the ONLY path to this status.
-7. Custom backend on completion: calls `pdf-lib` to generate GST receipt → writes `invoice_data JSONB` to `invoices` table → uploads PDF to Uploadthing at randomised path → stores signed URL reference in DB.
+7. Custom backend on completion: calls `pdf-lib` to generate GST receipt → writes `invoice_data JSONB` to `invoices` table → uploads PDF to Cloudflare R2 at randomised path via `IStorageProvider.upload()` → stores file key in `invoices.storage_path`.
 8. Custom backend schedules Expo push to both parties for rating prompt after 2-hour delay.
 
 ### 3.3 Real-time Chat Architecture
@@ -1019,7 +1020,7 @@ CREATE TABLE order_status_history (
 );
 
 -- Order media (storage_path is Uploadthing file key)
--- Order media (storage_path is Uploadthing file key)
+-- Order media (storage_path is Cloudflare R2 object key)
 -- order_id is NULL for KYC document rows — KYC is not linked to any order
 CREATE TABLE order_media (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1032,7 +1033,7 @@ CREATE TABLE order_media (
                   'kyc_shop',                           -- Shop exterior — aggregator_type='shop' only
                   'kyc_vehicle',                        -- Vehicle photo — aggregator_type='mobile' only
                   'invoice')),
-  storage_path TEXT NOT NULL,   -- Uploadthing file key — used to generate signed URLs
+  storage_path TEXT NOT NULL,   -- R2 object key — used to generate presigned URLs via IStorageProvider
   uploaded_by  UUID NOT NULL REFERENCES users(id),
   created_at   TIMESTAMPTZ DEFAULT NOW()
 )
@@ -1110,7 +1111,7 @@ CREATE TABLE dispute_evidence (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   dispute_id   UUID NOT NULL REFERENCES disputes(id),
   submitted_by UUID NOT NULL REFERENCES users(id),
-  storage_path TEXT NOT NULL,   -- Uploadthing file key
+  storage_path TEXT NOT NULL,   -- R2 object key
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -1133,7 +1134,7 @@ CREATE TABLE invoices (
   seller_gstin      TEXT,
   aggregator_details JSONB,
   total_amount      NUMERIC NOT NULL,
-  storage_path      TEXT,     -- Uploadthing file key for PDF (V27: randomised path)
+  storage_path      TEXT,     -- R2 object key for PDF (V27: randomised path suffix)
   invoice_data      JSONB NOT NULL DEFAULT '{}',  -- Legal record — PDF is rendering artifact
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1734,7 +1735,7 @@ Validate and strip all user-supplied strings before pdf-lib insertion. GSTIN mus
 
 #### D1 — Storage Access Control
 
-All Uploadthing files are stored as **private**. Express backend generates expiring signed URLs after verifying ownership of the `order_media` record. No file URL is ever returned directly to clients. Expiry: 5 minutes.
+All Cloudflare R2 files are stored in a **private bucket** (no public access). Express backend generates S3 presigned URLs (via `@aws-sdk/s3-request-presigner`) after verifying ownership of the `order_media` record. No file URL is ever returned directly to clients. Expiry: 5 minutes (300 seconds).
 
 #### D2 — Push Notification PII (unchanged)
 
@@ -1859,7 +1860,7 @@ Additional requirements:
 |---|---|---|---|---|
 | Ably Realtime | Cost ceiling | 30K DAU | `IRealtimeProvider` — swap to Soketi or Pusher | Interface built |
 | Clerk Auth | Phone hash coupling | Auth migration | `IAuthProvider` — re-enrollment required on swap | Interface built |
-| Uploadthing | File key format | Storage migration | `IStorageProvider` — bulk export available | Interface built |
+| Cloudflare R2 | S3 key format (standard) | Storage migration | `IStorageProvider` — S3-compatible, trivial to migrate to AWS S3 Mumbai if India jurisdiction lock required | Interface built |
 | Gemini Vision | Cost ceiling | 75K DAU | `IAnalysisProvider` — swap to OpenAI Vision | Interface built |
 | Expo Push Tokens | Token format | Native push migration | Dual-token storage (Expo + FCM/APNs raw tokens) | Build from Day 1 |
 | Meta WhatsApp | Cost ceiling | 1,000 OTPs/month | Enable paid Meta billing | Monitor from Day 1 |
@@ -1889,10 +1890,12 @@ export interface IAuthProvider {
 }
 
 // packages/storage/src/IStorageProvider.ts
+// Default implementation: R2StorageProvider (Cloudflare R2, S3-compatible)
+// Swap: set STORAGE_PROVIDER=s3 to switch to AWS S3 Mumbai (ap-south-1) for hard India jurisdiction
 export interface IStorageProvider {
-  upload(bucket: string, path: string, data: Buffer, opts?: object): Promise<string>;
-  getSignedUrl(bucket: string, path: string, expiresIn: number): Promise<string>;
-  delete(bucket: string, path: string): Promise<void>;
+  upload(bucket: string, path: string, data: Buffer, opts?: object): Promise<{ fileKey: string }>;
+  getSignedUrl(fileKey: string, expiresIn?: number): Promise<string>;  // default: 300s (D1)
+  delete(fileKey: string): Promise<void>;
 }
 
 // packages/analysis/src/IAnalysisProvider.ts
@@ -1919,7 +1922,8 @@ export interface IMapProvider {
 | `@clerk/clerk-sdk-node` | Clerk JWT verification on backend | Replaces Supabase Auth |
 | `@clerk/clerk-expo` | Clerk session management on mobile | Replaces Supabase JS client auth |
 | `ably` | Realtime WebSockets via IRealtimeProvider | Replaces Supabase Realtime |
-| `uploadthing` | File storage via IStorageProvider | Replaces Supabase Storage |
+| `@aws-sdk/client-s3` | Cloudflare R2 / S3-compatible storage via `IStorageProvider` | S3 SDK used for R2 (same SDK works for AWS S3 Mumbai swap) |
+| `@aws-sdk/s3-request-presigner` | Presigned URL generation (D1 — 300s default expiry) | — |
 | `expo` SDK 51+ | React Native framework | — |
 | `expo-notifications` | Push token registration (dual-token: Expo + native) | — |
 | `expo-server-sdk` | Server-side Expo push dispatch | Backend only |
@@ -1953,8 +1957,11 @@ export interface IMapProvider {
 | `DATABASE_URL` | Backend only | Azure PostgreSQL connection string (SSL required) |
 | `ABLY_API_KEY` | **Backend only** | Ably server API key — NEVER in client bundle |
 | ~~`NEXT_PUBLIC_ABLY_KEY`~~ | ~~Client apps~~ | **DEPRECATED for mobile** — mobile uses Ably Token Auth via `GET /api/realtime/token`. Removed from mobile `.env`. Web portal review required before Day 16. |
-| `UPLOADTHING_SECRET` | Backend only | Uploadthing secret key |
-| `UPLOADTHING_APP_ID` | Backend + Client | Uploadthing app identifier |
+| `R2_ACCOUNT_ID` | Backend only | Cloudflare account ID (used in endpoint URL) |
+| `R2_ACCESS_KEY_ID` | Backend only | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | Backend only | R2 API token secret key |
+| `R2_BUCKET_NAME` | Backend only | R2 bucket name (e.g. `sortt-storage`) |
+| `STORAGE_PROVIDER` | Backend only | `"r2"` (default) — set to `"s3"` to swap to AWS S3 Mumbai |
 | `OTP_HMAC_SECRET` | Backend only | HMAC-SHA256 key for OTP hashing (X3) |
 | `CHANNEL_HMAC_SECRET` | Backend only | HMAC key for Ably channel name suffix (V32) |
 | `META_WHATSAPP_TOKEN` | Backend only | Permanent System User access token from Meta Business Manager |

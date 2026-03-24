@@ -202,7 +202,7 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 - GST invoice generation is triggered for Business Mode seller transactions. For transactions exceeding ₹50,000 in value, generation is automatic.
 - GST invoice generated using the seller's GSTIN (mandatory for Business Mode sellers) and aggregator's details.
 - The invoice is template-based in v1 — full GST API integration is a v2 feature. In v1, a standard commercial template is sufficient; CA review is recommended but not a blocker for launch.
-- Invoice PDFs stored in private storage (Uploadthing) with randomised path suffix. Accessible only via 5-minute signed URL after server-side ownership verification (D1).
+- Invoice PDFs stored in private storage (Cloudflare R2) with randomised path suffix. Accessible only via 5-minute signed URL after server-side ownership verification (D1).
 - **Legal record:** The `invoices.invoice_data JSONB NOT NULL` column stores the structured invoice data for 6-year audit trail compliance under Indian GST law. The PDF is a rendering artifact only. This column must not be absent or `null` for any invoice record.
 
 > **Post-MVP (not in Days 4–17):** E-Way Bill generation (for bulk goods in transit) is **not** in the Days 4–17 build plan and is deferred to a future release.
@@ -359,7 +359,7 @@ All security constraints listed here are mandatory for MVP launch. Full technica
 - All API calls over HTTPS/TLS. SSL enforced at Azure PostgreSQL level (`sslmode=require`).
 - No personal phone numbers shared between users — all communication in-app. Phone numbers are stored only as HMAC-SHA256 hashes (`phone_hash` keyed on `PHONE_HASH_SECRET`). The hash is irreversible — rotation of `PHONE_HASH_SECRET` requires re-enrollment of all users.
 - OTP-based authentication for all users. OTPs delivered via **Meta WhatsApp Cloud API** (free tier: 1,000 authentication conversations/month). OTPs are generated server-side in the custom backend (Express on Azure App Service) using `crypto.randomInt`, stored only as HMAC-SHA256 hashes (keyed on `OTP_HMAC_SECRET`), and delivered directly to WhatsApp.
-- Scale photos, KYC documents, and GST invoices stored in **Uploadthing** private storage. All sensitive media served via short-lived signed URLs (5-minute expiry) generated server-side after ownership verification. No direct public file URLs exposed. See TRD v4.1 §14.5 (D1).
+- Scale photos, KYC documents, and GST invoices stored in **Cloudflare R2** private storage (S3-compatible; India PoPs in Mumbai, Hyderabad, Chennai). All sensitive media served via short-lived signed URLs (5-minute expiry) generated server-side after ownership verification. No direct public file URLs exposed. See TRD v4.1 §14.5 (D1).
 - **Admin panel security** is enforced via: IP allowlisting (`ADMIN_IP_ALLOWLIST` env var via Vercel Edge Middleware), 10-attempt lockout, 15-minute inactivity re-auth, and comprehensive `admin_audit_log` table for all admin actions. See TRD v4.1 §14.1 (X4).
 - Custom backend (Azure App Service) must verify **Clerk JWT** on every API route via middleware before processing any request — after Clerk validation, the middleware additionally re-fetches `user_type` and `is_active` from the DB (never trusts JWT claims for these fields — V7). See TRD v4.1 §14.1 (A1).
 - Push notification bodies must not include names, amounts, or location details visible on the device lock screen. Generic copy only; PII revealed in-app after authentication. See TRD v4.1 §5.2 (D2).
@@ -455,7 +455,7 @@ This document is a PRD only. Full technical architecture is in TRD v4.1.
 - **OTP delivery:** Meta WhatsApp Cloud API called directly from Express backend — zero cost up to 1,000 authentication conversations/month.
 - **Auth provider:** Clerk — handles session management, JWT issuance, and device sessions. India SMS/WhatsApp region must be enabled in Clerk Dashboard before launch.
 - **Realtime:** Ably — India edge nodes ensure low latency for order status updates and in-app chat. Mobile clients use Token Auth via `GET /api/realtime/token` (no raw Ably key in client bundle).
-- **Storage:** Uploadthing — private file storage with server-generated signed URLs for KYC documents, scale photos, and GST invoices.
+- **Storage:** Cloudflare R2 (S3-compatible) — private file storage with server-generated presigned URLs for KYC documents, scale photos, and GST invoices. Bucket region: Automatic (routes to India PoPs). Zero egress fees. Free tier: 10 GB storage, 1M operations/month.
 - **Database:** Azure PostgreSQL Flexible Server B1ms (Central India) — full relational schema with Row Level Security on every table. No PostGIS — geospatial matching uses `city_code` and `locality` text fields.
 - **Backend hosting:** Azure App Service (Central India, free tier) — all business logic, OTP generation, vendor API calls, and node-cron scheduled jobs.
 - **Scheduled jobs:** node-cron on Express (replaces pg_cron). Five jobs: aggregator culling (5 min), rating stats refresh (15 min), price cache refresh (daily 00:30 UTC), OTP log cleanup (nightly 02:00 UTC), message partition creation (25th of month).

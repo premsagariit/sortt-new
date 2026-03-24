@@ -9,7 +9,7 @@
 > - **Database:** Azure PostgreSQL Flexible Server B1ms (Central India — free on Azure for Students)
 > - **Auth:** Clerk (session management) + Meta WhatsApp OTP (delivery, called directly from Express)
 > - **Realtime:** Ably (via `IRealtimeProvider` — India edge nodes)
-> - **Storage:** Uploadthing (via `IStorageProvider`)
+> - **Storage:** Cloudflare R2 (via `IStorageProvider` — S3-compatible, India PoPs, zero egress fees)
 > - **Backend:** Express on Azure App Service (Central India — free tier)
 > - **Scheduler:** node-cron on Express (replaces pg_cron)
 > - **Atomic ops:** Express PostgreSQL transactions (replaces Supabase Edge Functions)
@@ -527,7 +527,7 @@
 - [x] `POST /api/aggregators/kyc` — Clerk JWT required, aggregator only:
   - Accept multipart fields: `aadhaar_front`, `aadhaar_back`, `selfie` (required for all); `shop_photo` OR `vehicle_photo` (required — conditional on `aggregator_type` read from DB, never from request body).
   - Strip EXIF via `sharp` on each file before any other processing (V18).
-  - Upload each stripped file to Uploadthing via `IStorageProvider.upload()`.
+  - Upload each stripped file to Cloudflare R2 via `IStorageProvider.upload()`.
   - INSERT one row per file to `order_media` with `order_id = NULL` and correct `media_type`: `kyc_aadhaar_front`, `kyc_aadhaar_back`, `kyc_selfie`, `kyc_shop` or `kyc_vehicle`.
   - `kyc_status` must NOT be set here — it stays `'pending'` (V35).
   - Return 200. Notify admin via push (generic copy only — D2).
@@ -764,7 +764,7 @@
 - [x] `POST /api/orders/:id/media` — Clerk JWT, order parties only:
   - Verify `req.user.id` is `seller_id` OR `aggregator_id` of the order. 403 otherwise.
   - Strip ALL EXIF metadata via `sharp(buffer).toBuffer()` before passing to anything (V18).
-  - Upload stripped buffer to Uploadthing via `IStorageProvider.upload()`. Store file key (not URL) in `order_media.storage_path`.
+  - Upload stripped buffer to Cloudflare R2 via `IStorageProvider.upload()`. Store file key (not URL) in `order_media.storage_path`.
   - INSERT to `order_media`.
   - For `media_type = 'scale_photo'`: generate 6-digit OTP, store HMAC in Redis (`otp:order:{orderId}`, TTL 600s), call Meta WhatsApp to send to seller.
 - [x] `GET /api/orders/:id/media/:mediaId/url` — Clerk JWT, order parties only:

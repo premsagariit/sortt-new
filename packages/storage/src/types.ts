@@ -1,7 +1,7 @@
 /**
  * IStorageProvider — Abstraction for file storage.
  * Critical (D1): No public URL method — all files private with signed URLs only.
- * Two implementations: UploadthingStorageProvider (default), StubStorageProvider.
+ * Two implementations: R2StorageProvider (default), S3StorageProvider (stub).
  */
 
 export interface IStorageProvider {

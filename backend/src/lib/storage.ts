@@ -2,6 +2,7 @@ import { createStorageProvider, type IStorageProvider as IProviderStorage } from
 
 export interface IStorageProvider {
     uploadFile(fileBuffer: Buffer, fileName: string, mimeType: string): Promise<string>;
+    getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string>;
 }
 
 export class ProviderStorageAdapter implements IStorageProvider {
@@ -16,6 +17,10 @@ export class ProviderStorageAdapter implements IStorageProvider {
         const path = `${safeMime}-${Date.now()}-${fileName}`;
         const uploaded = await this.provider.upload('kyc-media', path, fileBuffer);
         return uploaded.fileKey;
+    }
+
+    async getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string> {
+        return this.provider.getSignedUrl(fileKey, expiresInSeconds);
     }
 }
 

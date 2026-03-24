@@ -12,7 +12,6 @@ import { storageProvider } from '../../lib/storage';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import axios from 'axios';
-import { UTApi } from 'uploadthing/server';
 import { createClerkClient } from '@clerk/backend';
 import { createNotification } from '../../lib/notifications';
 import { channelName } from '../../utils/channelHelper';
@@ -28,11 +27,6 @@ const upload = multer({
     allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
   }
 });
-
-// Uploadthing API client for signed URLs (D1)
-const utapi = process.env.UPLOADTHING_TOKEN && !process.env.UPLOADTHING_TOKEN.startsWith('sk_live_xxxx')
-  ? new UTApi({ token: process.env.UPLOADTHING_TOKEN })
-  : null;
 
 const router = Router();
 
@@ -490,16 +484,7 @@ router.get('/:id/media/:mediaId/url', async (req, res) => {
 
     // D1: 5-minute signed URL — never return permanent URLs
     const expiresAt = new Date(Date.now() + 300_000).toISOString();
-    let url: string;
-
-    if (utapi && !storageKey.startsWith('/uploads/')) {
-      // Uploadthing signed URL
-      const result = await utapi.getSignedURL(storageKey, { expiresIn: 300 });
-      url = typeof result === 'string' ? result : (result as any).url;
-    } else {
-      // Local dev: serve relative path (no real expiry in dev mode)
-      url = `${process.env.API_BASE_URL || 'http://localhost:8080'}${storageKey}`;
-    }
+    const url = await storageProvider.getSignedUrl(storageKey, 300);
 
     return res.json({ url, expiresAt });
   } catch (e: any) {

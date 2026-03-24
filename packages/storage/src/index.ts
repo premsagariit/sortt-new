@@ -1,24 +1,18 @@
 ﻿import type { IStorageProvider } from './types';
-import { UploadthingStorageProvider } from './providers/UploadthingStorageProvider';
-import { StubStorageProvider } from './providers/StubStorageProvider';
+import { R2StorageProvider } from './providers/R2StorageProvider';
+import { S3StorageProvider } from './providers/S3StorageProvider';
 
 export { IStorageProvider } from './types';
-export { UploadthingStorageProvider } from './providers/UploadthingStorageProvider';
-export { StubStorageProvider } from './providers/StubStorageProvider';
+export { R2StorageProvider } from './providers/R2StorageProvider';
+export { S3StorageProvider } from './providers/S3StorageProvider';
 
 /**
  * Factory function to create storage provider based on environment variable.
  */
 export function createStorageProvider(): IStorageProvider {
-  const provider = process.env.STORAGE_PROVIDER || 'uploadthing';
-
-  if (provider === 'uploadthing') {
-    return new UploadthingStorageProvider();
+  const provider = process.env.STORAGE_PROVIDER ?? 'r2';
+  if (provider === 's3') {
+    return new S3StorageProvider();
   }
-
-  if (provider === 'stub') {
-    return new StubStorageProvider();
-  }
-
-  throw new Error(`Unknown storage provider: ${provider}`);
+  return new R2StorageProvider();
 }
