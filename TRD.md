@@ -41,6 +41,11 @@
 > - Seller earnings API regression fixed:
 >   - `/api/orders/earnings` route now registers before dynamic `/:id`, preventing UUID parse collisions when requesting earnings.
 >   - Seller home/profile lifetime earnings now resolve from completed orders endpoint without route collision failures.
+> - ✅ **Maps provider migration completed (Google → Ola):**
+>   - `packages/maps/src/providers/OlaMapsProvider.ts` now implements geocode/reverse + autocomplete helper.
+>   - `backend/src/routes/maps.ts` now exposes authenticated `GET /api/maps/geocode`, `GET /api/maps/reverse`, and `GET /api/maps/autocomplete`.
+>   - Mobile map rendering migrated from `react-native-maps` to MapLibre + Ola vector tiles with `apps/mobile/utils/mapAvailable.ts` gate (`MAP_RENDERING_AVAILABLE=false` default for Expo Go).
+>   - Aggregator route planner now supports store-backed order pins on MapLibre when rendering is enabled.
 
 
 ---
@@ -137,7 +142,7 @@ Every tool listed below is either free, open-source, or covered by student credi
 | Rate Limiting + OTP Store | Upstash Redis via `@upstash/ratelimit` | 10,000 req/day free |
 | AI — Image Analysis | Gemini Flash Vision via `IAnalysisProvider` | 1,500 req/day free |
 | AI — Price Scraper | Gemini Pro (Python agent, node-cron scheduled) | 50 req/day free |
-| Maps / Geocoding | Google Maps API via `IMapProvider` | $200 credit/month |
+| Maps / Geocoding | Ola Maps via `IMapProvider` + MapLibre tile rendering on mobile | Ola API key + mobile public tile key |
 | PDF Generation | pdf-lib (Node.js) | Free / open-source |
 | Icons | Phosphor Icons (MIT) | Free |
 | State Management | Zustand | Free |

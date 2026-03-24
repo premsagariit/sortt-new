@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import * as Location from 'expo-location';
 import { colors, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -30,6 +31,7 @@ export default function ActiveOrderDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
     const [showCancelModal, setShowCancelModal] = React.useState(false);
+    const [currentLocation, setCurrentLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
 
     const storeOrder = orders.find(o => o.orderId === id);
     useOrderChannel(
@@ -43,6 +45,50 @@ export default function ActiveOrderDetailScreen() {
             fetchOrder(id, true);
         }
     }, [id, fetchOrder]);
+
+    React.useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const permission = await Location.requestForegroundPermissionsAsync();
+                if (permission.status !== 'granted') return;
+                const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                if (!mounted) return;
+                setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+            } catch {
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    const distanceLabel = React.useMemo(() => {
+        const pickupLat = storeOrder?.pickupLat;
+        const pickupLng = storeOrder?.pickupLng;
+        if (
+            currentLocation &&
+            typeof pickupLat === 'number' &&
+            typeof pickupLng === 'number'
+        ) {
+            const toRad = (deg: number) => (deg * Math.PI) / 180;
+            const earthRadiusKm = 6371;
+            const deltaLat = toRad(pickupLat - currentLocation.latitude);
+            const deltaLng = toRad(pickupLng - currentLocation.longitude);
+            const a =
+                Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                Math.cos(toRad(currentLocation.latitude)) * Math.cos(toRad(pickupLat)) *
+                Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return `${(earthRadiusKm * c).toFixed(1)} km`;
+        }
+
+        if (typeof storeOrder?.liveDistanceKm === 'number') {
+            return `${storeOrder.liveDistanceKm.toFixed(1)} km`;
+        }
+
+        return '—';
+    }, [currentLocation, storeOrder?.pickupLat, storeOrder?.pickupLng, storeOrder?.liveDistanceKm]);
 
     const internalOrderId = storeOrder?.orderId ?? id ?? '';
     const displayOrderNumber = storeOrder?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
@@ -73,7 +119,7 @@ export default function ActiveOrderDetailScreen() {
     const computedTotal = itemRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const activeOrder = {
         id: displayOrderNumber,
-        distance: '—',
+        distance: distanceLabel,
         locality: storeOrder?.pickupLocality ?? '—',
         address: storeOrder?.pickupAddress ?? 'Address available after acceptance',
         window: storeOrder?.window ?? 'Flexible',

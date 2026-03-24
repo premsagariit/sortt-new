@@ -67,6 +67,11 @@
 - [x] Validation snapshots passed after updates:
   - [x] Backend type-check (`pnpm --filter backend type-check`)
   - [x] Workspace type-check (`pnpm type-check`)
+- [x] Google Maps → Ola Maps migration completed:
+  - [x] `packages/maps/src/providers/OlaMapsProvider.ts` implemented (geocode/reverse/autocomplete helper).
+  - [x] Backend maps routes now include authenticated autocomplete endpoint (`GET /api/maps/autocomplete`).
+  - [x] Mobile map rendering migrated to MapLibre + Ola tiles with `MAP_RENDERING_AVAILABLE` fallback gate for Expo Go.
+  - [x] Aggregator route planner map now renders store-backed order pins when map rendering is enabled.
 
 ---
 

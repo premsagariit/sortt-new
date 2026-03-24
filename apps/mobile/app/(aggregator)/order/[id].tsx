@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import * as Location from 'expo-location';
 import { colors, spacing, radius } from '../../../constants/tokens';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
@@ -36,6 +37,7 @@ export default function AggregatorOrderByIdScreen() {
 
   const [rates, setRates] = useState<any[]>([]);
   const [isBusy, setIsBusy] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const feedOrder = newOrders.find((o) => o.id === id);
 
@@ -49,6 +51,24 @@ export default function AggregatorOrderByIdScreen() {
       });
     }
   }, [id, fetchOrder]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!mounted) return;
+        setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      } catch {
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const internalOrderId = storeOrder?.orderId ?? id ?? '';
   const displayOrderNumber = storeOrder?.orderNumber ?? feedOrder?.orderNumber ?? `#${String(internalOrderId).slice(0, 8).toUpperCase()}`;
@@ -138,7 +158,29 @@ export default function AggregatorOrderByIdScreen() {
     return 0;
   }, [items, storeOrder, storeOrder?.estimatedAmount, feedOrder?.estimatedPrice]);
 
-  const orderDistance = typeof feedOrder?.distanceKm === 'number' ? `${feedOrder.distanceKm.toFixed(1)} km` : '—';
+  const orderDistance = useMemo(() => {
+    const pickupLat = storeOrder?.pickupLat;
+    const pickupLng = storeOrder?.pickupLng;
+
+    if (currentLocation && typeof pickupLat === 'number' && typeof pickupLng === 'number') {
+      const toRad = (deg: number) => (deg * Math.PI) / 180;
+      const earthRadiusKm = 6371;
+      const deltaLat = toRad(pickupLat - currentLocation.latitude);
+      const deltaLng = toRad(pickupLng - currentLocation.longitude);
+      const a =
+        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+        Math.cos(toRad(currentLocation.latitude)) * Math.cos(toRad(pickupLat)) *
+        Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return `${(earthRadiusKm * c).toFixed(1)} km`;
+    }
+
+    if (typeof feedOrder?.distanceKm === 'number' && feedOrder.distanceKm > 0) {
+      return `${feedOrder.distanceKm.toFixed(1)} km`;
+    }
+
+    return '—';
+  }, [currentLocation, storeOrder?.pickupLat, storeOrder?.pickupLng, feedOrder?.distanceKm]);
   const orderLocality = storeOrder?.pickupLocality ?? feedOrder?.locality ?? '—';
   const orderWindow = storeOrder?.window
     ?? feedOrder?.window

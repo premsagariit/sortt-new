@@ -38,9 +38,8 @@ export default function Step4Screen() {
     pickupType,
     scheduledDate,
     scheduledTime,
-    addressLine,
+    selectedAddressSnapshot,
     notes,
-    resetListing,
     customNames,
     submitListing,
   } = useListingStore();
@@ -137,10 +136,12 @@ export default function Step4Screen() {
       setShowSuccess(true);
     } else {
       const errStr = res.error || '';
-      if (errStr.includes('unsupported_city')) {
-        setErrorBanner('Service unavailable in this area');
-      } else if (errStr.includes('geocode_failed')) {
-        setErrorBanner('Address not found — please check and try again');
+      if (errStr.includes('selectedAddressId')) {
+        setErrorBanner('Please select a saved pickup address');
+      } else if (errStr.includes('selected_address_not_found')) {
+        setErrorBanner('Selected address was not found. Please reselect your address.');
+      } else if (errStr.includes('selected_address_missing_required_geodata')) {
+        setErrorBanner('Selected address is incomplete. Please edit and try again.');
       } else if (errStr.includes('429')) {
         setErrorBanner("You've reached the daily listing limit");
       } else {
@@ -271,7 +272,17 @@ export default function Step4Screen() {
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Address</Text>
                 <Text variant="caption" color={colors.slate} numberOfLines={2}>
-                  {pickupType === 'scheduled' ? addressLine || 'Flat 4B, Shanti Apartments...' : 'Store Drop-off'}
+                  {selectedAddressSnapshot
+                    ? [
+                        selectedAddressSnapshot.building_name,
+                        selectedAddressSnapshot.street,
+                        selectedAddressSnapshot.colony,
+                        selectedAddressSnapshot.city,
+                        selectedAddressSnapshot.pincode,
+                      ]
+                        .filter((part) => !!part && String(part).trim().length > 0)
+                        .join(', ')
+                    : 'No address selected'}
                 </Text>
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step3')}>

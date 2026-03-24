@@ -36,6 +36,7 @@ import {
   DMMono_500Medium,
 } from '@expo-google-fonts/dm-mono';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { setRealtimeTokenGetter } from '@sortt/realtime';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
 import { api, setApiTokenGetter, setApiUnauthorizedHandler } from '../lib/api';
 import { useAuthStore, type AuthState, setGlobalClerkSignOut } from '../store/authStore';
@@ -53,6 +54,7 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Set token getter IMMEDIATELY on first render with auth context available
     setApiTokenGetter(getToken);
+    setRealtimeTokenGetter(getToken);
     setApiUnauthorizedHandler(() => useAuthStore.getState().signOut());
     setGlobalClerkSignOut(signOut);
     // Mark as ready so child routes can render
@@ -60,6 +62,7 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
 
     return () => {
       setApiUnauthorizedHandler(null);
+      setRealtimeTokenGetter(null);
     };
   }, [getToken, signOut]);
 

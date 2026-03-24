@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
 
+type SelectedAddressSnapshot = {
+  id: string;
+  label: string;
+  building_name: string | null;
+  street: string | null;
+  colony: string | null;
+  city: string;
+  pincode: string;
+  pickup_locality: string | null;
+};
+
 export interface ListingState {
   // Step 1
   selectedMaterials: MaterialCode[];
@@ -16,7 +27,8 @@ export interface ListingState {
   pickupType: 'scheduled' | 'dropoff' | null;
   scheduledDate: string;
   scheduledTime: string;
-  addressLine: string;
+  selectedAddressId: string | null;
+  selectedAddressSnapshot: SelectedAddressSnapshot | null;
   notes: string;
 
   // Actions
@@ -28,7 +40,7 @@ export interface ListingState {
   setPickupType: (t: 'scheduled' | 'dropoff') => void;
   setScheduledDate: (d: string) => void;
   setScheduledTime: (t: string) => void;
-  setAddressLine: (a: string) => void;
+  setSelectedAddress: (address: SelectedAddressSnapshot | null) => void;
   setNotes: (n: string) => void;
   resetListing: () => void;
 
@@ -45,7 +57,8 @@ const initialState = {
   pickupType: null,
   scheduledDate: '',
   scheduledTime: '',
-  addressLine: '',
+  selectedAddressId: null,
+  selectedAddressSnapshot: null,
   notes: '',
 };
 
@@ -83,7 +96,11 @@ export const useListingStore = create<ListingState>((set, get) => ({
 
   setScheduledTime: (scheduledTime) => set({ scheduledTime }),
 
-  setAddressLine: (addressLine) => set({ addressLine }),
+  setSelectedAddress: (address) =>
+    set({
+      selectedAddressId: address?.id ?? null,
+      selectedAddressSnapshot: address,
+    }),
 
   setNotes: (notes) => set({ notes }),
 
@@ -104,7 +121,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
       const res = await api.post('/api/orders', {
         material_codes,
         estimated_weights,
-        pickup_address: state.addressLine,
+        selectedAddressId: state.selectedAddressId,
         pickup_preference,
         seller_note: state.notes || undefined,
       });

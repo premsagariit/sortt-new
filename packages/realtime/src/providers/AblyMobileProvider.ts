@@ -1,5 +1,6 @@
 import Ably from 'ably';
 import { IRealtimeProvider, RealtimeMessage } from '../types';
+import { getRealtimeToken } from '../authToken';
 
 type AblyMessageShape = {
   name?: string;
@@ -48,7 +49,14 @@ export class AblyMobileProvider implements IRealtimeProvider {
       callback: (error: unknown, tokenRequestOrToken?: AblyAuthPayload) => void
     ): Promise<void> => {
       try {
-        const response = await fetch(this.authUrl);
+        const token = await getRealtimeToken();
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const response = await fetch(this.authUrl, {
+          method: 'GET',
+          headers,
+        });
+
         if (!response.ok) {
           throw new Error(`Token endpoint returned ${response.status}`);
         }

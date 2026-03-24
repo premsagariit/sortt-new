@@ -9,9 +9,17 @@ type GoogleAddressComponent = {
 type GoogleGeocodeResult = {
   formatted_address: string;
   address_components: GoogleAddressComponent[];
+  geometry?: {
+    location?: {
+      lat?: number;
+      lng?: number;
+    };
+  };
 };
 
 type GoogleGeocodeResponse = {
+  status?: string;
+  error_message?: string;
   results: GoogleGeocodeResult[];
 };
 
@@ -24,60 +32,68 @@ export class GoogleMapsProvider implements IMapProvider {
   private apiKey: string;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      throw new Error('GOOGLE_MAPS_API_KEY environment variable is required');
+      throw new Error('GOOGLE_MAPS_API_KEY or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY environment variable is required');
     }
     this.apiKey = apiKey;
   }
 
+  private async requestGeocode(address: string): Promise<GoogleGeocodeResponse> {
+    const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+    url.searchParams.set('address', address);
+    url.searchParams.set('key', this.apiKey);
+    url.searchParams.set('region', 'in');
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`Google Maps API returned ${response.status}`);
+    }
+
+    return (await response.json()) as GoogleGeocodeResponse;
+  }
+
   async geocode(address: string): Promise<GeoResult> {
     try {
-      // V19: SSRF Prevention — use official Google API endpoint only
-      const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
-      url.searchParams.set('address', address);
-      url.searchParams.set('key', this.apiKey);
-      url.searchParams.set('region', 'in'); // Bias results to India
+      let data = await this.requestGeocode(address);
 
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        throw new Error(`Google Maps API returned ${response.status}`);
+      if (data.status === 'REQUEST_DENIED' || data.status === 'OVER_DAILY_LIMIT') {
+        throw new Error(`geocode_failed:${data.error_message || data.status}`);
       }
 
-      const data = (await response.json()) as GoogleGeocodeResponse;
+      if (!Array.isArray(data.results) || data.results.length === 0) {
+        const hasHydContext = /hyderabad|telangana|india/i.test(address);
+        if (!hasHydContext) {
+          data = await this.requestGeocode(`${address}, Hyderabad, Telangana, India`);
+        }
+      }
 
-      if (data.results.length === 0) {
-        throw new Error(`No results found for address: ${address}`);
+      if (!Array.isArray(data.results) || data.results.length === 0) {
+        throw new Error('geocode_failed');
       }
 
       const result = data.results[0];
+      const location = result.geometry?.location;
+      const lat = typeof location?.lat === 'number' ? location.lat : 0;
+      const lng = typeof location?.lng === 'number' ? location.lng : 0;
 
-      // Extract city code from administrative_area_level_1 (state)
-      const stateComponent = result.address_components.find(
-        (c: any) => c.types.includes('administrative_area_level_1')
+      const cityComponent = result.address_components.find(
+        (c: GoogleAddressComponent) =>
+          c.types.includes('locality') || c.types.includes('administrative_area_level_2')
       );
-      let city_code = 'unknown';
-      if (stateComponent) {
-        const stateName = stateComponent.short_name?.toLowerCase() || 'unknown';
-        // Map state short names to city codes (simplified)
-        const stateMap: Record<string, string> = {
-          ts: 'hyd', // Telangana → Hyderabad
-          ka: 'blr', // Karnataka → Bangalore
-          mh: 'mum', // Maharashtra → Mumbai
-          tn: 'chn', // Tamil Nadu → Chennai
-          dl: 'del', // Delhi
-          ap: 'viz', // Andhra Pradesh → Visakhapatnam
-        };
-        city_code = stateMap[stateName] || stateName;
-      }
+      const cityText = (cityComponent?.long_name || cityComponent?.short_name || '').toLowerCase();
+      const city_code = cityText.includes('hyderabad') || cityText.includes('secunderabad') ? 'HYD' : 'HYD';
 
       // Extract locality from locality or sublocality
       const localityComponent =
-        result.address_components.find((c: any) => c.types.includes('locality')) ||
-        result.address_components.find((c: any) => c.types.includes('sublocality'));
+        result.address_components.find((c: GoogleAddressComponent) => c.types.includes('sublocality_level_1')) ||
+        result.address_components.find((c: GoogleAddressComponent) => c.types.includes('sublocality')) ||
+        result.address_components.find((c: GoogleAddressComponent) => c.types.includes('locality'));
       const locality = localityComponent?.long_name || 'Unknown';
 
       return {
+        lat,
+        lng,
         city_code,
         locality,
         display_address: result.formatted_address,

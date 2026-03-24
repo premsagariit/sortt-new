@@ -4,6 +4,8 @@
  */
 
 export interface GeoResult {
+  lat: number;
+  lng: number;
   city_code: string;        // e.g., "hyd", "blr"
   locality: string;         // e.g., "Banjara Hills"
   display_address: string;  // e.g., "Banjara Hills, Hyderabad"

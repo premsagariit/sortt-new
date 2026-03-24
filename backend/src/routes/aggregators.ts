@@ -5,8 +5,39 @@ import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { verifyRole } from '../middleware/auth';
 import { storageProvider } from '../lib/storage';
+import { publishEvent } from '../lib/realtime';
+import { channelName } from '../utils/channelHelper';
 
 const router = Router();
+
+const toNumberOrNull = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim().length > 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+};
+
+const calculateDistanceKm = (
+    sourceLat: number,
+    sourceLng: number,
+    destinationLat: number,
+    destinationLng: number
+): number => {
+    const rad = (deg: number) => (deg * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+
+    const deltaLat = rad(destinationLat - sourceLat);
+    const deltaLng = rad(destinationLng - sourceLng);
+    const a =
+        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+        Math.cos(rad(sourceLat)) * Math.cos(rad(destinationLat)) *
+        Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return Number((earthRadiusKm * c).toFixed(2));
+};
 
 // Multer memory storage configuration
 const upload = multer({
@@ -263,6 +294,9 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
     const userId = (req as any).user.id;
     // Accept optional is_online from body — defaults to true for backward compatibility
     const isOnline = req.body?.is_online !== undefined ? Boolean(req.body.is_online) : true;
+    const orderId = typeof req.body?.order_id === 'string' ? req.body.order_id : null;
+    const latitude = toNumberOrNull(req.body?.latitude);
+    const longitude = toNumberOrNull(req.body?.longitude);
     try {
         await query(`
             INSERT INTO aggregator_availability (user_id, is_online, last_ping_at)
@@ -270,6 +304,43 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
             ON CONFLICT (user_id) DO UPDATE
                 SET is_online = $2, last_ping_at = NOW()
         `, [userId, isOnline]);
+
+        if (orderId && latitude != null && longitude != null) {
+            const orderRes = await query(
+                `SELECT id, seller_id, aggregator_id, status, pickup_lat, pickup_lng
+                   FROM orders
+                  WHERE id = $1
+                    AND aggregator_id = $2
+                    AND status IN ('accepted', 'en_route', 'arrived', 'weighing_in_progress')`,
+                [orderId, userId]
+            );
+
+            if (orderRes.rows.length > 0) {
+                const order = orderRes.rows[0];
+                const pickupLat = toNumberOrNull(order.pickup_lat);
+                const pickupLng = toNumberOrNull(order.pickup_lng);
+                const distanceKm =
+                    pickupLat != null && pickupLng != null
+                        ? calculateDistanceKm(latitude, longitude, pickupLat, pickupLng)
+                        : null;
+
+                const locationPayload = {
+                    orderId,
+                    aggregator_lat: latitude,
+                    aggregator_lng: longitude,
+                    distance_km: distanceKm,
+                    updatedAt: new Date().toISOString(),
+                };
+
+                if (order.seller_id) {
+                    await publishEvent(channelName(order.seller_id, 'order', orderId), 'location_updated', locationPayload);
+                }
+                if (order.aggregator_id) {
+                    await publishEvent(channelName(order.aggregator_id, 'order', orderId), 'location_updated', locationPayload);
+                }
+            }
+        }
+
         console.log(`[HEARTBEAT] User ${userId} status updated: online=${isOnline}`);
         return res.json({ success: true });
     } catch (e: any) {

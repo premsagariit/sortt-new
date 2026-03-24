@@ -54,6 +54,24 @@ export function useOrderChannel(
       }
     });
 
+    statusChannel.subscribe('location_updated', (msg) => {
+      const payload = msg.data as {
+        aggregator_lat?: number;
+        aggregator_lng?: number;
+        distance_km?: number;
+      };
+
+      if (typeof payload.aggregator_lat !== 'number' || typeof payload.aggregator_lng !== 'number') {
+        return;
+      }
+
+      useOrderStore.getState().updateOrderLiveLocation(orderId, {
+        aggregatorLat: payload.aggregator_lat,
+        aggregatorLng: payload.aggregator_lng,
+        liveDistanceKm: typeof payload.distance_km === 'number' ? payload.distance_km : null,
+      });
+    });
+
     // When the other party reads our messages, update local status to 'read'
     statusChannel.subscribe('messages_read', () => {
       if (selfId) {

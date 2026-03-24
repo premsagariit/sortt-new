@@ -54,14 +54,19 @@ export default function SellerHomeScreen() {
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const ordersLoading = useOrderStore((s) => s.isLoading);
+  const [lifetimeEarnings, setLifetimeEarnings] = useState<number | null>(null);
 
   // ── Live stats derived from store ──────────────────────────────
-  const totalEarned = useMemo(() => {
-    const sum = orders
+  const computedTotalEarned = useMemo(() => {
+    return orders
       .filter(o => o.status === 'completed')
       .reduce((acc, o) => acc + getOrderDisplayAmount(o), 0);
-    return sum > 0 ? `₹${sum.toLocaleString('en-IN')}` : '₹0';
   }, [orders]);
+
+  const totalEarned = useMemo(() => {
+    const value = lifetimeEarnings ?? computedTotalEarned;
+    return value > 0 ? `₹${value.toLocaleString('en-IN')}` : '₹0';
+  }, [lifetimeEarnings, computedTotalEarned]);
   const ordersCount = String(orders.length).padStart(2, '0');
   const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
   const activeCount = String(activeOrders.length).padStart(2, '0');
@@ -79,6 +84,15 @@ export default function SellerHomeScreen() {
   // ── Live rates from GET /api/rates ─────────────────────────────
   const [rates, setRates] = useState<RateEntry[]>([]);
   const [ratesLoading, setRatesLoading] = useState(false);
+  const fetchLifetimeEarnings = useCallback(async () => {
+    try {
+      const res = await api.get('/api/orders/earnings');
+      setLifetimeEarnings(Number(res.data?.total_earned ?? 0));
+    } catch {
+      setLifetimeEarnings(null);
+    }
+  }, []);
+
   const fetchRates = useCallback(async (silent = false) => {
     if (!silent) setRatesLoading(true);
     try {
@@ -94,22 +108,25 @@ export default function SellerHomeScreen() {
     fetchMe();
     fetchOrders();
     fetchRates();
+    fetchLifetimeEarnings();
 
     // Auto-refresh: poll every 30s — silent so no loading flash
     const poll = setInterval(() => {
       fetchOrders(true);
       fetchRates(true);
+      fetchLifetimeEarnings();
     }, 30_000);
 
     return () => clearInterval(poll);
-  }, [fetchMe, fetchOrders, fetchRates]);
+  }, [fetchMe, fetchOrders, fetchRates, fetchLifetimeEarnings]);
 
   // Re-fetch silently when tab gains focus
   useFocusEffect(
     useCallback(() => {
       fetchOrders(true);
       fetchRates(true);
-    }, [fetchOrders, fetchRates])
+      fetchLifetimeEarnings();
+    }, [fetchOrders, fetchRates, fetchLifetimeEarnings])
   );
 
   const calculateEstimate = useCallback((order: any) => {

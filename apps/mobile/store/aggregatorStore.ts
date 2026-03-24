@@ -191,7 +191,12 @@ interface AggregatorStoreState {
   /** POST /api/orders/:id/accept */
   acceptOrderApi: (orderId: string) => Promise<void>;
   /** PATCH /api/orders/:id/status */
-  updateOrderStatusApi: (orderId: string, status: Extract<OrderStatus, 'en_route' | 'arrived' | 'weighing_in_progress'>, note?: string) => Promise<void>;
+  updateOrderStatusApi: (
+    orderId: string,
+    status: Extract<OrderStatus, 'en_route' | 'arrived' | 'weighing_in_progress'>,
+    note?: string,
+    location?: { latitude: number; longitude: number } | null
+  ) => Promise<void>;
   /** POST /api/orders/:id/finalize-weighing */
   finalizeWeighingApi: (
     orderId: string,
@@ -716,12 +721,13 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   },
 
   // ── Async: PATCH /api/orders/:orderId/status ──────────────────
-  updateOrderStatusApi: async (orderId, status, note) => {
+  updateOrderStatusApi: async (orderId, status, note, location) => {
     set({ isLoading: true, error: null });
     try {
       await api.patch(`/api/orders/${orderId}/status`, {
         status,
         ...(note ? { note } : {}),
+        ...(location ? { aggregator_lat: location.latitude, aggregator_lng: location.longitude } : {}),
       });
 
       const { useOrderStore } = require('./orderStore');

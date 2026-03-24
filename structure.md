@@ -8,6 +8,10 @@
 │   │   └── `apps/mobile/app/(seller)/order/[id].tsx` (resilient live tracking map gating + fallback)
 │   ├── Order live-location field preservation in `apps/mobile/store/orderStore.ts`
 │   └── Seller earnings route collision fix in `backend/src/routes/orders/index.ts` (`/earnings` before `/:id`)
+│   ├── Maps migration completed: Google Maps → Ola Maps provider implementation in `packages/maps/src/providers/OlaMapsProvider.ts`
+│   ├── Backend maps route expansion in `backend/src/routes/maps.ts` (`/geocode`, `/reverse`, `/autocomplete`)
+│   ├── Mobile map rendering migrated to MapLibre + Ola tiles with Expo Go-safe gate in `apps/mobile/utils/mapAvailable.ts`
+│   └── Provider-aware external map navigation helper added at `apps/mobile/utils/mapNavigation.ts`
 │
 ├── MEMORY.md # Authoritative project memory, decisions, and lessons learned
 ├── PLAN.md # Master execution roadmap with status checkpoints

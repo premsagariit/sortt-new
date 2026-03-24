@@ -26,9 +26,9 @@ class MapProviderAdapter implements IMapProvider {
   }> {
     const result = await this.provider.geocode(addressText);
     return {
-      lat: 0,
-      lng: 0,
-      cityCode: result.city_code,
+      lat: result.lat,
+      lng: result.lng,
+      cityCode: result.city_code.toUpperCase(),
       locality: result.locality,
       formattedAddress: result.display_address,
     };

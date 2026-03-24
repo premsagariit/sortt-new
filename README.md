@@ -50,11 +50,14 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 - `scraper/.env`
 
 - `CLERK_SECRET_KEY`: Backend auth verification.
-- `GOOGLE_MAPS_API_KEY`: Geocoding and map services.
+- `OLA_MAPS_API_KEY`: Backend geocoding/routing key (Ola Maps).
+- `EXPO_PUBLIC_OLA_MAPS_API_KEY`: Mobile tile-rendering key for Ola vector style.
 - `EXPO_ACCESS_TOKEN`: EAS deployments and updates.
 - `DATABASE_URL`: Azure PostgreSQL connection string.
 - `REDIS_URL`: Upstash Redis for rate limiting.
 - `MAP_PROVIDER`: Backend map provider switch (`google` | `ola`).
+- `EXPO_PUBLIC_MAP_PROVIDER`: Mobile provider switch (`ola` default).
+- `EXPO_PUBLIC_MAP_RENDERING_AVAILABLE`: `false` by default for Expo Go fallback; enable `true` in dev build with native MapLibre module.
 - `REALTIME_PROVIDER`: Realtime provider switch (`ably` | `soketi`).
 - `SOKETI_URL`: Soketi websocket URL (required when `REALTIME_PROVIDER=soketi`).
 
@@ -145,6 +148,13 @@ pnpm dev:backend
 - No additional installation or startup commands are required.
 
 ✅ Validation: `pnpm type-check` exits 0 at workspace root.
+
+✅ Google → Ola maps migration completed (2026-03-25):
+- `packages/maps/src/providers/OlaMapsProvider.ts` now implements geocode + reverse geocode + autocomplete.
+- `backend/src/routes/maps.ts` now exposes authenticated `GET /api/maps/geocode`, `GET /api/maps/reverse`, and `GET /api/maps/autocomplete`.
+- Mobile map rendering now uses MapLibre + Ola style URL with safe gate fallback (`apps/mobile/utils/mapAvailable.ts`).
+- Updated map screens: `address-map`, `address-form`, seller order live tracking, aggregator execution navigate, and aggregator route planner.
+- External route launch is provider-aware via `apps/mobile/utils/mapNavigation.ts` (no hardcoded Google URLs in screens).
 
 ---
 

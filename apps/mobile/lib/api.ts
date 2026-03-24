@@ -7,13 +7,27 @@ import { Platform } from 'react-native';
  * This prevents the double /api/api/ bug when env var or fallback has /api appended.
  */
 export const getBaseUrl = (): string => {
-  const raw =
-    process.env.EXPO_PUBLIC_API_URL ||
-    (__DEV__ ? 'http://192.168.1.100:8080' : 'https://api.sortt.com');
+  let baseUrl: string | undefined;
+
+  // Priority 1: Use environment variable if set
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    baseUrl = process.env.EXPO_PUBLIC_API_URL;
+  }
+  // Priority 2: Development mode — use hardcoded local IP, with Android special case
+  else if (__DEV__) {
+    let host = '192.168.1.100';
+    if (Platform.OS === 'android') {
+      host = '10.0.2.2';
+    }
+    baseUrl = `http://${host}:8080`;
+  }
+  // Priority 3: Production URL
+  else {
+    baseUrl = 'https://api.sortt.com';
+  }
 
   // Strip trailing /api or /api/ defensively — prevents double /api/api/ paths
-  // regardless of whether the env var was set with or without the suffix.
-  return raw.replace(/\/api\/?$/, '');
+  return (baseUrl ?? 'https://api.sortt.com').replace(/\/api\/?$/, '');
 };
 
 export const api = axios.create({

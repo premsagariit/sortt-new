@@ -1,22 +1,16 @@
-/**
- * app/(seller)/listing/step3.tsx
- * ──────────────────────────────────────────────────────────────────
- * Step 3: Pickup Preference
- * ──────────────────────────────────────────────────────────────────
- */
-
 import React from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Truck, Storefront, MapPin, Calendar, ArrowRight } from 'phosphor-react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { Truck, Storefront, MapPin, Calendar, ArrowRight, Plus } from 'phosphor-react-native';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
-import { PrimaryButton } from '../../../components/ui/Button';
+import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
 import { colors, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
+import { useAddressStore } from '../../../store/addressStore';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { safeBack } from '../../../utils/navigation';
@@ -30,19 +24,76 @@ const TIMES = [
   { label: 'Evening · 6 PM+', value: 'evening_6_plus' },
 ];
 
+const formatAddress = (address: {
+  building_name: string | null;
+  street: string | null;
+  colony: string | null;
+  city: string;
+  pincode: string;
+}) => {
+  return [address.building_name, address.street, address.colony, address.city, address.pincode]
+    .filter((part) => !!part && String(part).trim().length > 0)
+    .join(', ');
+};
+
 export default function Step3Screen() {
   const {
     pickupType,
     scheduledDate,
     scheduledTime,
-    addressLine,
+    selectedAddressId,
+    selectedAddressSnapshot,
     setPickupType,
     setScheduledDate,
     setScheduledTime,
-    setAddressLine,
+    setSelectedAddress,
   } = useListingStore();
 
+  const addresses = useAddressStore((state) => state.addresses);
+  const loadingAddresses = useAddressStore((state) => state.loading);
+  const fetchAddresses = useAddressStore((state) => state.fetchAddresses);
+
   const [showDatePicker, setShowDatePicker] = React.useState(false);
+  const [showAddressSelector, setShowAddressSelector] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void fetchAddresses();
+    }, [fetchAddresses])
+  );
+
+  React.useEffect(() => {
+    if (selectedAddressId) {
+      const selected = addresses.find((item) => item.id === selectedAddressId);
+      if (selected) {
+        setSelectedAddress({
+          id: selected.id,
+          label: selected.label,
+          building_name: selected.building_name,
+          street: selected.street,
+          colony: selected.colony,
+          city: selected.city,
+          pincode: selected.pincode,
+          pickup_locality: selected.pickup_locality,
+        });
+      }
+      return;
+    }
+
+    const defaultAddress = addresses.find((item) => item.is_default) || addresses[0];
+    if (defaultAddress) {
+      setSelectedAddress({
+        id: defaultAddress.id,
+        label: defaultAddress.label,
+        building_name: defaultAddress.building_name,
+        street: defaultAddress.street,
+        colony: defaultAddress.colony,
+        city: defaultAddress.city,
+        pincode: defaultAddress.pincode,
+        pickup_locality: defaultAddress.pickup_locality,
+      });
+    }
+  }, [addresses, selectedAddressId, setSelectedAddress]);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -53,11 +104,9 @@ export default function Step3Screen() {
     }
   };
 
-
-  // Validation
   const canProceed =
-    pickupType === 'dropoff' ||
-    (pickupType === 'scheduled' && scheduledDate && scheduledTime && addressLine.trim().length > 0);
+    !!selectedAddressId &&
+    (pickupType === 'dropoff' || (pickupType === 'scheduled' && !!scheduledDate && !!scheduledTime));
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -75,7 +124,6 @@ export default function Step3Screen() {
             <Text variant="heading">Pickup preference</Text>
           </View>
 
-          {/* Type Selection */}
           <View style={styles.typeRow}>
             <Pressable
               style={[styles.typeCard, pickupType === 'scheduled' ? styles.typeSelected : styles.typeUnselected]}
@@ -104,84 +152,91 @@ export default function Step3Screen() {
             </Pressable>
           </View>
 
-          {/* Scheduled Details */}
-          {pickupType === 'scheduled' && (
-            <View style={styles.detailsContainer}>
-              <Text variant="subheading" style={styles.sectionTitle}>Pickup Address</Text>
-              <TextInput
-                style={styles.addressArea}
-                value={addressLine}
-                onChangeText={setAddressLine}
-                placeholder="Enter complete address"
-                multiline
-              />
+          <View style={styles.detailsContainer}>
+            <View style={styles.addressHeaderRow}>
+              <Text variant="subheading">Saved Pickup Address</Text>
+              <Pressable onPress={() => router.push('/(seller)/addresses' as any)}>
+                <Text variant="caption" color={colors.red}>Manage</Text>
+              </Pressable>
+            </View>
 
-              <View style={styles.mapPlaceholder}>
-                <MapPin size={32} color={colors.red} weight="fill" />
-                <Text variant="caption" color={colors.slate} style={styles.mapPinText}>Tap to adjust pin</Text>
-              </View>
-
-              <Text variant="subheading" style={styles.sectionTitle}>Preferred Date</Text>
-
-              {Platform.OS === 'ios' ? (
-                <View style={styles.iosPickerContainer}>
-                  <DateTimePicker
-                    value={scheduledDate ? new Date(scheduledDate) : new Date()}
-                    mode="date"
-                    display="inline"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                  />
-                </View>
-              ) : (
+            <Pressable style={styles.addressCard} onPress={() => setShowAddressSelector(true)}>
+              {selectedAddressSnapshot ? (
                 <>
-                  <Pressable
-                    style={styles.datePickerBtn}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text variant="body" color={scheduledDate ? colors.navy : colors.muted}>
-                      {scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Select Date'}
-                    </Text>
-                    <Calendar size={20} color={colors.navy} />
-                  </Pressable>
-                  {showDatePicker && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <MapPin size={16} color={colors.navy} />
+                    <Text variant="label" color={colors.navy}>{selectedAddressSnapshot.label}</Text>
+                  </View>
+                  <Text variant="caption" color={colors.slate} numberOfLines={2}>
+                    {formatAddress(selectedAddressSnapshot)}
+                  </Text>
+                </>
+              ) : (
+                <Text variant="caption" color={colors.muted}>
+                  {loadingAddresses ? 'Loading saved addresses...' : 'Select a saved address to continue'}
+                </Text>
+              )}
+            </Pressable>
+
+            {!selectedAddressId && !loadingAddresses ? (
+              <SecondaryButton
+                label="Add New Address"
+                icon={<Plus size={14} color={colors.navy} weight="bold" />}
+                onPress={() => router.push('/(seller)/address-map' as any)}
+              />
+            ) : null}
+
+            {pickupType === 'scheduled' && (
+              <>
+                <Text variant="subheading" style={styles.sectionTitle}>Preferred Date</Text>
+
+                {Platform.OS === 'ios' ? (
+                  <View style={styles.iosPickerContainer}>
                     <DateTimePicker
                       value={scheduledDate ? new Date(scheduledDate) : new Date()}
                       mode="date"
-                      display="calendar"
+                      display="inline"
                       onChange={handleDateChange}
                       minimumDate={new Date()}
                     />
-                  )}
-                </>
-              )}
+                  </View>
+                ) : (
+                  <>
+                    <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
+                      <Text variant="body" color={scheduledDate ? colors.navy : colors.muted}>
+                        {scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Select Date'}
+                      </Text>
+                      <Calendar size={20} color={colors.navy} />
+                    </Pressable>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={scheduledDate ? new Date(scheduledDate) : new Date()}
+                        mode="date"
+                        display="calendar"
+                        onChange={handleDateChange}
+                        minimumDate={new Date()}
+                      />
+                    )}
+                  </>
+                )}
 
-              <Text variant="subheading" style={styles.sectionTitle}>Preferred Time</Text>
-              <View style={styles.timeGrid}>
-                {TIMES.map((t) => (
-                  <Pressable
-                    key={t.label}
-                    style={[styles.timeChip, scheduledTime === t.value ? styles.chipSelected : styles.chipUnselected]}
-                    onPress={() => setScheduledTime(t.value)}
-                  >
-                    <Text variant="caption" style={{ color: scheduledTime === t.value ? colors.surface : colors.navy, textAlign: 'center' }}>
-                      {t.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {pickupType === 'dropoff' && (
-            <View style={styles.detailsContainer}>
-              <View style={styles.mapPlaceholder}>
-                <Text variant="caption" color={colors.slate}>Drop-off at nearest aggregator</Text>
-                <Text variant="caption" color={colors.muted} style={{ marginTop: 4 }}>Aggregator mapping logic coming soon</Text>
-              </View>
-            </View>
-          )}
-
+                <Text variant="subheading" style={styles.sectionTitle}>Preferred Time</Text>
+                <View style={styles.timeGrid}>
+                  {TIMES.map((timeSlot) => (
+                    <Pressable
+                      key={timeSlot.label}
+                      style={[styles.timeChip, scheduledTime === timeSlot.value ? styles.chipSelected : styles.chipUnselected]}
+                      onPress={() => setScheduledTime(timeSlot.value)}
+                    >
+                      <Text variant="caption" style={{ color: scheduledTime === timeSlot.value ? colors.surface : colors.navy, textAlign: 'center' }}>
+                        {timeSlot.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
@@ -193,6 +248,50 @@ export default function Step3Screen() {
           />
         </View>
       </View>
+
+      <Modal
+        visible={showAddressSelector}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddressSelector(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAddressSelector(false)}>
+          <Pressable style={styles.modalContent} onPress={(event) => event.stopPropagation()}>
+            <Text variant="subheading" style={{ marginBottom: spacing.md }}>Select Address</Text>
+
+            {addresses.map((address) => (
+              <Pressable
+                key={address.id}
+                style={[styles.modalAddressCard, selectedAddressId === address.id && styles.modalAddressCardSelected]}
+                onPress={() => {
+                  setSelectedAddress({
+                    id: address.id,
+                    label: address.label,
+                    building_name: address.building_name,
+                    street: address.street,
+                    colony: address.colony,
+                    city: address.city,
+                    pincode: address.pincode,
+                    pickup_locality: address.pickup_locality,
+                  });
+                  setShowAddressSelector(false);
+                }}
+              >
+                <Text variant="label" color={colors.navy}>{address.label}</Text>
+                <Text variant="caption" color={colors.slate} numberOfLines={2}>{formatAddress(address)}</Text>
+              </Pressable>
+            ))}
+
+            <SecondaryButton
+              label="Add New Address"
+              onPress={() => {
+                setShowAddressSelector(false);
+                router.push('/(seller)/address-map' as any);
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -232,25 +331,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
-
   detailsContainer: {
     gap: spacing.sm,
+  },
+  addressHeaderRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addressCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
   sectionTitle: {
     marginTop: spacing.md,
     marginBottom: 4,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  dateChip: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 20,
-    borderWidth: 1,
-    minWidth: 64,
   },
   timeGrid: {
     flexDirection: 'row',
@@ -272,34 +372,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
-  mapPlaceholder: {
-    backgroundColor: colors.surface,
-    height: 120,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-    position: 'relative',
-  },
-  mapPinText: {
-    position: 'absolute',
-    bottom: spacing.sm,
-    right: spacing.sm,
-  },
-  addressArea: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.btn,
-    padding: spacing.md,
-    color: colors.navy,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-
-
   footer: {
     padding: spacing.lg,
     paddingTop: spacing.sm,
@@ -321,5 +393,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     minHeight: 56,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.blackAlpha3,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    maxHeight: '75%',
+  },
+  modalAddressCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  modalAddressCardSelected: {
+    borderColor: colors.navy,
+    backgroundColor: colors.navyAlpha3,
   },
 });

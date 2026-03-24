@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Animated, BackHandler, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Animated, BackHandler } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CheckCircle, Clock, CaretLeft } from 'phosphor-react-native';
+import { CheckCircle, Clock } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
@@ -16,7 +16,7 @@ type ConfirmState = 'waiting' | 'verified';
 export default function ConfirmScreen() {
     const [state, setState] = useState<ConfirmState>('waiting');
     const insets = useSafeAreaInsets();
-    const pulseAnim = new Animated.Value(1);
+    const pulseAnim = React.useRef(new Animated.Value(1)).current;
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
     const { executionDraftByOrderId } = useAggregatorStore();
@@ -81,7 +81,7 @@ export default function ConfirmScreen() {
             <NavBar
                 variant="light"
                 title={state === 'waiting' ? `Order ${displayOrderNumber}` : 'Pickup Confirmation'}
-                onBack={state === 'waiting' ? () => router.back() : undefined}
+                onBack={undefined}
             />
 
             <View style={styles.content}>

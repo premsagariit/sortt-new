@@ -8,9 +8,10 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
-import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
+import { useOrderStore } from '../../store/orderStore';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { useNotificationStore } from '../../store/notificationStore';
+import { api } from '../../lib/api';
 
 interface InfoRowProps {
   icon: React.ReactNode;
@@ -54,6 +55,7 @@ export default function SellerProfileScreen() {
   const fetchMe = useAuthStore((s) => s.fetchMe);
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
+  const [lifetimeEarnings, setLifetimeEarnings] = useState<number | null>(null);
   
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [heroHeight, setHeroHeight] = useState(300);
@@ -65,15 +67,22 @@ export default function SellerProfileScreen() {
     React.useCallback(() => {
       fetchMe();
       fetchOrders(true);
+      void (async () => {
+        try {
+          const res = await api.get('/api/orders/earnings');
+          setLifetimeEarnings(Number(res.data?.total_earned ?? 0));
+        } catch {
+          setLifetimeEarnings(null);
+        }
+      })();
     }, [fetchMe, fetchOrders])
   );
 
   const isBusinessMode = authStore.accountType === 'business';
 
   // Computed stats from real store data
-  const completedOrders = orders.filter(o => o.status === 'completed');
-  const totalEarned = completedOrders.reduce((acc, o) => acc + getOrderDisplayAmount(o), 0);
-  const totalPickups = completedOrders.length;
+  const totalPickups = orders.filter(o => o.status === 'completed').length;
+  const totalEarned = lifetimeEarnings ?? 0;
 
   const liveName = authStore.name || 'Sortt User';
   const liveLocation = authStore.locality && authStore.city 
@@ -171,7 +180,7 @@ export default function SellerProfileScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
-                <Text variant="caption" style={styles.statLabelHero}>Pickups</Text>
+                <Text variant="caption" style={styles.statLabelHero}>Total Orders</Text>
                 <Numeric size={20} color={colors.surface}>
                   {totalPickups || 0}
                 </Numeric>
@@ -220,6 +229,10 @@ export default function SellerProfileScreen() {
           <InfoRow
             rowKey="listings" icon={<ClipboardText size={22} color={colors.navy} />} title="My Listings" subtitle="Active and past requests"
             onPress={() => router.push({ pathname: '/(seller)/orders', params: { tab: 'All' } })}
+          />
+          <InfoRow
+            rowKey="addresses" icon={<MapPin size={22} color={colors.navy} />} title="Saved Addresses" subtitle="Manage pickup addresses"
+            onPress={() => router.push('/(seller)/addresses' as any)}
           />
           <InfoRow
             rowKey="earnings" icon={<CurrencyInr size={22} color={colors.navy} />} title="Earnings Summary" subtitle="Payouts and history"

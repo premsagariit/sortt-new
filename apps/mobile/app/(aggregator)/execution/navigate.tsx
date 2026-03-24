@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Location from 'expo-location';
 import { Globe, Phone, ChatCenteredText, MapPin } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
@@ -14,10 +15,19 @@ import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore } from '../../../store/chatStore';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { api } from '../../../lib/api';
+import { MAP_RENDERING_AVAILABLE } from '../../../utils/mapAvailable';
+import { getMapLibreModule } from '../../../lib/maplibre';
+import { OLA_TILE_STYLE_URL } from '../../../lib/olaMaps';
+import { openExternalDirections } from '../../../utils/mapNavigation';
 
 export default function NavigateScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [resolvedPickupCoords, setResolvedPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+    const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
+    const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
     const insets = useSafeAreaInsets();
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
@@ -40,6 +50,116 @@ export default function NavigateScreen() {
         }
     }, [order?.status]);
 
+    React.useEffect(() => {
+        let isMounted = true;
+
+        const resolvePickupCoords = async () => {
+            if (order?.pickupLat != null && order?.pickupLng != null) {
+                setResolvedPickupCoords({ latitude: order.pickupLat, longitude: order.pickupLng });
+                return;
+            }
+
+            const addressText = (order?.pickupAddress ?? '').trim();
+            if (!addressText) {
+                setResolvedPickupCoords(null);
+                return;
+            }
+
+            try {
+                const geocodeRes = await api.get('/api/maps/geocode', { params: { address: addressText } });
+                const lat = Number(geocodeRes.data?.lat);
+                const lng = Number(geocodeRes.data?.lng);
+                if (!isMounted) return;
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    setResolvedPickupCoords({ latitude: lat, longitude: lng });
+                    return;
+                }
+            } catch {
+                try {
+                    const geocoded = await Location.geocodeAsync(addressText);
+                    if (!isMounted) return;
+                    if (Array.isArray(geocoded) && geocoded.length > 0) {
+                        setResolvedPickupCoords({ latitude: geocoded[0].latitude, longitude: geocoded[0].longitude });
+                        return;
+                    }
+                } catch {
+                }
+            }
+
+            if (isMounted) setResolvedPickupCoords(null);
+        };
+
+        void resolvePickupCoords();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [order?.pickupLat, order?.pickupLng, order?.pickupAddress]);
+
+    React.useEffect(() => {
+        let subscription: Location.LocationSubscription | null = null;
+        let mounted = true;
+        const terminalStatuses: ReadonlyArray<string> = ['arrived', 'weighing_in_progress', 'completed', 'cancelled', 'disputed'];
+
+        const startTracking = async () => {
+            try {
+                const permission = await Location.requestForegroundPermissionsAsync();
+                if (permission.status !== 'granted') return;
+
+                const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                if (!mounted) return;
+
+                const firstPoint = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
+                setCurrentLocation(firstPoint);
+
+                if (id) {
+                    await api.post('/api/aggregators/heartbeat', {
+                        is_online: true,
+                        order_id: id,
+                        latitude: firstPoint.latitude,
+                        longitude: firstPoint.longitude,
+                    }).catch(() => {});
+                }
+
+                subscription = await Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.Balanced,
+                        timeInterval: 8000,
+                        distanceInterval: 20,
+                    },
+                    (position) => {
+                        if (terminalStatuses.includes(order?.status ?? '')) {
+                            return;
+                        }
+
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        setCurrentLocation({ latitude, longitude });
+
+                        if (id) {
+                            api.post('/api/aggregators/heartbeat', {
+                                is_online: true,
+                                order_id: id,
+                                latitude,
+                                longitude,
+                            }).catch(() => {
+                                // keep non-blocking; heartbeat retries on next location tick
+                            });
+                        }
+                    }
+                );
+            } catch {
+            }
+        };
+
+        void startTracking();
+
+        return () => {
+            mounted = false;
+            if (subscription) subscription.remove();
+        };
+    }, [id, order?.status]);
+
     const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
     const navUserId = useAuthStore((s: any) => s.userId);
     const chatUnread = useChatStore((state) => {
@@ -60,7 +180,11 @@ export default function NavigateScreen() {
         setErrorMsg(null);
 
         try {
-            await updateOrderStatusApi(internalOrderId, nextStatus);
+            await updateOrderStatusApi(internalOrderId, nextStatus, undefined, currentLocation);
+
+            if (nextStatus === 'en_route') {
+                await openNavigationRoute();
+            }
 
             if (nextStatus === 'arrived') {
                 router.push(`/(aggregator)/execution/weighing/${internalOrderId}` as any);
@@ -77,9 +201,35 @@ export default function NavigateScreen() {
     const displaySeller = order?.sellerName ?? 'Seller';
     const displayPhone = order?.sellerPhone ?? null;
     const displayAddress = order?.pickupAddress ?? 'Address unavailable';
-    const displayCoords = order?.pickupLat != null && order?.pickupLng != null
-        ? `${order.pickupLat.toFixed(5)}, ${order.pickupLng.toFixed(5)}`
+    const displayCoords = resolvedPickupCoords
+        ? `${resolvedPickupCoords.latitude.toFixed(5)}, ${resolvedPickupCoords.longitude.toFixed(5)}`
         : null;
+
+    const liveDistanceLabel = React.useMemo(() => {
+        if (!currentLocation || !resolvedPickupCoords) return null;
+
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const earthRadiusKm = 6371;
+        const deltaLat = toRad(resolvedPickupCoords.latitude - currentLocation.latitude);
+        const deltaLng = toRad(resolvedPickupCoords.longitude - currentLocation.longitude);
+        const a =
+            Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+            Math.cos(toRad(currentLocation.latitude)) * Math.cos(toRad(resolvedPickupCoords.latitude)) *
+            Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return `${(earthRadiusKm * c).toFixed(1)} km away`;
+    }, [currentLocation, resolvedPickupCoords]);
+
+    const openNavigationRoute = React.useCallback(async () => {
+        if (!currentLocation || !resolvedPickupCoords) return;
+        await openExternalDirections({
+            origin: currentLocation,
+            destination: resolvedPickupCoords,
+            errorTitle: 'Unable to open navigation',
+            errorBody: 'No compatible maps app was found on this device.',
+        });
+    }, [currentLocation, resolvedPickupCoords]);
 
     return (
         <View style={styles.container}>
@@ -92,19 +242,72 @@ export default function NavigateScreen() {
 
             {/* Map View Placeholder */}
             <View style={styles.mapContainer}>
-                {displayCoords ? (
-                    <View style={styles.mapGrid}>
-                        <Globe size={120} color={colors.navy} weight="thin" style={{ opacity: 0.1 }} />
-                        <Numeric size={13} color={colors.muted} style={styles.mapText}>
-                            {displayCoords}
-                        </Numeric>
-                    </View>
+                {resolvedPickupCoords ? (
+                    canRenderMap && mapLibre ? (
+                        <mapLibre.MapView style={styles.map} mapStyle={OLA_TILE_STYLE_URL}>
+                            <mapLibre.Camera
+                                centerCoordinate={
+                                    currentLocation
+                                        ? [
+                                            (currentLocation.longitude + resolvedPickupCoords.longitude) / 2,
+                                            (currentLocation.latitude + resolvedPickupCoords.latitude) / 2,
+                                        ]
+                                        : [resolvedPickupCoords.longitude, resolvedPickupCoords.latitude]
+                                }
+                                zoomLevel={currentLocation ? 13 : 14}
+                            />
+                            {currentLocation ? (
+                                <mapLibre.PointAnnotation
+                                    id="agg-current-location"
+                                    coordinate={[currentLocation.longitude, currentLocation.latitude]}
+                                >
+                                    <View style={styles.currentPointPin} />
+                                </mapLibre.PointAnnotation>
+                            ) : null}
+                            <mapLibre.PointAnnotation
+                                id="agg-seller-location"
+                                coordinate={[resolvedPickupCoords.longitude, resolvedPickupCoords.latitude]}
+                            >
+                                <View style={styles.sellerPointPin} />
+                            </mapLibre.PointAnnotation>
+                            {currentLocation ? (
+                                <mapLibre.ShapeSource
+                                    id="agg-route-line-source"
+                                    shape={{
+                                        type: 'Feature',
+                                        geometry: {
+                                            type: 'LineString',
+                                            coordinates: [
+                                                [currentLocation.longitude, currentLocation.latitude],
+                                                [resolvedPickupCoords.longitude, resolvedPickupCoords.latitude],
+                                            ],
+                                        },
+                                        properties: {},
+                                    } as any}
+                                >
+                                    <mapLibre.LineLayer
+                                        id="agg-route-line-layer"
+                                        style={{ lineColor: colors.teal, lineWidth: 3 }}
+                                    />
+                                </mapLibre.ShapeSource>
+                            ) : null}
+                        </mapLibre.MapView>
+                    ) : (
+                        <View style={styles.mapGrid}>
+                            <EmptyState
+                                icon={<MapPin size={48} color={colors.muted} weight="thin" />}
+                                heading="Map unavailable in Expo Go"
+                                body="Location tracking continues and navigation opens in your maps app."
+                            />
+                            {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
+                        </View>
+                    )
                 ) : (
                     <View style={styles.mapGrid}>
                         <EmptyState
                           icon={<MapPin size={48} color={colors.muted} weight="thin" />}
                           heading="Location unavailable"
-                          body="Pickup coordinates are not available for this order yet."
+                                                    body="Pickup coordinates could not be resolved for this order."
                         />
                     </View>
                 )}
@@ -121,6 +324,11 @@ export default function NavigateScreen() {
                             <Text variant="body" style={styles.addressText}>
                                 {displayAddress}
                             </Text>
+                            {liveDistanceLabel ? (
+                                <Text variant="caption" color={colors.teal} style={{ marginTop: spacing.xs }}>
+                                    {liveDistanceLabel}
+                                </Text>
+                            ) : null}
                         </View>
                         <View style={styles.cardActions}>
                             <TouchableOpacity
@@ -190,6 +398,25 @@ const styles = StyleSheet.create({
     mapContainer: {
         flex: 1,
         backgroundColor: colors.surface2,
+    },
+    map: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    currentPointPin: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: colors.navy,
+        borderWidth: 2,
+        borderColor: colors.surface,
+    },
+    sellerPointPin: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: colors.red,
+        borderWidth: 2,
+        borderColor: colors.surface,
     },
     mapGrid: {
         flex: 1,

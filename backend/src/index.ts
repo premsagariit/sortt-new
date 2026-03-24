@@ -19,6 +19,8 @@ import ratingsRouter from './routes/ratings';
 import disputesRouter from './routes/disputes';
 import notificationsRouter from './routes/notifications';
 import realtimeRouter from './routes/realtime';
+import addressesRouter from './routes/addresses';
+import mapsRouter from './routes/maps';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -73,7 +75,9 @@ app.get('/health', (req, res) => {
 app.use('/api/orders', ordersRouter);
 app.use('/api/aggregators', aggregatorsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/sellers/addresses', addressesRouter);
 app.use('/api/rates', ratesRouter);
+app.use('/api/maps', mapsRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);

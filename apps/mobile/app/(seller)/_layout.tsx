@@ -69,6 +69,9 @@ export default function SellerLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="earnings" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="addresses" options={{ href: null }} />
+      <Tabs.Screen name="address-map" options={{ href: null }} />
+      <Tabs.Screen name="address-form" options={{ href: null }} />
     </Tabs>
   );
 }

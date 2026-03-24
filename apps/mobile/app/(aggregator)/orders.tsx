@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, Switch, ActivityIndicator } fr
 import { Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { Alert } from 'react-native';
+import * as Location from 'expo-location';
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -24,6 +25,7 @@ export default function AggregatorOrdersScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     fetchAggregatorOrders();
@@ -38,6 +40,24 @@ export default function AggregatorOrdersScreen() {
       void fetchAggregatorOrders(true);
     }, [fetchAggregatorOrders])
   );
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!mounted) return;
+        setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      } catch {
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const getMaterialKey = (m: string | null) => m ? m.toLowerCase().replace('-', '') : null;
   const matKey = getMaterialKey(selectedMaterial);
@@ -82,10 +102,34 @@ export default function AggregatorOrdersScreen() {
     const rawPrice = Number(o.orderAmount ?? o.display_amount ?? o.displayAmount ?? o.confirmed_total ?? o.confirmed_value ?? o.confirmedAmount ?? o.estimated_total ?? o.estimated_value ?? o.estimatedAmount ?? 0);
     const weights: Record<string, number> = o.estimated_weights ?? o.estimatedWeights ?? {};
     const price = rawPrice > 0 ? rawPrice : mats.reduce((sum, mat) => sum + (Number(weights[mat.id] ?? 0) * mat.ratePerKg), 0);
+    const pickupLat = typeof o.pickupLat === 'number' ? o.pickupLat : (typeof o.pickup_lat === 'number' ? o.pickup_lat : null);
+    const pickupLng = typeof o.pickupLng === 'number' ? o.pickupLng : (typeof o.pickup_lng === 'number' ? o.pickup_lng : null);
+
+    const distanceText = (() => {
+      if (currentLocation && typeof pickupLat === 'number' && typeof pickupLng === 'number') {
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const earthRadiusKm = 6371;
+        const deltaLat = toRad(pickupLat - currentLocation.latitude);
+        const deltaLng = toRad(pickupLng - currentLocation.longitude);
+        const a =
+          Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+          Math.cos(toRad(currentLocation.latitude)) * Math.cos(toRad(pickupLat)) *
+          Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return `${(earthRadiusKm * c).toFixed(1)} km`;
+      }
+
+      if (typeof o.distance_km === 'number') {
+        return `${o.distance_km.toFixed(1)} km`;
+      }
+
+      return '—';
+    })();
+
     return {
       id: o.orderId || o.id,
       orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
-      distance: '—',
+      distance: distanceText,
       price,
       locality: o.pickupLocality ?? o.pickup_locality,
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),

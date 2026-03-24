@@ -30,6 +30,7 @@
 > - Mobile execution flow now threads route `id` across navigate → weighing → OTP → confirm → receipt screens.
 > - Workspace gate check: `pnpm type-check` exits 0.
 > - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow supports inline rating with post-submit refresh; notifications now deep-link to order detail via metadata payloads.
+> - ✅ **Maps migration (2026-03-25):** Google-based map integration has been replaced with Ola-backed provider implementation + MapLibre mobile rendering. Existing address pinning, reverse-geocode fallback, live tracking, and route planning behaviors are preserved with Expo Go fallback gating.
 
 ---
 

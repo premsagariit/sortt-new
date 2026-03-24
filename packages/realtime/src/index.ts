@@ -1,6 +1,12 @@
 import type { IRealtimeProvider } from './types';
+import { setRealtimeTokenGetter, type RealtimeTokenGetter } from './authToken';
 
 export { IRealtimeProvider, RealtimeMessage } from './types';
+export { setRealtimeTokenGetter } from './authToken';
+
+export function configureRealtimeAuth(getter: RealtimeTokenGetter): void {
+  setRealtimeTokenGetter(getter);
+}
 
 /**
  * Factory function to create realtime provider based on environment variable.
@@ -12,9 +18,25 @@ export function createRealtimeProvider(platform: 'backend' | 'mobile'): IRealtim
   if (provider === 'ably') {
     if (platform === 'mobile') {
       const { AblyMobileProvider } = require('./providers/AblyMobileProvider') as {
-        AblyMobileProvider: new () => IRealtimeProvider;
+        AblyMobileProvider: new (tokenUrl?: string) => IRealtimeProvider;
       };
-      return new AblyMobileProvider();
+
+      const envAuthUrl = process.env.EXPO_PUBLIC_ABLY_AUTH_URL;
+      const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
+
+      const hasTemplateSyntax = (value?: string): boolean => {
+        return !!value && /\$\{[^}]+\}/.test(value);
+      };
+
+      const normalizeBase = (value: string): string => value.replace(/\/api\/?$/, '');
+
+      const authUrl = hasTemplateSyntax(envAuthUrl)
+        ? undefined
+        : envAuthUrl || (envApiUrl && !hasTemplateSyntax(envApiUrl)
+            ? `${normalizeBase(envApiUrl)}/api/realtime/token`
+            : undefined);
+
+      return new AblyMobileProvider(authUrl);
     } else {
       const { AblyBackendProvider } = require('./providers/AblyBackendProvider') as {
         AblyBackendProvider: new () => IRealtimeProvider;

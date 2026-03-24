@@ -41,6 +41,9 @@ export interface Order {
   orderChannelToken?: string | null;     // BLOCK: Ably channel name with HMAC prefix
   pickupLat?: number | null;
   pickupLng?: number | null;
+  aggregatorLat?: number | null;
+  aggregatorLng?: number | null;
+  liveDistanceKm?: number | null;
   rating?: number;
   sellerHasRated?: boolean;
   window?: string;
@@ -140,6 +143,9 @@ export function mapApiOrder(o: any): Order {
     orderChannelToken: o.orderChannelToken ?? o.order_channel ?? null,   // BLOCK: map from API
     pickupLat: typeof o.pickup_lat === 'number' ? o.pickup_lat : (typeof o.pickupLat === 'number' ? o.pickupLat : null),
     pickupLng: typeof o.pickup_lng === 'number' ? o.pickup_lng : (typeof o.pickupLng === 'number' ? o.pickupLng : null),
+    aggregatorLat: typeof o.aggregator_lat === 'number' ? o.aggregator_lat : (typeof o.aggregatorLat === 'number' ? o.aggregatorLat : null),
+    aggregatorLng: typeof o.aggregator_lng === 'number' ? o.aggregator_lng : (typeof o.aggregatorLng === 'number' ? o.aggregatorLng : null),
+    liveDistanceKm: typeof o.distance_km === 'number' ? o.distance_km : (typeof o.liveDistanceKm === 'number' ? o.liveDistanceKm : null),
     rating: typeof o.rating === 'number' ? o.rating : undefined,
     sellerHasRated: typeof o.seller_has_rated === 'boolean' ? o.seller_has_rated : undefined,
     window: windowLabel,
@@ -181,6 +187,7 @@ interface OrderStoreState {
   setOrders: (orders: Order[]) => void;
   setActiveOrderId: (id: string | null) => void;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
+  updateOrderLiveLocation: (id: string, payload: { aggregatorLat: number; aggregatorLng: number; liveDistanceKm?: number | null }) => void;
   rejectOrder: (id: string) => void;
   addOrder: (order: Order) => void;
   setLoading: (v: boolean) => void;
@@ -212,6 +219,20 @@ export const useOrderStore = create<OrderStoreState>()(
       updateOrderStatus: (id, status) => set((state) => ({
         orders: state.orders.map((o) =>
           o.orderId === id ? { ...o, status, updatedAt: new Date().toISOString() } : o
+        ),
+      })),
+
+      updateOrderLiveLocation: (id, payload) => set((state) => ({
+        orders: state.orders.map((o) =>
+          o.orderId === id
+            ? {
+                ...o,
+                aggregatorLat: payload.aggregatorLat,
+                aggregatorLng: payload.aggregatorLng,
+                liveDistanceKm: typeof payload.liveDistanceKm === 'number' ? payload.liveDistanceKm : o.liveDistanceKm ?? null,
+                updatedAt: new Date().toISOString(),
+              }
+            : o
         ),
       })),
 
@@ -265,6 +286,11 @@ export const useOrderStore = create<OrderStoreState>()(
               lineItems: (Array.isArray(newOrder.lineItems) && newOrder.lineItems.length > 0)
                 ? newOrder.lineItems
                 : old.lineItems,
+              pickupLat: typeof newOrder.pickupLat === 'number' ? newOrder.pickupLat : old.pickupLat,
+              pickupLng: typeof newOrder.pickupLng === 'number' ? newOrder.pickupLng : old.pickupLng,
+              aggregatorLat: typeof newOrder.aggregatorLat === 'number' ? newOrder.aggregatorLat : old.aggregatorLat,
+              aggregatorLng: typeof newOrder.aggregatorLng === 'number' ? newOrder.aggregatorLng : old.aggregatorLng,
+              liveDistanceKm: typeof newOrder.liveDistanceKm === 'number' ? newOrder.liveDistanceKm : old.liveDistanceKm,
             };
           });
 
@@ -293,9 +319,24 @@ export const useOrderStore = create<OrderStoreState>()(
         if (!silent) set({ isLoading: true, error: null, isNetworkError: false });
         try {
           const res = await api.get(`/api/orders/${id}`);
-          const order = mapApiOrder(res.data);
+          const incomingOrder = mapApiOrder(res.data);
           set((state) => ({
-            orders: [...state.orders.filter(o => o.orderId !== order.orderId), order],
+            orders: [
+              ...state.orders.filter(o => o.orderId !== incomingOrder.orderId),
+              (() => {
+                const old = state.orders.find(o => o.orderId === incomingOrder.orderId);
+                if (!old) return incomingOrder;
+                return {
+                  ...old,
+                  ...incomingOrder,
+                  pickupLat: typeof incomingOrder.pickupLat === 'number' ? incomingOrder.pickupLat : old.pickupLat,
+                  pickupLng: typeof incomingOrder.pickupLng === 'number' ? incomingOrder.pickupLng : old.pickupLng,
+                  aggregatorLat: typeof incomingOrder.aggregatorLat === 'number' ? incomingOrder.aggregatorLat : old.aggregatorLat,
+                  aggregatorLng: typeof incomingOrder.aggregatorLng === 'number' ? incomingOrder.aggregatorLng : old.aggregatorLng,
+                  liveDistanceKm: typeof incomingOrder.liveDistanceKm === 'number' ? incomingOrder.liveDistanceKm : old.liveDistanceKm,
+                };
+              })(),
+            ],
             isLoading: false,
           }));
         } catch (e: any) {

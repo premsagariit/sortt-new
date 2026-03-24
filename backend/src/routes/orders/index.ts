@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import { query, withUser, pool } from '../../lib/db';
 import { DbOrder, buildOrderDto, OrderDtoViewerType } from '../../utils/orderDto';
 import { ALLOWED_TRANSITIONS, IMMUTABLE_STATUSES } from '../../utils/orderStateMachine';
-import { mapProvider } from '../../providers/maps';
 import { orderCreateLimiter, redis } from '../../lib/redis';
 import { verifyUserRole } from '../../middleware/verifyRole';
 import { storageProvider } from '../../lib/storage';
@@ -37,6 +36,35 @@ const resolveViewerType = (userType?: string | null): OrderDtoViewerType | null 
 // Validation helpers
 const stripHtml = (text?: string) => text ? sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} }) : '';
 
+const parseNumberOrNull = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const haversineDistanceKm = (
+  sourceLat: number,
+  sourceLng: number,
+  destinationLat: number,
+  destinationLng: number
+): number => {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const deltaLat = rad(destinationLat - sourceLat);
+  const deltaLng = rad(destinationLng - sourceLng);
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(rad(sourceLat)) * Math.cos(rad(destinationLat)) *
+    Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Number((earthRadiusKm * c).toFixed(2));
+};
+
 // 1. POST /api/orders
 // Only sellers can create orders
 router.post('/', verifyUserRole('seller'), async (req, res) => {
@@ -58,7 +86,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     const {
       material_codes,
       estimated_weights,
-      pickup_address,
+      selectedAddressId,
       pickup_preference: preferred_pickup_window,
       seller_note
     } = req.body;
@@ -69,23 +97,38 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     if (!estimated_weights || typeof estimated_weights !== 'object') {
       return res.status(400).json({ error: 'estimated_weights is required' });
     }
-    if (!pickup_address) {
-      return res.status(400).json({ error: 'pickup_address is required' });
+    if (!selectedAddressId) {
+      return res.status(400).json({ error: 'selectedAddressId is required' });
     }
 
-    const cleanAddress = stripHtml(pickup_address);
     const cleanNote = stripHtml(seller_note);
 
-    const geo = await mapProvider.geocode(cleanAddress).catch((err: any) => {
-      if (err.message === 'unsupported_city' || err.message === 'geocode_failed') {
-        console.warn('[DIAG] Geocode caught error:', err.message);
-        throw err;
-      }
-      console.error('Geocode error:', err);
-      throw new Error('geocode_failed');
-    });
+    const selectedAddressRes = await query(
+      `SELECT id, seller_id, building_name, street, colony, city, pincode,
+              city_code, pickup_locality, latitude, longitude
+         FROM seller_addresses
+        WHERE id = $1 AND seller_id = $2`,
+      [selectedAddressId, userId]
+    );
 
-    console.log('[DIAG] Geocode success:', JSON.stringify(geo));
+    if (selectedAddressRes.rows.length === 0) {
+      return res.status(404).json({ error: 'selected_address_not_found' });
+    }
+
+    const selectedAddress = selectedAddressRes.rows[0];
+    const fullPickupAddress = [
+      selectedAddress.building_name,
+      selectedAddress.street,
+      selectedAddress.colony,
+      selectedAddress.city,
+      selectedAddress.pincode,
+    ]
+      .filter((part: unknown) => typeof part === 'string' && part.trim().length > 0)
+      .join(', ');
+
+    if (!selectedAddress.city_code || !selectedAddress.pickup_locality) {
+      return res.status(400).json({ error: 'selected_address_missing_required_geodata' });
+    }
 
     // Need to use transaction explicitly in withUser if needed.
     // withUser does NOT begin a transaction by default!
@@ -98,7 +141,14 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'created')
               RETURNING *
             `, [
-          userId, geo.cityCode, cleanAddress, geo.locality, geo.lat, geo.lng, JSON.stringify({ type: preferred_pickup_window }), cleanNote
+          userId,
+          selectedAddress.city_code,
+          fullPickupAddress,
+          selectedAddress.pickup_locality,
+          selectedAddress.latitude,
+          selectedAddress.longitude,
+          JSON.stringify({ type: preferred_pickup_window }),
+          cleanNote,
         ]);
 
         const newOrder = orderRes.rows[0];
@@ -113,7 +163,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
              WHERE city_code = $1 AND material_code = $2
              ORDER BY scraped_at DESC
              LIMIT 1`,
-            [geo.cityCode, code]
+            [selectedAddress.city_code, code]
           );
           const ratePerKg = Number(rateRes.rows[0]?.rate_per_kg || 0);
           const lineAmount = weight * ratePerKg;
@@ -152,7 +202,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
               JOIN aggregator_availability a ON d.user_id = a.user_id AND a.is_online = true
               JOIN aggregator_profiles p ON a.user_id = p.user_id AND p.city_code = $1
               JOIN aggregator_material_rates m ON p.user_id = m.aggregator_id AND m.material_code = ANY($2)
-            `, [geo.cityCode, material_codes]);
+            `, [selectedAddress.city_code, material_codes]);
 
         const tokens = aggRes.rows.map(r => r.expo_token).filter(t => t.startsWith('ExponentPushToken'));
 
@@ -167,7 +217,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
             'A new scrap listing is available in your area.',
             {
               order_id: order.id,
-              city_code: geo.cityCode,
+              city_code: selectedAddress.city_code,
               kind: 'new_order_listing'
             }
           );
@@ -200,8 +250,8 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       try {
         const feedPayload = {
           orderId: order.id,
-          cityCode: geo.cityCode,
-          locality: geo.locality,
+          cityCode: selectedAddress.city_code,
+          locality: selectedAddress.pickup_locality,
           materialCodes: material_codes,
           createdAt: order.created_at || new Date().toISOString(),
         };
@@ -216,12 +266,6 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       order: buildOrderDto(order, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
     });
   } catch (error: any) {
-    if (error.message === 'unsupported_city') {
-      return res.status(422).json({ error: 'unsupported_city' });
-    }
-    if (error.message === 'geocode_failed') {
-      return res.status(422).json({ error: 'geocode_failed', message: "We couldn't find that address — please check and try again." });
-    }
     console.error('POST /api/orders error:', error);
     Sentry.captureException(error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -391,6 +435,41 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     console.error('GET /api/orders/feed error:', e);
     Sentry.captureException(e);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3b. GET /api/orders/earnings — seller lifetime earnings summary
+router.get('/earnings', verifyUserRole('seller'), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const totals = await query(
+      `SELECT COALESCE(SUM(order_totals.order_total), 0) AS total_earned,
+              COUNT(order_totals.order_id)::int AS orders_completed,
+              COALESCE(SUM(order_totals.total_weight_kg), 0) AS total_weight_kg
+         FROM (
+           SELECT o.id AS order_id,
+                  COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS order_total,
+                  COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS total_weight_kg
+             FROM orders o
+             LEFT JOIN order_items oi ON oi.order_id = o.id
+            WHERE o.seller_id = $1
+              AND o.status = 'completed'
+            GROUP BY o.id
+         ) order_totals`,
+      [userId]
+    );
+
+    return res.json({
+      total_earned: Number(totals.rows[0]?.total_earned ?? 0),
+      orders_completed: Number(totals.rows[0]?.orders_completed ?? 0),
+      total_weight_kg: Number(totals.rows[0]?.total_weight_kg ?? 0),
+    });
+  } catch (e) {
+    console.error('GET /api/orders/earnings error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Failed to load earnings' });
   }
 });
 
@@ -775,7 +854,7 @@ router.patch('/:id/status', async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
-    const { status: newStatus, note } = req.body;
+    const { status: newStatus, note, aggregator_lat, aggregator_lng } = req.body;
 
     if (!newStatus) return res.status(400).json({ error: 'status is required' });
 
@@ -786,7 +865,7 @@ router.patch('/:id/status', async (req, res) => {
     await withUser(userId, async (client) => {
       await client.query('BEGIN');
       try {
-        const currentRes = await client.query('SELECT status, aggregator_id FROM orders WHERE id = $1 FOR UPDATE', [id]);
+        const currentRes = await client.query('SELECT status, aggregator_id, pickup_lat, pickup_lng FROM orders WHERE id = $1 FOR UPDATE', [id]);
         if (currentRes.rows.length === 0) {
           await client.query('ROLLBACK');
           return res.status(404).json({ error: 'Not found' });
@@ -830,7 +909,22 @@ router.patch('/:id/status', async (req, res) => {
               );
               if (fullOrderRes.rows[0]) {
                 const order = fullOrderRes.rows[0];
-                const statusPayload = { status: newStatus, updatedAt: new Date().toISOString() };
+                const parsedLat = parseNumberOrNull(aggregator_lat);
+                const parsedLng = parseNumberOrNull(aggregator_lng);
+                const pickupLat = parseNumberOrNull((currentOrder as any).pickup_lat);
+                const pickupLng = parseNumberOrNull((currentOrder as any).pickup_lng);
+                const statusPayload: Record<string, unknown> = {
+                  status: newStatus,
+                  updatedAt: new Date().toISOString(),
+                };
+
+                if (parsedLat != null && parsedLng != null) {
+                  statusPayload.aggregator_lat = parsedLat;
+                  statusPayload.aggregator_lng = parsedLng;
+                  if (pickupLat != null && pickupLng != null) {
+                    statusPayload.distance_km = haversineDistanceKm(parsedLat, parsedLng, pickupLat, pickupLng);
+                  }
+                }
 
                 // Publish to seller's private order channel
                 if (order.seller_id) {

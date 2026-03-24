@@ -391,7 +391,7 @@ export default function AggregatorHomeScreen() {
             </View>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{activeFeed.length}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Pending</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>New</Text>
             </View>
           </View>
         </Animated.View>

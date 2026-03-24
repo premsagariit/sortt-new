@@ -13,6 +13,10 @@
 > - Order store merge hardening completed to preserve `pickupLat/pickupLng`, `aggregatorLat/aggregatorLng`, and `liveDistanceKm` across silent refresh cycles.
 > - Seller lifetime earnings route regression fixed: `/api/orders/earnings` now registered before dynamic `/:id`, preventing UUID parse collisions.
 > - Validation snapshot: backend and workspace type-checks pass after above changes.
+> - Google Maps → Ola Maps migration completed:
+>   - `packages/maps/src/providers/OlaMapsProvider.ts` implemented for geocode/reverse + autocomplete helper.
+>   - `backend/src/routes/maps.ts` now includes authenticated autocomplete endpoint.
+>   - Mobile map screens now use MapLibre + Ola tiles with Expo Go fallback gate (`MAP_RENDERING_AVAILABLE=false` by default).
 
 > ✅ **Learned Lesson (Route Safety)**
 > - In Express routers, always register static routes (e.g., `/feed`, `/earnings`) before dynamic `/:id` routes.
@@ -91,7 +95,7 @@ Days 16–17 → Web portal + admin + security audit
 | Rate Limiting | Upstash Redis via `@upstash/ratelimit` + `express-rate-limit` | Required from day 1 for horizontal scale |
 | AI — Image Analysis | Gemini Flash Vision (via `IAnalysisProvider`) | 1,500 req/day free cap — enforce circuit breaker |
 | AI — Price Scraper | Gemini Pro (Python agent on Render cron) | Writes to `price_index` table with sanity checks |
-| Maps / Geocoding | Google Maps API via `IMapProvider` | Swap-ready for Ola Maps via env var |
+| Maps / Geocoding | Ola Maps API via `IMapProvider` + MapLibre tiles on mobile | Keep `MAP_PROVIDER`/`EXPO_PUBLIC_MAP_PROVIDER` env-driven |
 | PDF Generation | `pdf-lib` (Node.js) | GST invoices only |
 | Icons | Phosphor Icons (MIT) — outline, 1.5px stroke | Filled variant for active nav states only |
 | State Management | Zustand | No Redux, no Context API for global state |

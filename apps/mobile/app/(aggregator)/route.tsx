@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import {
   Check,
@@ -24,6 +24,11 @@ import { NavBar } from '../../components/ui/NavBar';
 import { BaseCard } from '../../components/ui/Card';
 import { PrimaryButton } from '../../components/ui/Button';
 import { Text, Numeric } from '../../components/ui/Typography';
+import { useOrderStore } from '../../store/orderStore';
+import { MAP_RENDERING_AVAILABLE } from '../../utils/mapAvailable';
+import { getMapLibreModule } from '../../lib/maplibre';
+import { OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
+import { openExternalDirections } from '../../utils/mapNavigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -80,7 +85,30 @@ const MOCK_ORDERS: Order[] = [
 export default function RoutePlannerScreen() {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
-  const [selectedIds, setSelectedIds] = useState<string[]>(MOCK_ORDERS.map(o => o.id));
+  const orders = useOrderStore((state: any) => state.orders);
+  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
+  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+
+  const storeOrders: Order[] = React.useMemo(() => {
+    const withCoordinates = Array.isArray(orders)
+      ? orders.filter((item: any) => Number.isFinite(item?.pickupLat) && Number.isFinite(item?.pickupLng))
+      : [];
+
+    if (withCoordinates.length === 0) return MOCK_ORDERS;
+
+    return withCoordinates.slice(0, 12).map((item: any, index: number) => ({
+      id: String(item.orderId ?? item.id ?? `route-order-${index + 1}`),
+      orderNumber: String(item.orderNumber ?? item.order_display_id ?? `#${String(item.orderId ?? '').slice(0, 6).toUpperCase()}`),
+      locality: String(item.pickupLocality ?? item.locality ?? 'Unknown area'),
+      distance: typeof item.liveDistanceKm === 'number' ? `${item.liveDistanceKm.toFixed(1)} km` : '—',
+      materials: [{ type: 'metal', weight: Number(item.estimatedWeightKg ?? 0) || 0 }],
+      price: Number(item.estimatedAmount ?? item.estimatedTotal ?? item.displayAmount ?? 0) || 0,
+      lat: Number(item.pickupLat),
+      lng: Number(item.pickupLng),
+    }));
+  }, [orders]);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>(storeOrders.map(o => o.id));
 
   const toggleSelection = (id: string) => {
     if (selectedIds.includes(id)) {
@@ -92,9 +120,30 @@ export default function RoutePlannerScreen() {
 
   const clearAll = () => setSelectedIds([]);
 
-  const totalValue = MOCK_ORDERS
+  React.useEffect(() => {
+    setSelectedIds(storeOrders.map((item) => item.id));
+  }, [storeOrders]);
+
+  const totalValue = storeOrders
     .filter(o => selectedIds.includes(o.id))
     .reduce((sum, o) => sum + o.price, 0);
+
+  const openRouteInMaps = async (): Promise<void> => {
+    const selectedOrders = storeOrders.filter((order) => selectedIds.includes(order.id));
+    if (selectedOrders.length === 0) {
+      Alert.alert('No orders selected', 'Select at least one order to open route.');
+      return;
+    }
+
+    const destinationOrder = selectedOrders[selectedOrders.length - 1];
+    const waypointOrders = selectedOrders.slice(0, -1);
+    await openExternalDirections({
+      destination: { latitude: destinationOrder.lat, longitude: destinationOrder.lng },
+      waypoints: waypointOrders.map((order) => ({ latitude: order.lat, longitude: order.lng })),
+      errorTitle: 'Unable to open maps',
+      errorBody: 'No compatible maps app was found on this device.',
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -127,14 +176,33 @@ export default function RoutePlannerScreen() {
       <View style={styles.main}>
         {/* Map Visualization Area */}
         <View style={styles.mapArea}>
-          <View style={styles.mapGraphic}>
+          {canRenderMap && mapLibre ? (
+            <mapLibre.MapView style={styles.map} mapStyle={OLA_TILE_STYLE_URL}>
+              <mapLibre.Camera centerCoordinate={[78.4867, 17.385]} zoomLevel={11} />
+              {storeOrders
+                .filter((order) => selectedIds.includes(order.id))
+                .map((order) => (
+                  <mapLibre.PointAnnotation
+                    key={order.id}
+                    id={`route-order-pin-${order.id}`}
+                    coordinate={[order.lng, order.lat]}
+                  >
+                    <View style={styles.routePointPin} />
+                  </mapLibre.PointAnnotation>
+                ))}
+            </mapLibre.MapView>
+          ) : (
+            <View style={styles.mapGraphic}>
             {/* Markers */}
-            {MOCK_ORDERS.map(order => (
+            {storeOrders.map(order => (
               <View
                 key={order.id}
                 style={[
                   styles.marker,
-                  { left: `${order.lng}%`, top: `${order.lat}%` },
+                  {
+                    left: `${Math.max(5, Math.min(90, ((order.lng - 78.2) / 0.6) * 100))}%`,
+                    top: `${Math.max(5, Math.min(90, ((order.lat - 17.2) / 0.4) * 100))}%`,
+                  },
                   !selectedIds.includes(order.id) && { opacity: 0.4 },
                 ]}
               >
@@ -162,7 +230,9 @@ export default function RoutePlannerScreen() {
               <Globe size={40} color={colors.muted} style={{ opacity: 0.1 }} />
               <Text style={styles.mapOverlayText}>Route Preview</Text>
             </View>
+            {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
           </View>
+          )}
 
           {/* Map Info Overlays */}
           <View style={styles.overlayTopLeft}>
@@ -192,7 +262,7 @@ export default function RoutePlannerScreen() {
             contentContainerStyle={styles.orderListContent}
             showsVerticalScrollIndicator={false}
           >
-            {MOCK_ORDERS.map(order => {
+            {storeOrders.map(order => {
               const isSelected = selectedIds.includes(order.id);
               return (
                 <TouchableOpacity
@@ -232,8 +302,8 @@ export default function RoutePlannerScreen() {
           {/* Action Button */}
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
             <PrimaryButton
-              label="Open Route in Google Maps"
-              onPress={() => { }}
+              label="Open Route in Maps"
+              onPress={() => void openRouteInMaps()}
               style={{ backgroundColor: colors.red }}
               disabled={selectedIds.length === 0}
             />
@@ -278,6 +348,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colorExtended.surface2,
     position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  routePointPin: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
   mapGraphic: {
     flex: 1,
