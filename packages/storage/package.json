@@ -1,4 +1,4 @@
-﻿{
+{
     "version":  "1.0.0",
     "name":  "@sortt/storage",
     "main":  "dist/index.js",

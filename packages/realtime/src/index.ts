@@ -1,4 +1,4 @@
-﻿import type { IRealtimeProvider } from './types';
+import type { IRealtimeProvider } from './types';
 
 export { IRealtimeProvider, RealtimeMessage } from './types';
 

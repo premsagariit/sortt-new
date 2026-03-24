@@ -1,20 +1,20 @@
-﻿{
-    "version":  "1.0.0",
-    "name":  "@sortt/realtime",
-    "main":  "dist/index.js",
-    "types":  "dist/index.d.ts",
-    "scripts":  {
-                    "type-check":  "tsc --noEmit",
-                    "build":  "tsc --project tsconfig.json"
-                },
+{
+    "version": "1.0.0",
+    "name": "@sortt/realtime",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "type-check": "tsc --noEmit",
+        "build": "tsc --project tsconfig.json"
+    },
     "dependencies": {
-                        "ably": "^2.0.0"
-                    },
-    "devDependencies":  {
-                            "typescript":  "^5.5.3"
-                        },
-        "files": [
-            "dist"
-        ],
-    "private":  true
+        "ably": "^2.0.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.5.3"
+    },
+    "files": [
+        "dist"
+    ],
+    "private": true
 }
