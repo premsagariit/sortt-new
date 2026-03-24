@@ -1,625 +1,601 @@
-# [Sortt] — Day 13: Ably Realtime + Push Notifications Implementation Plan
+# Day 14 Implementation Plan — Provider Abstractions (All 5 Packages)
 
-**Date:** 2026-03-20  
-**Status:** READY FOR REVIEW  
-**Gate Target:** 8/8 gates passing  
-**Teams:** 5 parallel sub-agents (Backend Gap Filler, Backend Realtime Wrapper, Mobile Ably Integration, Screen Wiring, Connection Monitor)
-
----
-
-## SECTION 1: VERIFICATION INVENTORY
-
-### Items ALREADY COMPLETED (✅ From Day 12 Report)
-
-Below are all Day 13 items marked ✅ in the Day 13 report that require verification:
-
-1. **✅ Backend accept-order route publishes Ably event**
-   - **Verification Command:**
-     ```bash
-     grep -n "publishEvent\|ably" backend/src/routes/orders/accept.ts | head -20
-     # Expected: Contains "publishEvent" or direct Ably channel.publish call
-     ```
-   - **Exact Check:** File exists and has Ably publish call for status change to `accepted`.
-
-2. **✅ Backend verify-pickup-otp route publishes Ably event**
-   - **Verification Command:**
-     ```bash
-     grep -n "publishEvent\|ably" backend/src/routes/orders/verify-otp.ts | head -20
-     ```
-   - **Exact Check:** Route publishes status change to `completed`.
-
-3. **✅ Backend message POST route publishes Ably event**
-   - **Verification Command:**
-     ```bash
-     grep -n "publishEvent\|ably\|channels.get" backend/src/routes/messages.ts | head -20
-     ```
-   - **Exact Check:** Messages route publishes `message` event to order's private channel.
-
-4. **✅ channelHelper.ts exists and constructs HMAC-suffix channel names**
-   - **Verification Command:**
-     ```bash
-     cat apps/mobile/lib/channelHelper.ts | grep -A5 "function\|export"
-     ```
-   - **Exact Check:** File contains function(s) that build channel names with token suffix (V32 compliant).
-
-5. **✅ Clerk JWT middleware exists on all protected routes**
-   - **Verification Command:**
-     ```bash
-     grep -rn "clerkJwtMiddleware\|verifyClerkJwt" backend/src/routes/ | wc -l
-     # Expected: > 0 results
-     ```
-   - **Exact Check:** Middleware present on order + message routes.
+**Status:** ⏳ AWAITING APPROVAL  
+**Date Created:** 2026-03-24  
+**Based on:** MEMORY.md, PLAN.md, TRD.md, day-14.md (context file), structure.md  
+**Responsible Team:** Lead + 9 Sub-Agents (A-I)  
 
 ---
 
-## SECTION 2: GAP INVENTORY
+## ✅ SECTION 1 — PRE-FLIGHT AUDIT RESULTS
 
-### Critical Gaps (⚠️ / ❌) Blocking Day 13 Completion
+### Pre-flight Check 1: Confirm EXPO_PUBLIC_ABLY_KEY is Absent
 
-| Gap ID | Item | Root Cause | Files to Modify/Create | Dependency | Priority |
-|---|---|---|---|---|---|
-| G2.1 | **PATCH /api/orders/:id/status does NOT publish Ably event** | Route exists but missing Ably publish call | `backend/src/routes/orders/index.ts` | None (Backend Gap Filler) | **🚨 CRITICAL** |
-| G2.2 | **POST /api/orders does NOT publish to orders:hyd:new feed** | No feed channel publish in order creation | `backend/src/routes/orders/index.ts` | None (Backend Gap Filler) | **🚨 CRITICAL** |
-| G2.3 | **pushHelper.ts uses single-token pattern (not chunked)** | Current push implementation does not chunk with expo-server-sdk | Create `backend/src/utils/pushNotifications.ts`, replace all `pushHelper` calls | None (Backend Gap Filler) | **🚨 CRITICAL** |
-| G2.4 | **No backend Ably wrapper library** | Route handlers call Ably SDK directly (tight coupling) | Create `backend/src/lib/realtime.ts` | None (Backend Realtime Wrapper) | **High** |
-| G2.5 | **GET /api/realtime/token endpoint may not exist** | Mobile cannot request Clerk-authenticated token | Create or verify `backend/src/routes/realtime.ts` | Backend Realtime Wrapper (for wrapper pattern) | **🚨 CRITICAL** |
-| G2.6 | **Mobile realtime.ts is noop stub** | No functional Ably client in mobile app | Rewrite `apps/mobile/lib/realtime.ts` | Backend Realtime Wrapper (for token endpoint) | **🚨 CRITICAL** |
-| G2.7 | **useOrderChannel hook does not exist** | Mobile cannot subscribe to order status + chat | Create `apps/mobile/hooks/useOrderChannel.ts` | Mobile Ably Integration | **🚨 CRITICAL** |
-| G2.8 | **useAggregatorFeedChannel hook does not exist** | Aggregators cannot receive live new order feed | Create `apps/mobile/hooks/useAggregatorFeedChannel.ts` | Mobile Ably Integration | **🚨 CRITICAL** |
-| G2.9 | **Hook wiring missing from seller Order Detail** | Screen does not subscribe to order status updates | Wire `useOrderChannel` in `apps/mobile/app/(seller)/order/[id].tsx` | Mobile Ably Integration hooks created | **High** |
-| G2.10 | **Hook wiring missing from aggregator Active Order Detail** | Aggregator cannot see live status updates | Wire `useOrderChannel` in `apps/mobile/app/(aggregator)/active-order-detail.tsx` | Mobile Ably Integration hooks created | **High** |
-| G2.11 | **Hook wiring missing from aggregator Home feed** | Aggregator does not receive live new orders | Wire `useAggregatorFeedChannel` in `apps/mobile/app/(aggregator)/home.tsx` | Mobile Ably Integration hooks created | **High** |
-| G2.12 | **Hook wiring missing from Chat screen** | Chat does not refresh on incoming Ably message | Wire `useOrderChannel` in `apps/mobile/app/(shared)/chat/[id].tsx` | Mobile Ably Integration hooks created | **High** |
-| G2.13 | **Ably SDK not installed in mobile** | `ably` package missing from `apps/mobile/package.json` | Install via `pnpm add ably` in mobile app | Mobile Ably Integration | **🚨 CRITICAL** |
-| G2.14 | **EXPO_PUBLIC_ABLY_AUTH_URL not set** | Mobile cannot know token endpoint URL | Add to `apps/mobile/.env` and `.env.example` | Mobile Ably Integration | **High** |
-| G2.15 | **Ably connection count monitor not implemented** | No alerting when approaching 150 connections (75% of 200 limit) | Add cron job to `backend/src/scheduler.ts` | None (Connection Monitor) | **Medium** |
-| G2.16 | **PII audit on all push call sites not complete** | Some push bodies may contain name, phone, address, etc. | Audit + refactor all `sendPush*` calls in `backend/src/routes/` | Push Notifications replacement | **High** |
-
----
-
-## SECTION 3: EXECUTION SEQUENCE
-
-**Dependency order:** Backend before mobile (token endpoint must exist before mobile can test). Hooks before screens.
-
-### Step 0: Precondition Verification (5 min)
-- [ ] Read MEMORY.md §3, §5 (realtime + push + security).
-- [ ] Read TRD.md §6 (Ably), §5 (push), §14 (security V32, V37, D2, A1).
-- [ ] Read PLAN.md Day 13 section.
-- [ ] Read structure.md for all file paths.
-- [ ] Confirm all 5 sub-agent assignments understood.
-- [ ] User approval to proceed: **GO / NO-GO**
-
-### Phase 1: Backend Gap Filling (Sub-Agent 1) — 30 min
-1. [ ] Add Ably publish to PATCH /api/orders/:id/status
-   - **File:** `backend/src/routes/orders/index.ts`
-   - **Check:** Publishes `status_updated` event after successful status UPDATE + history INSERT.
-   - **Validation:** `grep -n "publishEvent\|channels.get" backend/src/routes/orders/index.ts | grep -i "patch\|status"`
-
-2. [ ] Add Ably publish to POST /api/orders
-   - **File:** `backend/src/routes/orders/index.ts`
-   - **Check:** Publishes `new_order` to `orders:hyd:new` after order INSERT + push fire.
-   - **Validation:** `grep -n "orders:hyd:new\|publishEvent" backend/src/routes/orders/index.ts`
-
-3. [ ] Create `backend/src/utils/pushNotifications.ts`
-   - **Check:** Exports `sendPushToUsers()` using expo-server-sdk chunking.
-   - **JSDoc:** Mentions PII restrictions (zero name, phone, address, amount, GSTIN).
-   - **Validation:** `grep -n "chunkPushNotifications\|Expo" backend/src/utils/pushNotifications.ts`
-
-4. [ ] Replace all `pushHelper` calls with `sendPushToUsers()`
-   - **Files:** All in `backend/src/routes/`
-   - **Validation:** `grep -rn "pushHelper" backend/src/routes/ | wc -l` → should be 0 (or only legacy)
-
-5. [ ] Add new chat message push trigger
-   - **File:** `backend/src/routes/messages.ts`
-   - **Check:** After Ably publish, calls `sendPushToUsers([offlinePartyId], ...)`
-   - **Validation:** `grep -n "sendPushToUsers" backend/src/routes/messages.ts`
-
-6. [ ] Sub-Agent 1 Self-Verification
-   ```bash
-   grep -n "publishEvent\|ably" backend/src/routes/orders/index.ts | wc -l   # Should be ≥ 2
-   grep -rn "pushHelper" backend/src/routes/ | wc -l                      # Should be 0
-   pnpm type-check                                                         # Should exit 0
-   ```
-
-### Phase 2: Backend Realtime Wrapper (Sub-Agent 2) — 25 min
-1. [ ] Create `backend/src/lib/realtime.ts`
-   - **Exports:** `publishEvent()`, `createTokenRequest()`
-   - **Validation:** `grep -n "export\|function" backend/src/lib/realtime.ts | head -10`
-
-2. [ ] Create or verify `backend/src/routes/realtime.ts`
-   - **Route:** `GET /api/realtime/token`
-   - **Middleware:** `clerkJwtMiddleware` required
-   - **Validation:** `grep -n "GET\|/token\|clerkJwtMiddleware" backend/src/routes/realtime.ts`
-
-3. [ ] Verify `/api/realtime/token` mounted in Express app
-   - **File:** `backend/src/index.ts`
-   - **Validation:** `grep -n "realtime\|'/token" backend/src/index.ts`
-
-4. [ ] Migrate (accept, verify-otp, messages) routes to use `publishEvent()`
-   - **Files:** `backend/src/routes/orders/accept.ts`, verify-otp.ts, `backend/src/routes/messages.ts`
-   - **Validation:** `grep -rn "ablyRest.channels.get" backend/src/routes/ | wc -l` → should be 0
-
-5. [ ] Sub-Agent 2 Self-Verification
-   ```bash
-   grep -rn "ablyRest.channels.get" backend/src/routes/ | wc -l  # Should be 0
-   curl -H "Authorization: Bearer <test_jwt>" http://localhost:3001/api/realtime/token  # Should return token JSON
-   pnpm type-check                                               # Should exit 0
-   ```
-
-### Phase 3: Mobile Ably SDK + Token Auth (Sub-Agent 3) — 25 min
-1. [ ] Install Ably SDK in mobile
-   - **Command:** `cd apps/mobile && pnpm add ably`
-   - **Validation:** `grep '"ably"' apps/mobile/package.json`
-
-2. [ ] Rewrite `apps/mobile/lib/realtime.ts`
-   - **Exports:** `getRealtimeClient()`, `disconnectRealtime()`
-   - **Auth:** Token Auth via authCallback
-   - **Validation:** `grep -n "Token\|authCallback\|getRealtimeClient" apps/mobile/lib/realtime.ts`
-
-3. [ ] Create `apps/mobile/hooks/useOrderChannel.ts`
-   - **Exports:** `useOrderChannel(orderId, orderChannelToken, chatChannelToken)`
-   - **Subscribes to:** full backend-provided channel tokens from DTO (`orderChannelToken`, `chatChannelToken`) without client-side reconstruction
-   - **Validation:** `grep -n "subscribe\|channels.get" apps/mobile/hooks/useOrderChannel.ts | wc -l` → should be ≥ 2
-
-4. [ ] Create `apps/mobile/hooks/useAggregatorFeedChannel.ts`
-   - **Exports:** `useAggregatorFeedChannel()`
-   - **Subscribes to:** `orders:hyd:new`
-   - **Validation:** `grep -n "subscrib" apps/mobile/hooks/useAggregatorFeedChannel.ts`
-
-5. [ ] Add `prependFeedOrder` to `aggregatorStore.ts` (if missing)
-   - **Check:** Function exists on store; deduplicates + prepends + caps at ~50
-   - **Validation:** `grep -n "prependFeedOrder" apps/mobile/store/aggregatorStore.ts`
-
-6. [ ] Wire `disconnectRealtime()` in AppState background handler
-   - **File:** `apps/mobile/app/_layout.tsx`
-   - **Validation:** `grep -n "disconnectRealtime\|AppState" apps/mobile/app/_layout.tsx`
-
-7. [ ] Add env vars to mobile
-   - **Vars:** `EXPO_PUBLIC_ABLY_AUTH_URL` (set to `${EXPO_PUBLIC_API_URL}/api/realtime/token`)
-   - **Validation:** `grep "EXPO_PUBLIC_ABLY" apps/mobile/.env` (should have auth URL, NOT API key)
-
-8. [ ] Sub-Agent 3 Self-Verification
-   ```bash
-   grep -n "noop\|stub\|TODO" apps/mobile/lib/realtime.ts | wc -l  # Should be 0
-   grep '"ably"' apps/mobile/package.json                          # Should show version
-   grep -n "channels.get" apps/mobile/hooks/useOrderChannel.ts     # Should show 2+ channel subscriptions
-   pnpm type-check                                                 # Should exit 0
-   ```
-
-### Phase 4: Screen Hook Wiring (Sub-Agent 4) — 20 min
-1. [ ] Wire `useOrderChannel` into seller Order Detail
-   - **File:** `apps/mobile/app/(seller)/order/[id].tsx`
-   - **Call:** `useOrderChannel(order.id, order.orderChannelToken ?? order.chatChannelToken ?? null)`
-   - **Validation:** `grep -n "useOrderChannel" apps/mobile/app/(seller)/order/[id].tsx`
-
-2. [ ] Wire `useOrderChannel` into aggregator Active Order Detail
-   - **File:** `apps/mobile/app/(aggregator)/active-order-detail.tsx`
-   - **Validation:** `grep -n "useOrderChannel" apps/mobile/app/(aggregator)/active-order-detail.tsx`
-
-3. [ ] Wire `useAggregatorFeedChannel` into aggregator Home
-   - **File:** `apps/mobile/app/(aggregator)/home.tsx`
-   - **Validation:** `grep -n "useAggregatorFeedChannel" apps/mobile/app/(aggregator)/home.tsx`
-
-4. [ ] Wire `useOrderChannel` into Chat screen
-   - **File:** `apps/mobile/app/(shared)/chat/[id].tsx`
-   - **Validation:** `grep -n "useOrderChannel" apps/mobile/app/(shared)/chat/[id].tsx`
-
-5. [ ] Sub-Agent 4 Self-Verification
-   ```bash
-   grep -n "useOrderChannel" apps/mobile/app/(seller)/order/[id].tsx          # ≥1
-   grep -n "useOrderChannel" apps/mobile/app/(aggregator)/active-order-detail.tsx  # ≥1
-   grep -n "useAggregatorFeedChannel" apps/mobile/app/(aggregator)/home.tsx   # ≥1
-   grep -n "useOrderChannel" apps/mobile/app/(shared)/chat/[id].tsx           # ≥1
-   pnpm type-check                                                            # Should exit 0
-   ```
-
-### Phase 5: Backend Monitoring (Sub-Agent 5) — 5 min
-1. [ ] Add Ably connection count monitor cron job
-   - **File:** `backend/src/scheduler.ts` or `backend/src/index.ts`
-   - **Schedule:** Every 5 minutes
-   - **Alert:** Sentry warning at ≥150 connections (75% of 200 free limit)
-   - **Validation:** `grep -n "Ably\|connection.*monitor" backend/src/scheduler.ts`
-
-2. [ ] Sub-Agent 5 Self-Verification
-   ```bash
-   grep -n "Ably.*stats\|connection.*monitor" backend/src/scheduler.ts | wc -l  # Should be ≥1
-   pnpm type-check                                                              # Should exit 0
-   ```
-
----
-
-## SECTION 4: SECURITY RULES IN SCOPE
-
-### Rule V32: HMAC-Suffix Channel Names
-- **Requirement:** All private channels use token-based suffix to prevent enumeration.
-- **Backend:** Uses `channelHelper.ts` (already correct).
-- **Mobile:** Uses `chatChannelToken` / `orderChannelToken` from API response — never bare `orderId`.
-- **Verification:**
-  ```bash
-  grep -n "channels.get" apps/mobile/hooks/useOrderChannel.ts | grep -v "hyd:new"
-  # Expected: Contains pattern like ${orderId}:${token}
-  ```
-- **BLOCK if:** Any client-side reconstructed private channel (e.g. bare `order:${orderId}`) is found.
-
-### Rule V37: Terminal Status Decommission
-- **Requirement:** After order reaches `completed`, `cancelled`, `disputed`, no more Ably messages.
-- **Backend:**
-  ```bash
-  grep -n "IMMUTABLE_STATUSES\|completed\|cancelled\|disputed" backend/src/routes/orders/index.ts | head -10
-  ```
-  Expected: Check prevents publish if status is immutable.
-- **Mobile:** `useFocusEffect` cleanup handles unsubscribe on screen unmount.
-- **BLOCK if:** Terminal-status order generates Ably event.
-
-### Rule D2: Zero PII in Push Bodies
-- **Requirement:** Push titles + bodies contain ZERO: name, phone, address, rupee amount, GSTIN, material type.
-- **Verification:**
-  ```bash
-  grep -rn "sendPushToUsers\|sendPush" backend/src/routes/ | grep -v node_modules
-  # For each call: inspect title and body strings
-  ```
-- **Allowed:** "New message", "Your pickup has been accepted", "Order completed".
-- **BLOCK if:** Any PII found.
-
-### Rule A1: /api/realtime/token Requires Clerk JWT
-- **Requirement:** Route protected by `clerkJwtMiddleware`.
-- **Verification:**
-  ```bash
-  grep -B3 -A3 "GET.*token\|/api/realtime/token" backend/src/routes/realtime.ts | grep -i middleware
-  ```
-- **BLOCK if:** Route accessible without Clerk JWT.
-
-### Rule I1: Ably Publish Never Crashes HTTP Response
-- **Requirement:** All publish calls wrapped in try/catch. Error logged but not thrown.
-- **Verification:**
-  ```bash
-  grep -B2 -A5 "publishEvent\|channels.get.*publish" backend/src/routes/orders/index.ts | grep -i "try\|catch"
-  ```
-- **BLOCK if:** Ably failure stops HTTP response.
-
----
-
-## SECTION 5: VERIFICATION GATE CHECKLIST
-
-All 8 gates MUST pass (show actual test output) before Day 13 is marked complete.
-
-### Gate G13.1: Chat Message Delivery < 1 Second
-**Test Steps:**
-1. Start backend: `pnpm dev:backend`
-2. Start mobile on two simulators/devices.
-3. Log in to both devices as seller + aggregator on same order.
-4. Open chat screen on both.
-5. Send message from Device A.
-6. Check Device B for message receipt (timestamp).
-
-**Expected Output:**
-```
-Device A sends: "Hello" at 14:32:10.000
-Device B receives: "Hello" at 14:32:10.800
-Latency: ~0.8 seconds ✅ PASS
-```
-
----
-
-### Gate G13.2: Phone Number Redacted in Chat
-**Test Command:**
+**Command:**
 ```bash
-# 1. Send message with phone via API
-curl -X POST http://localhost:3001/api/messages \
-  -H "Authorization: Bearer <seller_clerk_jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "order_id": "<order_uuid>",
-    "content": "Call me on 9876543210 or WhatsApp"
-  }'
-
-# 2. Fetch message from DB or API
-curl -X GET "http://localhost:3001/api/messages?order_id=<order_uuid>" \
-  -H "Authorization: Bearer <seller_clerk_jwt>"
-
-# 3. Verify stored content
-SELECT content FROM messages WHERE order_id = '<order_uuid>' ORDER BY created_at DESC LIMIT 1;
+grep -rn "EXPO_PUBLIC_ABLY_KEY" apps/mobile/ .env.example .env
 ```
 
-**Expected Output:**
-```
-Stored database content: "Call me on [phone number removed] or WhatsApp"
-API response content: "Call me on [phone number removed] or WhatsApp"
-✅ PASS
-```
+**Expected Result:** 0 results (Token Auth only — no direct API key on mobile)  
+**Status:** ⏳ PENDING EXECUTION  
+**Notes:** If found, must be removed before proceeding. Mobile uses `EXPO_PUBLIC_ABLY_AUTH_URL` instead.
 
 ---
 
-### Gate G13.3: Status Change → Live Order Detail Update (No Refresh)
-**Test Steps:**
-1. Seller Device A: Open Order Detail screen (order in `created` status).
-2. Aggregator Device B: Open same order in Order Detail (pre-acceptance view).
-3. Aggregator Device B: Tap "Accept Order".
-4. Seller Device A: Confirm status changed from `created` → `accepted` WITHOUT user tapping refresh.
+### Pre-flight Check 2: Verify Thin Wrapper Pattern is in Place
 
-**Expected Output:**
-```
-Seller Device A status before: "Created"
-[Aggregator Device B taps Accept]
-Seller Device A status updated to: "Accepted" (within 2 sec, no refresh)
-✅ PASS
-```
-
----
-
-### Gate G13.4: Navigate Away from Order Detail → Ably Connection Drops
-**Test Steps:**
-1. Open Ably dashboard → Statistics → Connections tab.
-2. On mobile: Navigate to Order Detail screen.
-3. Note connection count increases by 1.
-4. Navigate back to Orders List (leave Order Detail).
-5. Confirm connection count decreases by 1 within 5 seconds.
-
-**Expected Output:**
-```
-Before order detail: 1 connection
-After opening order detail: 2 connections
-After navigating away: 1 connection (within 5 sec)
-✅ PASS
-```
-
----
-
-### Gate G13.5: App Backgrounded → All Ably Channels Drop
-**Test Steps:**
-1. iOS/Android: Open Order Detail on mobile (Ably channel active).
-2. Press Home button (app goes to background).
-3. Watch Ably dashboard → Statistics → Connections.
-
-**Expected Output:**
-```
-Before background: 2 connections
-[App pressed to background]
-After 5 seconds: 0 connections
-✅ PASS
-```
-
----
-
-### Gate G13.6: New Order Push to Aggregator with Matching Materials
-**Test Steps:**
-1. Setup: Aggregator Device with `is_online=true` and materials set to [metal, plastic].
-2. Seller Device: Create new order with material=metal.
-3. Backend fires push to aggregators with matching materials.
-4. Aggregator Device: Should receive push notification.
-
-**Expected Output:**
-```
-[Seller creates order with material=metal]
-[Backend processes order creation]
-[Push sent to aggregator device]
-Aggregator Device receives: "New scrap order available"
-✅ PASS
-```
-
----
-
-### Gate G13.7: Zero PII in All Push Bodies
-**Audit Command:**
+**Command:**
 ```bash
-grep -rn "sendPushToUsers\(\|sendPush\(" backend/src/routes/ | grep -v node_modules | cut -d: -f1 | sort | uniq
-# For each file, inspect the function calls
+grep -rn "from 'ably'" backend/src/routes/ apps/mobile/app/
 ```
 
-**Expected Output:**
-```
-File: backend/src/routes/orders/index.ts
-  Line 234: sendPushToUsers(aggregatorIds, 'New scrap order available', 'Tap to view details', {...})
-  ✅ No name, phone, address, amount, GSTIN detected
-
-File: backend/src/routes/messages.ts
-  Line 156: sendPushToUsers([offlinePartyId], 'New message', 'You have a new message', {...})
-  ✅ No PII detected
-
-✅ PASS
-```
+**Expected Result:** 0 results in route handlers / screen files (only in `backend/src/lib/realtime.ts` and `apps/mobile/lib/realtime.ts` is acceptable)  
+**Status:** ⏳ PENDING EXECUTION  
+**Notes:** All Ably calls must go through wrapper modules, not direct SDK imports in route/screen files.
 
 ---
 
-### Gate G13.8: Private Channels Use HMAC-Suffix Naming
-**Inspection Commands:**
+### Pre-flight Check 3: Confirm Provider Stubs Exist
+
+**Command:**
 ```bash
-# Mobile channel construction
-grep -n "channels.get" apps/mobile/hooks/useOrderChannel.ts
-
-# Backend channel construction
-grep -n "channels.get\|publishEvent" backend/src/lib/realtime.ts
+ls -la packages/maps/src/ \
+       packages/realtime/src/ \
+       packages/auth/src/ \
+       packages/storage/src/ \
+       packages/analysis/src/
 ```
 
-**Expected Output:**
-```
-apps/mobile/hooks/useOrderChannel.ts: statusChannel = ably.channels.get(orderChannelToken)
-apps/mobile/hooks/useOrderChannel.ts: chatChannel = ably.channels.get(chatChannelToken)
-backend/src/lib/realtime.ts:8: export async function publishEvent(channel: string, event: string, payload: object) {
-backend/src/lib/realtime.ts:9:   await ablyRest.channels.get(channel).publish(event, payload);
-
-✅ All use token suffix (${chatChannelToken}), not bare orderId
-✅ PASS
-```
+**Expected Result:** Each directory exists; `index.ts` may be empty or minimal  
+**Status:** ⏳ PENDING EXECUTION  
+**Notes:** If any `src/` directory is missing, create it now.
 
 ---
 
-## SECTION 6: COMPLETION STEPS (EXECUTE IN EXACT ORDER AFTER ALL GATES PASS)
+### Pre-flight Check 4: Confirm @sortt/* Package Names
 
-Only after all 8 gates show PASS:
-
-### Step 1: Update PLAN.md
+**Command:**
 ```bash
-# Mark all Day 13 tasks [x]
-# Locate day 13 section in PLAN.md
-# For each task, change [ ] to [x]
-# Find gate marker and change to: [GATE PASSED — 2026-03-20T14:30:00Z]
-# Update STATUS TRACKER section (if exists)
+cat packages/maps/package.json | grep '"name"' && \
+cat packages/realtime/package.json | grep '"name"' && \
+cat packages/auth/package.json | grep '"name"' && \
+cat packages/storage/package.json | grep '"name"' && \
+cat packages/analysis/package.json | grep '"name"'
 ```
 
-### Step 2: Update MEMORY.md §9
-Append to MEMORY.md section 9 (Learned Lessons):
-
-```markdown
-## Learned Lessons — Day 13 (Ably Realtime + Push Notifications)
-
-### Pattern 1: Ably Token Auth in Mobile
-- **Issue:** Cannot expose `ABLY_API_KEY` to mobile — it's a backend secret.
-- **Solution:** Token Auth via `GET /api/realtime/token` endpoint. Mobile calls this route (protected by Clerk JWT) to get a token, then uses that token to authenticate Ably client.
-- **Implementation:** `authCallback` in `getRealtimeClient()` makes API call to get fresh token on each connection.
-- **Files:** `apps/mobile/lib/realtime.ts`, `backend/src/routes/realtime.ts`
-- **Date:** 2026-03-20
-
-### Pattern 2: Why EXPO_PUBLIC_ABLY_KEY Must Never Exist (V32)
-- **Issue:** Environment variables prefixed `EXPO_PUBLIC_` are bundled into the app binary. Any `EXPO_PUBLIC_*` value is visible to any user who decompiles the APK/IPA.
-- **Security risk:** If `ABLY_API_KEY` were exposed as `EXPO_PUBLIC_ABLY_KEY`, aggregators could enumerate channels, intercept competitor orders, or DOS the Ably service.
-- **Enforcement:** Token Auth pattern completely avoids this by routing all Ably auth through backend. Mobile never receives API key.
-- **Files affected:** `apps/mobile/.env`, `.env.example`
-- **Date:** 2026-03-20
-
-### Pattern 3: Backend Ably Wrapper (`publishEvent()`)
-- **Pattern:** Route handlers do NOT call Ably SDK directly. Instead, they call a thin `publishEvent(channel, event, payload)` wrapper.
-- **Benefit 1:** Decouples business logic from vendor SDK — easy swap later (Day 14 abstraction).
-- **Benefit 2:** Centralizes error handling — all Ably failures have one place to log + silence before HTTP response.
-- **Benefit 3:** Named function communicates intent clearly: "publish this event" vs. "call ably.channels.get()".
-- **Files:** `backend/src/lib/realtime.ts`, all routes using it
-- **Date:** 2026-03-20
-
-### Pattern 4: Singleton Realtime Client + Disconnect on AppState
-- **Issue:** Creating new Ably clients on every hook mount exhausts connection limit.
-- **Solution:** Singleton `getRealtimeClient()` — returns same instance on every call.
-- **Cleanup:** `disconnectRealtime()` called from AppState background handler — closes all channels and nullifies client.
-- **Reconnection:** On foreground, hooks call `getRealtimeClient()` again, which reconnects via Token Auth.
-- **Files:** `apps/mobile/lib/realtime.ts`, `apps/mobile/app/_layout.tsx`
-- **Date:** 2026-03-20
-
-### Pattern 5: Feed Order Deduplication (`prependFeedOrder`)
-- **Issue:** Multiple Ably events or race conditions could cause same order to appear in feed multiple times.
-- **Solution:** `prependFeedOrder(order)` in aggregator store checks if order.id already exists before prepending.
-- **Cap:** Feed capped at ~50 items to prevent memory bloat.
-- **Files:** `apps/mobile/store/aggregatorStore.ts`
-- **Date:** 2026-03-20
-
-### Compliance Gates Passed (V32, V37, D2, A1)
-- V32 (HMAC-suffix channels): All private channels use `chatChannelToken` from API.
-- V37 (Terminal status decommission): `useFocusEffect` cleanup unsubscribes on screen unmount.
-- D2 (Zero PII in push): Hardcoded PII audit rule in `sendPushToUsers()` JSDoc.
-- A1 (Clerk JWT on token endpoint): `/api/realtime/token` protected by `clerkJwtMiddleware`.
-- Date: 2026-03-20
+**Expected Result:**
+```
+"name": "@sortt/maps"
+"name": "@sortt/realtime"
+"name": "@sortt/auth"
+"name": "@sortt/storage"
+"name": "@sortt/analysis"
 ```
 
-### Step 3: Update structure.md
-Add the following to the directory tree in structure.md:
+**Status:** ⏳ PENDING EXECUTION  
+**Notes:** If any name is incorrect, fix `package.json` before proceeding.
 
-```markdown
-├── backend/
-│   ├── src/
-│   │   ├── lib/
-│   │   │   ├── realtime.ts          ← NEW: Ably wrapper (publishEvent, createTokenRequest)
-│   │   ├── utils/
-│   │   │   ├── pushNotifications.ts ← NEW: Chunked expo-server-sdk pattern (replaces pushHelper)
-│   │   ├── routes/
-│   │   │   ├── realtime.ts          ← NEW or UPDATED: GET /api/realtime/token endpoint
-│   ├── package.json                 ← UPDATED: ably + expo-server-sdk dependencies
+---
 
-├── apps/mobile/
-│   ├── lib/
-│   │   ├── realtime.ts              ← REWRITTEN: Ably Token Auth client (was noop stub)
-│   ├── hooks/
-│   │   ├── useOrderChannel.ts       ← NEW: Subscribe to order + chat events
-│   │   ├── useAggregatorFeedChannel.ts ← NEW: Subscribe to orders:hyd:new feed
-│   ├── store/
-│   │   ├── aggregatorStore.ts       ← UPDATED: Added prependFeedOrder, feed deduplication
-│   ├── .env                         ← UPDATED: Added EXPO_PUBLIC_ABLY_AUTH_URL
-│   ├── .env.example                 ← UPDATED: Added EXPO_PUBLIC_ABLY_AUTH_URL (no key!)
-│   ├── package.json                 ← UPDATED: ably dependency added
-```
+## ✅ SECTION 2 — FILE INVENTORY
 
-### Step 4: Update README.md
-Add `EXPO_PUBLIC_ABLY_AUTH_URL` to the environment variables table:
+### New files to CREATE
 
-```markdown
-| Variable | Scope | Required | Description |
+| Path | Type | Description |
+|---|---|---|
+| `packages/maps/src/types.ts` | NEW | `IMapProvider` interface + `GeoResult` DTO |
+| `packages/maps/src/providers/GoogleMapsProvider.ts` | NEW | Google Geocoding implementation |
+| `packages/maps/src/providers/OlaMapsProvider.ts` | NEW | OlaMapsProvider stub (throws NotImplementedError) |
+| `packages/maps/src/index.ts` | NEW | Exports + `createMapProvider()` factory |
+| `packages/realtime/src/types.ts` | NEW | `IRealtimeProvider` interface + `RealtimeMessage` type |
+| `packages/realtime/src/providers/AblyBackendProvider.ts` | NEW | Backend publish-only Ably wrapper (`Ably.Rest`) |
+| `packages/realtime/src/providers/AblyMobileProvider.ts` | NEW | Mobile Token Auth Ably wrapper (`Ably.Realtime`) |
+| `packages/realtime/src/providers/SoketiProvider.ts` | NEW | SoketiProvider stub (throws NotImplementedError) |
+| `packages/realtime/src/index.ts` | NEW | Exports + `createRealtimeProvider(context)` factory |
+| `packages/auth/src/types.ts` | NEW | `IAuthProvider` interface + `Session` DTO |
+| `packages/auth/src/providers/ClerkAuthProvider.ts` | NEW | Clerk authentication wrapper |
+| `packages/auth/src/index.ts` | NEW | Exports + `createAuthProvider()` factory |
+| `packages/storage/src/types.ts` | NEW | `IStorageProvider` interface (no `getPublicUrl()` — D1) |
+| `packages/storage/src/providers/UploadthingStorageProvider.ts` | NEW | Uploadthing implementation |
+| `packages/storage/src/providers/StubStorageProvider.ts` | NEW | StubStorageProvider (throws NotImplementedError) |
+| `packages/storage/src/index.ts` | NEW | Exports + `createStorageProvider()` factory |
+| `packages/analysis/src/types.ts` | NEW | `IAnalysisProvider` interface + `AnalysisResult` (is_ai_estimate: true) |
+| `packages/analysis/src/providers/GeminiVisionProvider.ts` | NEW | Gemini Vision stub (Day 15 completes implementation) |
+| `packages/analysis/src/index.ts` | NEW | Exports + `createAnalysisProvider()` factory |
+
+### Files to MODIFY
+
+| Path | Type | Change |
+|---|---|---|
+| `packages/maps/package.json` | MODIFY | Add `dependencies: { "@googlemaps/google-maps-services-js": "^3.0.0" }` + build scripts |
+| `packages/maps/tsconfig.json` | MODIFY | Extend root tsconfig, set `outDir: "./dist"` |
+| `packages/realtime/package.json` | MODIFY | Add ably dependency matching version in apps/mobile/package.json (run: `grep '"ably"' apps/mobile/package.json backend/package.json` to get current version) + build scripts |
+| `packages/realtime/tsconfig.json` | MODIFY | Extend root tsconfig, set `outDir: "./dist"` |
+| `packages/auth/package.json` | MODIFY | Empty dependencies (ClerkAuthProvider calls backend API only, NOT Clerk SDK) + build scripts |
+| `packages/auth/tsconfig.json` | MODIFY | Extend root tsconfig, set `outDir: "./dist"` |
+| `packages/storage/package.json` | MODIFY | Add `dependencies: { "uploadthing": "^6.0.0" }` + build scripts |
+| `packages/storage/tsconfig.json` | MODIFY | Extend root tsconfig, set `outDir: "./dist"` |
+| `packages/analysis/package.json` | MODIFY | Empty dependencies (GeminiVisionProvider stub throws NotImplementedError; Gemini SDK added Day 15) + build scripts |
+| `packages/analysis/tsconfig.json` | MODIFY | Extend root tsconfig, set `outDir: "./dist"` |
+| `backend/package.json` | MODIFY | Add workspace dependencies: `"@sortt/realtime": "workspace:*"`, `"@sortt/maps": "workspace:*"`, `"@sortt/storage": "workspace:*"`, `"@sortt/analysis": "workspace:*"` |
+| `backend/src/lib/realtime.ts` | MODIFY | Become factory for `AblyBackendProvider` from `@sortt/realtime` |
+| `backend/src/lib/storage.ts` | MODIFY | Become factory for `UploadthingStorageProvider` from `@sortt/storage` |
+| `backend/src/providers/maps.ts` | MODIFY | Become re-export of `createMapProvider()` from `@sortt/maps` |
+| `backend/src/providers/ablyProvider.ts` | DELETE | Remove after all callers migrated to `backend/src/lib/realtime.ts` |
+| `apps/mobile/package.json` | MODIFY | Add workspace dependencies: `"@sortt/realtime": "workspace:*"`, `"@sortt/auth": "workspace:*"` (NOT analysis — backend-only) |
+| `apps/mobile/lib/realtime.ts` | MODIFY | Become factory for `AblyMobileProvider` from `@sortt/realtime` |
+| `.env.example` | MODIFY | Remove `EXPO_PUBLIC_ABLY_KEY` (if present); add `SOKETI_URL=ws://localhost:6001  # Only if REALTIME_PROVIDER=soketi` |
+
+---
+
+## ✅ SECTION 3 — SUB-AGENT ASSIGNMENTS
+
+| Agent | Scope | Dependencies | Self-Verification |
 |---|---|---|---|
-| EXPO_PUBLIC_ABLY_AUTH_URL | Mobile | ✅ | Token endpoint for Ably Token Auth. Value: `${EXPO_PUBLIC_API_URL}/api/realtime/token`. Mobile makes authenticated call to this endpoint to get Ably token. **NEVER set EXPO_PUBLIC_ABLY_KEY** — that would expose the API key. |
+| **A: Pre-flight** | Run 4 pre-flight checks; fix `EXPO_PUBLIC_ABLY_KEY` if found; audit existing wrapper files | None | All 4 checks pass; audit report shows zero direct SDK calls in route handlers/screens |
+| **B: packages/realtime/** | `IRealtimeProvider`, `AblyBackendProvider`, `AblyMobileProvider`, `SoketiProvider`, factory | A complete | `REALTIME_PROVIDER=soketi` instantiates correctly; `pnpm type-check` passes |
+| **C: packages/maps/** | `IMapProvider`, `GoogleMapsProvider`, `OlaMapsProvider`, factory | A complete | `MAP_PROVIDER=ola` instantiates correctly; `pnpm type-check` passes |
+| **D: packages/storage/** | `IStorageProvider`, `UploadthingStorageProvider`, `StubStorageProvider`, factory | A complete | `typeof provider.getPublicUrl === 'undefined'`; `pnpm type-check` passes |
+| **E: packages/auth/** | `IAuthProvider`, `Session` DTO, `ClerkAuthProvider`, factory | A complete | `grep -n "phone\|clerk_user_id" src/types.ts` → 0 results; `pnpm type-check` passes |
+| **F: packages/analysis/** | `IAnalysisProvider`, `AnalysisResult` (is_ai_estimate: true), `GeminiVisionProvider` stub (throws NotImplementedError immediately; no Gemini SDK imported) | A complete | `GeminiVisionProvider` stub throws on call; `pnpm type-check` passes; zero Gemini imports |
+| **G: Backend migration** | Update `backend/src/lib/realtime.ts`, `backend/src/lib/storage.ts`, `backend/src/providers/maps.ts` to import from `@sortt/*`; DELETE `backend/src/providers/ablyProvider.ts`; update `backend/package.json` | B, C, D complete | `grep -rn "from 'ably'" backend/src/` → confirms zero Ably direct imports; `pnpm install` succeeds |
+| **H: Mobile migration** | Update `apps/mobile/lib/realtime.ts` to import from `@sortt/realtime`; update `apps/mobile/package.json` | B complete | `grep -rn "from 'ably'" apps/mobile/app/` → 0 results; `pnpm install` succeeds |
+| **I: Verification** | Run G14.1–G14.6 gates sequentially; report PASS/FAIL per gate | G, H complete | All gates pass; `pnpm type-check` from repo root exits 0 |
+
+---
+
+## ✅ SECTION 4 — EXECUTION SEQUENCE
+
+### Phase 1: Pre-flight (Single Agent)
+1. **Agent A:** Run 4 pre-flight checks. Flag any issues. Remove `EXPO_PUBLIC_ABLY_KEY` if found. Output: audit report.
+
+### Phase 2: Package Creation (5 Agents in PARALLEL)
+2. **Agent B:** Create `packages/realtime/` with `IRealtimeProvider`, `AblyBackendProvider`, `AblyMobileProvider`, `SoketiProvider`, factory.
+3. **Agent C:** Create `packages/maps/` with `IMapProvider`, `GoogleMapsProvider`, `OlaMapsProvider`, factory.
+4. **Agent D:** Create `packages/storage/` with `IStorageProvider`, `UploadthingStorageProvider`, `StubStorageProvider`, factory.
+5. **Agent E:** Create `packages/auth/` with `IAuthProvider`, `Session` DTO, `ClerkAuthProvider`, factory.
+6. **Agent F:** Create `packages/analysis/` with `IAnalysisProvider`, `AnalysisResult`, `GeminiVisionProvider` stub, factory index.ts.
+
+**Parallel Execution Safe:** Agents B, C, D, E, F have no inter-package dependencies — all can run simultaneously.
+
+### Phase 3: Backend + Mobile Migration (Sequential After Packages)
+7. **Agent G (depends on B+C+D):** After packages built, refactor backend code to import from `@sortt/*` instead of direct SDKs.
+   - Update `backend/src/lib/realtime.ts` → factory for `AblyBackendProvider`
+   - Update `backend/src/lib/storage.ts` → factory for `UploadthingStorageProvider`
+   - Update `backend/src/providers/maps.ts` → re-export `createMapProvider()`
+   - Update `backend/package.json` with workspace dependencies
+
+8. **Agent H (depends on B):** After `packages/realtime/` built, refactor mobile realtime code.
+   - Update `apps/mobile/lib/realtime.ts` → factory for `AblyMobileProvider`
+   - Update `apps/mobile/package.json` with workspace dependencies
+
+9. **Agent G & H (parallel post-package):** Both can run simultaneously after their dependencies are met.
+
+### Phase 4: Integrated Verification (Sequential After Refactoring)
+10. **Agent I (depends on G+H):** Run all 6 verification gates (G14.1–G14.6) sequentially. Report PASS/FAIL + actual command output for each.
+
+### Phase 5: Completion (Sequential After All Gates Pass)
+11. Update `PLAN.md` — mark all Day 14 tasks `[x]`; mark gate `[GATE PASSED — 2026-03-24]`.
+12. Update `MEMORY.md` §9 — append learned lessons from today.
+13. Update `structure.md` — add all 5 new packages to directory tree.
+14. Update `README.md` — add `MAP_PROVIDER`, `REALTIME_PROVIDER`, `STORAGE_PROVIDER` to env vars table.
+15. Run `pnpm type-check` from repo root — must exit 0.
+16. **GitHub push:** `feat: Day 14 complete — Provider abstractions for all 5 packages + swap stubs + zero SDK leakage`.
+17. Create `agent/day-context/day-15.md` context file for next day.
+
+---
+
+## ✅ SECTION 5 — SECURITY RULES IN SCOPE
+
+### TRD §14 Security Mitigations Enforced Today
+
+| Rule ID | Name | How Enforced |
+|---|---|---|
+| **D1** | Private Storage Only | `IStorageProvider` interface has NO `getPublicUrl()` method. Gate G14.5 verifies absence. All files use signed URLs (300s expiry). |
+| **V18** | EXIF Stripping Before AI | Deferred to Day 15 (GeminiVisionProvider is stub in Day 14). When implemented: `stripEXIF()` must be called BEFORE Gemini in `analyzeScrapImage()`. Day 15 gate will verify timing via grep. |
+| **V19** | SSRF Prevention | `GoogleMapsProvider.geocode()` uses official Google API only — no UDF-supplied URLs. Comment in code: "Coordinates validation: log warning if out-of-India." |
+| **V24 + V-CLERK-1** | Phone & Clerk ID Redaction | `IAuthProvider.Session` DTO MUST NOT include `phone`, `phone_hash`, or `clerk_user_id`. Gate G14.6 verifies absence. |
+| **V32** | HMAC-Suffixed Channels | Backend and mobile always use server-provided channel tokens (HMAC suffix). No client-side channel name reconstruction. Already enforced by Day 13; Day 14 preserves via wrapper. |
+| **I1** | AI Output Non-Authoritative | `AnalysisResult.is_ai_estimate: true` is a literal type (not `boolean`). Type-level guarantee. Deferred to Day 15: EXIF stripping and data assignment audit. |
+| **A1** | JWT on Token Endpoint | `GET /api/realtime/token` protected by `clerkJwtMiddleware` (already in place from Day 13). Day 14 preserves. |
+| **V34** | Helmet Security Headers | Day 13 enforced; Day 14 preserves. No changes. |
+
+---
+
+## ✅ SECTION 6 — INTERFACE CONTRACTS (EXACT TYPESCRIPT)
+
+### IRealtimeProvider (packages/realtime/src/types.ts)
+
+```typescript
+export type Unsubscribe = () => void;
+
+export interface RealtimeMessage {
+  event: string;
+  data: object;
+  timestamp: number;
+}
+
+export interface IRealtimeProvider {
+  /**
+   * Subscribe to a channel event.
+   * Returns an unsubscribe function.
+   */
+  subscribe(
+    channel: string,
+    event: string,
+    handler: (message: RealtimeMessage) => void
+  ): Unsubscribe;
+
+  /**
+   * Publish an event to a channel.
+   * Wraps SDK publish call. Errors logged but not thrown (graceful degradation).
+   */
+  publish(channel: string, event: string, payload: object): Promise<void>;
+
+  /**
+   * Detach a specific channel (backend) or unsubscribe all listeners (mobile).
+   */
+  removeChannel(channel: string): void;
+
+  /**
+   * Remove all channels (app backgrounding).
+   */
+  removeAllChannels(): void;
+
+  /**
+   * Disconnect the realtime client (mobile Token Auth cleanup).
+   * Backend: no-op.
+   */
+  disconnect(): void;
+}
 ```
 
-**Note:** Explicitly document that `EXPO_PUBLIC_ABLY_KEY` must never exist.
+### IMapProvider (packages/maps/src/types.ts)
 
-### Step 5: Type-Check
+```typescript
+export interface GeoResult {
+  city_code: string;         // e.g., "hyd", "blr"
+  locality: string;          // e.g., "Banjara Hills"
+  display_address: string;   // e.g., "Banjara Hills, Hyderabad"
+}
+
+export interface IMapProvider {
+  /**
+   * Geocode an address to city code, locality, and display address.
+   * Calls Google Maps Geocoding API.
+   * Throws if address is invalid or API fails.
+   */
+  geocode(address: string): Promise<GeoResult>;
+
+  /**
+   * Reverse geocode coordinates to a display address.
+   * Calls Google Maps Reverse Geocoding API.
+   * Returns a human-readable address string.
+   */
+  reverseGeocode(lat: number, lng: number): Promise<string>;
+}
+```
+
+### IAuthProvider (packages/auth/src/types.ts)
+
+```typescript
+/**
+ * CRITICAL (V24 + V-CLERK-1):
+ * Session MUST NOT include phone, phone_hash, or clerk_user_id.
+ * Only exposed DTO fields: id, user_type.
+ * Matches existing authStore contract.
+ */
+export interface Session {
+  id: string;                                           // Internal user.id (UUID)
+  user_type: 'seller' | 'aggregator' | 'admin' | null; // User type or null if not set
+}
+
+export interface IAuthProvider {
+  /**
+   * Initiate OTP flow for the given phone number.
+   * Mode determines behavior: 'login' checks existence, 'signup' checks non-existence.
+   */
+  signInWithOTP(phone: string, mode: 'login' | 'signup'): Promise<void>;
+
+  /**
+   * Verify OTP and return Clerk token.
+   */
+  verifyOTP(phone: string, token: string): Promise<{ clerkToken: string }>;
+
+  /**
+   * Get current session (null if not authenticated).
+   */
+  getSession(): Promise<Session | null>;
+
+  /**
+   * Sign out current session.
+   */
+  signOut(): Promise<void>;
+
+  /**
+   * Listen for auth state changes.
+   * Returns unsubscribe function.
+   */
+  onAuthStateChange(callback: (session: Session | null) => void): () => void;
+}
+```
+
+### IStorageProvider (packages/storage/src/types.ts)
+
+```typescript
+/**
+ * CRITICAL (D1):
+ * This interface has NO getPublicUrl() method.
+ * All files are private; access via expiring signed URLs only.
+ */
+export interface IStorageProvider {
+  /**
+   * Upload a file to the given bucket and path.
+   * Returns the file key for later reference (signed URL generation, deletion).
+   */
+  upload(
+    bucket: string,
+    path: string,
+    data: Buffer
+  ): Promise<{ fileKey: string }>;
+
+  /**
+   * Generate a signed URL for the given file key.
+   * Expires in the specified number of seconds (default 300s / 5 minutes).
+   * CRITICAL: always returns private, expiring URLs — never public URLs.
+   */
+  getSignedUrl(
+    fileKey: string,
+    expiresInSeconds?: number
+  ): Promise<string>;
+
+  /**
+   * Delete a file from storage.
+   */
+  delete(fileKey: string): Promise<void>;
+}
+```
+
+### IAnalysisProvider (packages/analysis/src/types.ts)
+
+```typescript
+/**
+ * CRITICAL (I1):
+ * is_ai_estimate MUST be a literal true (not boolean).
+ * This is a type-level guarantee that the result is non-authoritative.
+ * Callers must NOT write estimated_weight_kg directly to confirmed_weight_kg.
+ *
+ * CRITICAL (V18):
+ * EXIF must be stripped BEFORE Gemini call, inside analyzeScrapImage().
+ * Never pass raw image buffer with EXIF data to Gemini.
+ */
+export interface AnalysisResult {
+  material_code: string;        // Must match material_types.code
+  estimated_weight_kg: number;  // > 0
+  confidence: number;           // 0.0 - 1.0
+  is_ai_estimate: true;         // Literal true — non-authoritative hint only
+}
+
+export interface IAnalysisProvider {
+  /**
+   * Analyze a scrap image with Gemini Vision.
+   * 
+   * CRITICAL (V18): Method implementation must:
+   * 1. Call stripEXIF(imageBuffer) FIRST
+   * 2. Pass clean buffer to Gemini
+   * 3. Never pass buffer with EXIF metadata
+   * 
+   * Returns AnalysisResult with is_ai_estimate: true.
+   * Throws if Gemini call fails or response is unparseable.
+   */
+  analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult>;
+}
+```
+
+---
+
+## ✅ SECTION 7 — VERIFICATION GATE CHECKLIST
+
+### Gate G14.1: All 5 Packages Build + Type Check
+
+**Command:**
 ```bash
+pnpm install
+pnpm build
 pnpm type-check
-# Expected output: "✅ No errors"
-```
-
-If errors present, halt and fix root causes before proceeding.
-
-### Step 6: GitHub Commit & Push
-```bash
-git add -A
-git commit -m "feat: Day 13 complete — Ably realtime + push notifications wired end-to-end
-
-- Backend: PATCH status + POST orders publish Ably events
-- Push: Chunked expo-server-sdk, zero PII
-- Mobile: Ably Token Auth + useOrderChannel + useAggregatorFeedChannel hooks
-- Screens: Order detail + chat + aggregator home wired to live updates
-- Security: V32 (HMAC-suffix), V37 (terminal unsubscribe), D2 (PII audit), A1 (JWT token endpoint)
-- Monitoring: Ably connection count monitor added
-- All 8 gates passing"
-
-git push origin main
 ```
 
 **Expected Output:**
-```
-[main abc1234] feat: Day 13 complete...
- X files changed, YYY insertions(+), ZZZ deletions(-)
-✅ Push successful
-```
+- All commands exit 0
+- No TypeScript errors
+- Each package generates `dist/index.js` and `dist/index.d.ts`
+
+**Report Required:** Full terminal output showing successful build + type check.
 
 ---
 
-## FINAL STATUS
+### Gate G14.2: Map Provider Swap via ENV VAR
 
-| Phase | Status | Blocker? | Notes |
-|---|---|---|---|
-| Preconditions | ⏳ AWAITING USER APPROVAL | No | All reads done. Awaiting GO/NO-GO signal. |
-| Sub-Agent 1 (Backend Gap) | ⏳ PENDING | No | Will execute after approval. |
-| Sub-Agent 2 (Wrapper + Token) | ⏳ PENDING | No | Depends on deployment trigger. |
-| Sub-Agent 3 (Mobile Ably) | ⏳ PENDING | No | Depends on Sub-Agent 2 token endpoint. |
-| Sub-Agent 4 (Screen Wiring) | ⏳ PENDING | No | Depends on Sub-Agent 3 hooks. |
-| Sub-Agent 5 (Monitor) | ⏳ PENDING | No | Independent. |
-| All 8 Gates | ⏳ PENDING | No | Will execute after dev complete. |
-| PLAN.md Update | ⏳ PENDING | No | After gates pass. |
-| MEMORY.md Append | ⏳ PENDING | No | After gates pass. |
-| GitHub Commit | ⏳ PENDING | No | Final step. |
+**Command:**
+```bash
+MAP_PROVIDER=ola pnpm --filter @sortt/maps build && \
+MAP_PROVIDER=ola node -e "
+  const { createMapProvider } = require('./packages/maps/dist/index.js');
+  const provider = createMapProvider();
+  provider.geocode('test address').catch(e => console.log('✓ Expected error:', e.message));
+"
+```
+
+**Expected Output:** Message showing `NotImplementedError` or similar indicating OlaMapsProvider was instantiated.
+
+**Report Required:** Captured error message proving OlaMapsProvider was used, not GoogleMapsProvider.
 
 ---
 
-## APPROVAL REQUIRED
+### Gate G14.3: Realtime Provider Swap via ENV VAR
 
-**Before executing the implementation plan, confirm:**
-
-1. ✅ All preconditions in Section 1 understood and verified.
-2. ✅ All gaps in Section 2 understood and acceptable.
-3. ✅ Execution sequence in Section 3 is clear (5 phases, parallel sub-agents).
-4. ✅ Security rules in Section 4 understood (V32, V37, D2, A1, I1).
-5. ✅ Verification gates in Section 5 are achievable and realistic.
-6. ✅ Completion steps in Section 6 are clear and executable.
-
-**User Action Required:** Reply with:
-```
-GO — Deploy all 5 sub-agents in parallel.
+**Command:**
+```bash
+REALTIME_PROVIDER=soketi pnpm --filter @sortt/realtime build && \
+REALTIME_PROVIDER=soketi SOKETI_URL=ws://localhost:6001 node -e "
+  const { createRealtimeProvider } = require('./packages/realtime/dist/index.js');
+  const provider = createRealtimeProvider('backend');
+  provider.publish('test', 'event', {}).catch(e => console.log('✓ Expected error:', e.message));
+"
 ```
 
-or
+**Expected Output:** Message showing `NotImplementedError` indicating SoketiProvider was instantiated.
 
-```
-NO-GO — <reason>
-```
+**Report Required:** Captured error message.
 
 ---
 
-**Generated:** 2026-03-20T11:45:00Z  
-**Plan Version:** 1.0  
-**Estimated Completion Time:** ~2.5 hours (5 phases + 8 gates + 6 completion steps)
+### Gate G14.4: Zero Direct SDK Imports in Application Code
+
+**Command:**
+```bash
+grep -rn "from 'ably'" apps/mobile/ backend/src/ --exclude-dir=node_modules 2>/dev/null
+```
+
+**Expected Output:** `0` (zero lines matching the pattern)
+
+**Report Required:** Full grep output (should be empty) — save to file and show.
+
+---
+
+### Gate G14.5: Storage Interface + getSignedUrl Default Expiry
+
+**Command A (Storage interface — no getPublicUrl):**
+```bash
+grep -n "getPublicUrl" packages/storage/src/types.ts
+```
+
+**Expected Output:** `0` results (no getPublicUrl method in interface).
+
+**Command B (getSignedUrl default expiry):**
+```bash
+# Verify default expiry is 300s
+grep -A 5 "getSignedUrl" packages/storage/src/types.ts | grep -i "300\|expiresInSeconds\|default"
+```
+
+**Expected Output:** Shows JSDoc or code comment confirming default 300 seconds.
+
+**Report Required:** Both grep outputs confirming storage has no getPublicUrl and getSignedUrl defaults to ≤300s.
+
+---
+
+### Gate G14.6: Zero Gemini Types in Application Code
+
+**Command:**
+```bash
+grep -rn "@google/generative-ai\|@google-cloud/generative-ai" apps/mobile/ backend/src/ --exclude-dir=node_modules 2>/dev/null
+```
+
+**Expected Output:** `0` (zero results — Gemini SDK isolated to `packages/analysis/src/` only).
+
+**Report Required:** Full grep output (should be empty).
+
+---
+
+## ✅ SECTION 7B — SECURITY SIGN-OFF (Non-Gate Compliance Checks)
+
+These checks confirm security rules are enforced but are NOT formal verification gates. They are completed by individual agents during package creation.
+
+### Security Check: EXIF Stripping Timing (V18 — Day 15 Scope)
+**Note:** GeminiVisionProvider is a stub in Day 14. This check deferred to Day 15 when actual Gemini implementation is added.
+- Verify: `stripEXIF()` must be called INSIDE `analyzeScrapImage()` BEFORE any Gemini API call.
+- When implemented on Day 15, run: `grep -A 15 "analyzeScrapImage" packages/analysis/src/providers/GeminiVisionProvider.ts | grep -n "stripEXIF"`
+- Expected: stripEXIF line appears before Gemini API call line.
+
+### Security Check: Auth DTO Sensitive Field Exclusion (V24 + V-CLERK-1)
+**Command (Agent E — Sub-Agent 3):**
+```bash
+grep -n "phone\|clerk_user_id\|phone_hash\|display_name\|role" packages/auth/src/types.ts
+```
+
+**Expected Output:** 
+- `0` results for `phone`, `clerk_user_id`, `phone_hash`, `display_name`, `role`
+- ONLY acceptable results: `user_type` enum definitions
+
+**Report Required:** Grep output confirming Session DTO contains only `id` and `user_type` fields.
+
+---
+
+## ✅ SECTION 8 — COMPLETION STEPS (In Order)
+
+After all gates G14.1–G14.6 pass:
+
+1. ✅ **Update PLAN.md**
+   - Mark all Day 14 tasks under §14.1: `[x]`
+   - Mark the gate section: `[GATE PASSED — 2026-03-24]`
+   - Update STATUS TRACKER if present
+
+2. ✅ **Update MEMORY.md §9 (Learned Lessons)**
+   - Append entry: `[2026-03-24] Day 14 Complete — Provider abstractions: 5 packages created with zero SDK leakage. Key lessons: [list key findings].`
+
+3. ✅ **Update structure.md**
+   - Add to directory tree under `packages/`:
+     ```
+     packages/
+     ├── maps/          # NEW ← IMapProvider abstraction
+     ├── realtime/      # NEW ← IRealtimeProvider abstraction
+     ├── auth/          # NEW ← IAuthProvider abstraction
+     ├── storage/       # NEW ← IStorageProvider abstraction
+     └── analysis/      # NEW ← IAnalysisProvider abstraction
+     ```
+
+4. ✅ **Verify README.md**
+   - Confirm existence of env vars table
+   - Add if missing:
+     ```
+     | MAP_PROVIDER | backend | "google" | Swap IMapProvider: "google" | "ola" |
+     | REALTIME_PROVIDER | backend | "ably" | Swap IRealtimeProvider: "ably" | "soketi" |
+     | STORAGE_PROVIDER | backend | "uploadthing" | Swap IStorageProvider |
+     | SOKETI_URL | backend | - | Soketi server URL (only if REALTIME_PROVIDER=soketi) |
+     ```
+
+5. ✅ **Run final type check**
+   ```bash
+   pnpm type-check
+   ```
+   Must exit 0 with zero errors.
+
+6. ✅ **GitHub push**
+   ```bash
+   git add -A
+   git commit -m "feat: Day 14 complete — Provider abstractions for all 5 packages + swap stubs + zero SDK leakage in app code"
+   git push origin main
+   ```
+
+7. ✅ **Create agent context for Day 15**
+   - Create `.agent/day-context/day-15.md`
+   - Include: Gemini Vision implementation details, GST invoice requirements, price scraper architecture
+
+---
+
+## APPROVAL CHECKPOINT
+
+**This plan is ready for review and approval before any code is written.**
+
+**To approve, confirm:**
+- ✅ All 8 sections complete and logically sound
+- ✅ Pre-flight checks are feasible
+- ✅ File inventory matches structure.md
+- ✅ Sub-agent assignments are clear with dependencies
+- ✅ Interface contracts are type-safe and match TRD requirements
+- ✅ Verification gates are testable and have exact commands
+- ✅ Completion steps are actionable
+
+**Once approved, execution will proceed in this exact order:**
+1. Agent A runs pre-flight → audit report
+2. Agents B,C,D,E,F run in parallel → package creation
+3. Agents G,H run after dependencies → refactoring
+4. Agent I runs last → verification
+5. Lead runs completion steps 1-7 → final reports
+
+---
+
+**Plan Status:** ⏳ AWAITING APPROVAL  
+**Lead:** Team Lead (you)  
+**Next Action:** Review and approve, then authorize Agent A pre-flight execution.
+

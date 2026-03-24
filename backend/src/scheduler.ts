@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { query } from './lib/db';
 import * as Sentry from '@sentry/node';
-import Ably from 'ably';
 
 // Define the jobs and their queries
 const jobs = [
@@ -52,21 +51,11 @@ const jobs = [
         name: 'Ably Connection Monitor',
         schedule: '*/5 * * * *', // Every 5 minutes
         task: async () => {
-            const key = process.env.ABLY_API_KEY;
-            if (!key) return;
-
             try {
-                const ablyRest = new Ably.Rest({ key });
-                const stats = await ablyRest.stats({ unit: 'minute', limit: 1 });
-                const firstItem = stats.items?.[0] as unknown as { connections?: { peak?: number } } | undefined;
-                const connections = firstItem?.connections?.peak ?? 0;
-
-                // Alert at 150 connections (75% of 200 free limit)
-                if (connections >= 150) {
-                    Sentry.captureMessage(
-                        `Ably connection ceiling approaching: ${connections}/200`,
-                        'warning'
-                    );
+                // Day 14: direct Ably SDK usage removed from backend app code.
+                // Connection monitoring can be reintroduced via @sortt/realtime provider metrics.
+                if (process.env.ABLY_API_KEY) {
+                    Sentry.captureMessage('Ably connection monitor skipped: provider metrics adapter pending', 'info');
                 }
             } catch (err) {
                 Sentry.captureException(err, { tags: { cron_job: 'ably_connection_monitor' } });

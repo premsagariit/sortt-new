@@ -13,6 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@sortt/auth": "workspace:*",
+    "@sortt/realtime": "workspace:*",
     "@clerk/clerk-expo": "^2.19.30",
     "@expo-google-fonts/dm-mono": "^0.2.3",
     "@expo-google-fonts/dm-sans": "^0.2.3",

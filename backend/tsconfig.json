@@ -11,11 +11,11 @@
     "rootDir": "src",
     "baseUrl": ".",
     "paths": {
-      "@sortt/maps": ["../packages/maps/src/index.ts"],
-      "@sortt/realtime": ["../packages/realtime/src/index.ts"],
-      "@sortt/auth": ["../packages/auth/src/index.ts"],
-      "@sortt/storage": ["../packages/storage/src/index.ts"],
-      "@sortt/analysis": ["../packages/analysis/src/index.ts"]
+      "@sortt/maps": ["../packages/maps/dist/index.d.ts"],
+      "@sortt/realtime": ["../packages/realtime/dist/index.d.ts"],
+      "@sortt/auth": ["../packages/auth/dist/index.d.ts"],
+      "@sortt/storage": ["../packages/storage/dist/index.d.ts"],
+      "@sortt/analysis": ["../packages/analysis/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

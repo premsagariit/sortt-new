@@ -1,7 +1,8 @@
 ﻿{
     "version":  "1.0.0",
     "name":  "@sortt/storage",
-    "main":  "src/index.ts",
+    "main":  "dist/index.js",
+    "types":  "dist/index.d.ts",
     "scripts":  {
                     "type-check":  "tsc --noEmit",
                     "build":  "tsc --project tsconfig.json"
@@ -9,5 +10,8 @@
     "devDependencies":  {
                             "typescript":  "^5.5.3"
                         },
+        "files": [
+            "dist"
+        ],
     "private":  true
 }

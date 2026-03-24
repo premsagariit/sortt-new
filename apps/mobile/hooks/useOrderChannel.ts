@@ -2,6 +2,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useEffect } from 'react';
 import { getRealtimeClient } from '../lib/realtime';
 import { useOrderStore } from '../store/orderStore';
+import type { OrderStatus } from '../store/orderStore';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 
@@ -36,7 +37,21 @@ export function useOrderChannel(
     const statusChannel = ably.channels.get(orderChannelToken);
 
     statusChannel.subscribe('status_updated', (msg) => {
-      useOrderStore.getState().updateOrderStatus(orderId, msg.data.status);
+      const payload = msg.data as { status?: string };
+      const allowedStatuses: OrderStatus[] = [
+        'created',
+        'accepted',
+        'en_route',
+        'arrived',
+        'weighing_in_progress',
+        'completed',
+        'cancelled',
+        'disputed',
+      ];
+
+      if (payload.status && allowedStatuses.includes(payload.status as OrderStatus)) {
+        useOrderStore.getState().updateOrderStatus(orderId, payload.status as OrderStatus);
+      }
     });
 
     // When the other party reads our messages, update local status to 'read'

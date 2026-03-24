@@ -1,7 +1,6 @@
 import express from 'express';
 import { verifyToken } from '@clerk/backend';
 import { getChannelHmacPrefix } from '../utils/channelHelper';
-import { ablyRest } from '../providers/ablyProvider';
 import { createTokenRequest } from '../lib/realtime';
 
 const router = express.Router();
@@ -13,10 +12,6 @@ router.get('/token', async (req, res) => {
     const clerkUserId = req.user?.clerk_user_id;
     if (!clerkUserId) {
       return res.status(401).json({ error: 'Unable to determine user' });
-    }
-
-    if (!ablyRest) {
-      return res.status(500).json({ error: 'Realtime is not configured on this server' });
     }
 
     const tokenRequest = await createTokenRequest(clerkUserId);
@@ -57,19 +52,12 @@ router.get('/ably-token', async (req, res) => {
       return res.status(401).json({ error: 'No subject in token' });
     }
 
-    if (!ablyRest) {
-      return res.status(500).json({ error: 'Realtime is not configured on this server' });
-    }
-
     // Generate secure prefix constraint
     const hmacPrefix = getChannelHmacPrefix(clerkUserId);
 
     // Request token bounded to exact channels this user can access
-    const tokenRequest = await ablyRest.auth.createTokenRequest({
-      clientId: clerkUserId,
-      capability: {
-        [`${hmacPrefix}:*`]: ['subscribe', 'publish', 'presence']
-      }
+    const tokenRequest = await createTokenRequest(clerkUserId, {
+      [`${hmacPrefix}:*`]: ['subscribe', 'publish', 'presence']
     });
 
     return res.status(200).json(tokenRequest);

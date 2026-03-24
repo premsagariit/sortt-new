@@ -54,6 +54,9 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 - `EXPO_ACCESS_TOKEN`: EAS deployments and updates.
 - `DATABASE_URL`: Azure PostgreSQL connection string.
 - `REDIS_URL`: Upstash Redis for rate limiting.
+- `MAP_PROVIDER`: Backend map provider switch (`google` | `ola`).
+- `REALTIME_PROVIDER`: Realtime provider switch (`ably` | `soketi`).
+- `SOKETI_URL`: Soketi websocket URL (required when `REALTIME_PROVIDER=soketi`).
 
 ### 4. Running Locally
 
@@ -119,8 +122,8 @@ pnpm dev:backend
 - Seller detail now uses status-aware weights, completed-only rating UI with post-submit refresh, and seller-only own-contact card sourced from auth state.
 - Aggregator order-history no longer subtracts legacy service fee; receipt and seller detail spacing polish completed.
 
-✅ README setup unchanged:
-- No new environment variables were introduced.
+✅ README setup updated:
+- Provider env switches documented (`MAP_PROVIDER`, `REALTIME_PROVIDER`, `SOKETI_URL`).
 - No additional installation or startup commands are required.
 
 ✅ Validation: `pnpm type-check` exits 0 at workspace root.

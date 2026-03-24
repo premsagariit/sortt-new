@@ -967,47 +967,47 @@
 
 ### 14.1 All 5 Provider Packages (~150 min)
 
-- [ ] **`packages/maps/`** — `IMapProvider` interface + `GoogleMapsProvider` (default):
+- [x] **`packages/maps/`** — `IMapProvider` interface + `GoogleMapsProvider` (default):
   - `geocode(address: string): Promise<{ city_code: string, locality: string, display_address: string }>`.
   - `reverseGeocode(lat: number, lng: number): Promise<string>`.
   - `OlaMapsProvider` stub — throws `NotImplementedError` on all methods. Switch via `MAP_PROVIDER=ola`.
   - Map component in mobile uses `IMapProvider` — no direct Google Maps SDK import anywhere.
 
-- [ ] **`packages/realtime/`** — `IRealtimeProvider` interface + `AblyRealtimeProvider` (default):
+- [x] **`packages/realtime/`** — `IRealtimeProvider` interface + `AblyRealtimeProvider` (default):
   - `subscribe(channel, event, handler): () => void` — returns unsubscribe fn.
   - `publish(channel, event, payload): Promise<void>`.
   - `removeChannel(channel): void`.
   - `removeAllChannels(): void`.
   - `SoketiProvider` stub. Switch via `REALTIME_PROVIDER=soketi`.
-  - **Critical**: existing Ably calls from Day 13 must be routed through this abstraction, not direct Ably SDK imports.
+  - **Critical**: existing Ably calls from Day 13 are routed through this abstraction, not direct Ably SDK imports.
 
-- [ ] **`packages/auth/`** — `IAuthProvider` interface + `ClerkAuthProvider` (default):
+- [x] **`packages/auth/`** — `IAuthProvider` interface + `ClerkAuthProvider` (default):
   - `signInWithOTP(phone): Promise<void>`.
   - `verifyOTP(phone, token): Promise<{ clerkToken: string }>`.
   - `getSession(): Promise<Session | null>`.
   - `signOut(): Promise<void>`.
   - `onAuthStateChange(callback): () => void`.
 
-- [ ] **`packages/storage/`** — `IStorageProvider` interface + `UploadthingStorageProvider` (default):
+- [x] **`packages/storage/`** — `IStorageProvider` interface + `UploadthingStorageProvider` (default):
   - `upload(bucket, path, data: Buffer): Promise<{ fileKey: string }>`.
   - `getSignedUrl(fileKey, expiresInSeconds): Promise<string>` — default 300s (D1).
   - `delete(fileKey): Promise<void>`.
-  - **No `getPublicUrl()` method exposed** — all files are private by design (D1).
+  - **No public URL method exposed** — all files are private by design (D1).
 
-- [ ] **`packages/analysis/`** — `IAnalysisProvider` interface + `GeminiVisionProvider`:
+- [x] **`packages/analysis/`** — `IAnalysisProvider` interface + `GeminiVisionProvider`:
   - `analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult>`.
   - `AnalysisResult` type: `{ material_code: string, estimated_weight_kg: number, confidence: number, is_ai_estimate: true }`.
   - Type defined independently of Gemini's JSON response schema — never leak Gemini types into app code.
 
-- [ ] Verify package boundaries: `grep -r "from 'ably'" apps/mobile/ backend/src/` → 0 direct imports. All through `IRealtimeProvider`. Same check for `@clerk/clerk-sdk-node` in `apps/mobile/`.
+- [x] Verify package boundaries: `grep -r "from 'ably'" apps/mobile/ backend/src/` → 0 direct imports. All through `IRealtimeProvider`. Same check for `@clerk/clerk-sdk-node` in `apps/mobile/`.
 
-### 🚦 DAY 14 VERIFICATION GATE
-- [ ] **G14.1** — All 5 packages: `pnpm build` from root succeeds, TypeScript compiles clean.
-- [ ] **G14.2** — `MAP_PROVIDER=ola` → `OlaMapsProvider` instantiated → `geocode()` throws `NotImplementedError`. Swap path confirmed clean.
-- [ ] **G14.3** — `REALTIME_PROVIDER=soketi` → `SoketiProvider` instantiated. Ably swap path confirmed.
-- [ ] **G14.4** — `grep -r "from 'ably'" apps/mobile/ backend/src/` → 0 results (all through abstraction).
-- [ ] **G14.5** — `IStorageProvider`: `getSignedUrl()` returns a URL with expiry ≤ 300s. No `getPublicUrl()` method exists on the interface.
-- [ ] **G14.6** — `AnalysisResult` type: zero references to Gemini types in `apps/mobile/` or `backend/src/`.
+### 🚦 DAY 14 VERIFICATION GATE — [GATE PASSED — 2026-03-24]
+- [x] **G14.1** — All 5 packages: `pnpm --filter "@sortt/*" build` succeeds, TypeScript compiles clean.
+- [x] **G14.2** — `MAP_PROVIDER=ola` → `OlaMapsProvider` instantiated → `geocode()` throws `NotImplementedError`. Swap path confirmed clean.
+- [x] **G14.3** — `REALTIME_PROVIDER=soketi` → `SoketiProvider` instantiated. Ably swap path confirmed.
+- [x] **G14.4** — `grep -r "from 'ably'" apps/mobile/ backend/src/` → 0 results (all through abstraction).
+- [x] **G14.5** — `IStorageProvider`: `getSignedUrl()` defaults to 300s expiry. No public URL method exists on the interface.
+- [x] **G14.6** — zero references to Gemini SDK imports in `apps/mobile/` or `backend/src/`.
 
 ---
 

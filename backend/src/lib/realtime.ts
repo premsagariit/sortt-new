@@ -1,17 +1,16 @@
 /**
- * Ably Realtime Provider Wrapper
- * 
- * Thin abstraction around Ably SDK to:
+ * Realtime Provider Wrapper
+ *
+ * Thin abstraction around @sortt/realtime provider to:
  * 1. Decouple route handlers from vendor SDK
  * 2. Centralize error handling and logging
- * 3. Make Day 14 provider abstraction straightforward
  */
 
-import Ably from 'ably';
 import * as Sentry from '@sentry/node';
+import { AblyBackendProvider, createRealtimeTokenRequest } from '@sortt/realtime';
 import { getChannelHmacPrefix } from '../utils/channelHelper';
 
-const ablyRest = new Ably.Rest({ key: process.env.ABLY_API_KEY! });
+const realtimeProvider = new AblyBackendProvider();
 
 /**
  * Publish an event to an Ably channel.
@@ -27,11 +26,11 @@ export async function publishEvent(
   payload: object
 ): Promise<void> {
   try {
-    await ablyRest.channels.get(channel).publish(event, payload);
+    await realtimeProvider.publish(channel, event, payload);
   } catch (err) {
-    console.error(`[Ably] publish failed on channel ${channel}:`, err);
+    console.error(`[Realtime] publish failed on channel ${channel}:`, err);
     Sentry.captureException(err, {
-      tags: { operation: 'ably_publish', channel, event }
+      tags: { operation: 'realtime_publish', channel, event }
     });
     // Non-fatal — route handlers must not crash on Ably errors
   }
@@ -42,20 +41,23 @@ export async function publishEvent(
  * Used by mobile clients with Clerk JWT to authenticate to Ably.
  * 
  * @param clientId Clerk user ID (will be the Ably client ID)
- * @returns Token request signed by Ably
+ * @returns Token request signed by configured realtime provider
  */
-export async function createTokenRequest(clientId: string): Promise<Ably.TokenRequest> {
+export async function createTokenRequest(
+  clientId: string,
+  capabilityOverride?: Record<string, string[]>
+): Promise<Record<string, unknown>> {
   const hmacPrefix = getChannelHmacPrefix(clientId);
-  
-  return ablyRest.auth.createTokenRequest({
-    clientId,
-    capability: {
+
+  const capability = capabilityOverride || {
       // Public feed channel accessible to all aggregators
       'orders:hyd:new': ['subscribe'],
       // Private channels specific to this user (pattern match)
       [`${hmacPrefix}:*`]: ['subscribe', 'publish'],
-    },
+    };
+
+  return createRealtimeTokenRequest(clientId, capability,
     // 1-hour TTL — matches JWT refresh cadence on mobile
-    ttl: 3600 * 1000,
-  });
+    3600 * 1000
+  );
 }

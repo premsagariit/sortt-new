@@ -1,54 +1,93 @@
-/**
- * Ably Realtime Client Setup
- * 
- * Uses Token Auth: mobile gets a short-lived token from backend
- * (/api/realtime/token, protected by Clerk JWT).
- * 
- * CRITICAL SECURITY (V32):
- * - Never expose backend Ably secret key in mobile app
- * - All auth goes through backend Token Auth endpoint
- * - Channel names are pre-computed by backend and passed in order DTOs
- */
+import { createRealtimeProvider, type IRealtimeProvider } from '@sortt/realtime';
 
-import Ably from 'ably';
-import { api } from './api';
+type ChannelMessage = {
+  name?: string;
+  data?: object;
+  timestamp?: number;
+};
 
-let client: Ably.Realtime | null = null;
+type ChannelHandler = (msg: ChannelMessage) => void;
 
-/**
- * Get singleton Ably Realtime client.
- * Authenticates via Token Auth callback — backend issues token on each call.
- */
-export function getRealtimeClient(): Ably.Realtime {
-  if (!client) {
-    client = new Ably.Realtime({
-      authCallback: async (_tokenParams, callback) => {
-        try {
-          // Fetch token from backend (protected by Clerk JWT via api client)
-          const res = await api.get('/api/realtime/token');
-          callback(null, res.data);
-        } catch (err) {
-          callback(err as never, null);
-        }
-      },
-    });
+type ChannelCompat = {
+  subscribe: (event: string, handler: ChannelHandler) => void;
+  unsubscribe: () => void;
+  detach: () => Promise<void>;
+};
+
+type RealtimeClientCompat = {
+  channels: {
+    get: (channel: string) => ChannelCompat;
+  };
+};
+
+let provider: IRealtimeProvider | null = null;
+
+function getProvider(): IRealtimeProvider {
+  if (!provider) {
+    provider = createRealtimeProvider('mobile');
   }
-  return client;
+  return provider;
 }
 
-/**
- * Disconnect Ably client and reset singleton.
- * Called on AppState -> 'background' event.
- * Also unsubscribes from all channels.
- */
-export function disconnectRealtime(): void {
-  if (client) {
-    const c = client;
-    client = null; // Clear singleton FIRST so hooks don't race with a closing client
-    try {
-      c.close();
-    } catch {
-      // Swallow — connection may already be closed or in an invalid state
+class CompatChannel implements ChannelCompat {
+  private providerRef: IRealtimeProvider;
+  private channel: string;
+  private unsubscribers: Array<() => void> = [];
+
+  constructor(providerRef: IRealtimeProvider, channel: string) {
+    this.providerRef = providerRef;
+    this.channel = channel;
+  }
+
+  subscribe(event: string, handler: ChannelHandler): void {
+    const unsubscribe = this.providerRef.subscribe(this.channel, event, (msg) => {
+      handler({
+        name: msg.event,
+        data: msg.data,
+        timestamp: msg.timestamp,
+      });
+    });
+    this.unsubscribers.push(unsubscribe);
+  }
+
+  unsubscribe(): void {
+    for (const unsubscribe of this.unsubscribers) {
+      unsubscribe();
     }
+    this.unsubscribers = [];
+    this.providerRef.removeChannel(this.channel);
+  }
+
+  async detach(): Promise<void> {
+    this.unsubscribe();
+  }
+}
+
+export function subscribe(
+  channel: string,
+  event: string,
+  handler: (payload: object) => void
+): () => void {
+  return getProvider().subscribe(channel, event, (msg) => handler(msg.data));
+}
+
+export function removeAllChannels(): void {
+  getProvider().removeAllChannels();
+}
+
+export function getRealtimeClient(): RealtimeClientCompat {
+  const providerRef = getProvider();
+  return {
+    channels: {
+      get: (channel: string) => new CompatChannel(providerRef, channel),
+    },
+  };
+}
+
+export function disconnectRealtime(): void {
+  if (provider) {
+    provider.removeAllChannels();
+    void provider.disconnect();
+    provider = null;
   }
 }

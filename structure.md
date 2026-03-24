@@ -241,16 +241,15 @@
 │   │   │   ├── db.ts # PostgreSQL query/pool helpers
 │   │   │   ├── redis.ts # Redis client and limiter utilities
 │   │   │   ├── notifications.ts # Notification dispatch abstractions
-│   │   │   ├── realtime.ts # Ably publish/token wrapper helpers
-│   │   │   └── storage.ts # File storage helper abstractions
+│   │   │   ├── realtime.ts # Realtime publish/token wrapper via @sortt/realtime
+│   │   │   └── storage.ts # File storage adapter via @sortt/storage
 │   │   ├── middleware
 │   │   │   ├── auth.ts # Clerk token verification and user loading middleware
 │   │   │   ├── errorHandler.ts # Centralized API error handler middleware
 │   │   │   ├── sanitize.ts # Input sanitization middleware
 │   │   │   └── verifyRole.ts # Role guard middleware for protected routes
 │   │   ├── providers
-│   │   │   ├── ablyProvider.ts # Ably provider initialization/helpers
-│   │   │   └── maps.ts # Maps/geocoding provider abstraction
+│   │   │   └── maps.ts # Maps/geocoding adapter via @sortt/maps
 │   │   ├── routes
 │   │   │   ├── aggregators.ts # Aggregator profile/rates/availability endpoints
 │   │   │   ├── auth.ts # OTP request/verify and auth flow endpoints
@@ -275,23 +274,52 @@
 │   ├── analysis
 │   │   ├── package.json # Analysis package manifest
 │   │   ├── tsconfig.json # Analysis package TypeScript config
-│   │   └── src # Analysis package source files
+│   │   ├── dist # Built JS + d.ts artifacts
+│   │   └── src
+│   │       ├── index.ts # IAnalysisProvider exports + factory
+│   │       ├── types.ts # AnalysisResult + IAnalysisProvider contracts
+│   │       └── providers
+│   │           └── GeminiVisionProvider.ts # Day-14 stub (throws NotImplementedError)
 │   ├── auth
 │   │   ├── package.json # Auth package manifest
 │   │   ├── tsconfig.json # Auth package TypeScript config
-│   │   └── src # Auth package source files
+│   │   ├── dist # Built JS + d.ts artifacts
+│   │   └── src
+│   │       ├── index.ts # IAuthProvider exports + factory
+│   │       ├── types.ts # Session DTO + IAuthProvider interface
+│   │       └── providers
+│   │           └── ClerkAuthProvider.ts # Clerk auth adapter via backend APIs
 │   ├── maps
 │   │   ├── package.json # Maps package manifest
 │   │   ├── tsconfig.json # Maps package TypeScript config
-│   │   └── src # Maps package source files
+│   │   ├── dist # Built JS + d.ts artifacts
+│   │   └── src
+│   │       ├── index.ts # IMapProvider exports + factory
+│   │       ├── types.ts # GeoResult + IMapProvider interface
+│   │       └── providers
+│   │           ├── GoogleMapsProvider.ts # Default maps implementation
+│   │           └── OlaMapsProvider.ts # Swap stub (NotImplementedError)
 │   ├── realtime
 │   │   ├── package.json # Realtime package manifest
 │   │   ├── tsconfig.json # Realtime package TypeScript config
-│   │   └── src # Realtime package source files
+│   │   ├── dist # Built JS + d.ts artifacts
+│   │   └── src
+│   │       ├── index.ts # IRealtimeProvider exports + factory + token helper
+│   │       ├── types.ts # RealtimeMessage + IRealtimeProvider interface
+│   │       └── providers
+│   │           ├── AblyBackendProvider.ts # Backend realtime provider
+│   │           ├── AblyMobileProvider.ts # Mobile token-auth provider
+│   │           └── SoketiProvider.ts # Swap stub (NotImplementedError)
 │   └── storage
 │       ├── package.json # Storage package manifest
 │       ├── tsconfig.json # Storage package TypeScript config
-│       └── src # Storage package source files
+│       ├── dist # Built JS + d.ts artifacts
+│       └── src
+│           ├── index.ts # IStorageProvider exports + factory
+│           ├── types.ts # IStorageProvider contract (private-file only)
+│           └── providers
+│               ├── UploadthingStorageProvider.ts # Default storage adapter
+│               └── StubStorageProvider.ts # Swap stub (NotImplementedError)
 │
 ├── migrations # Database schema/data migrations
 │   ├── 0001_reference_tables.sql # Creates base reference tables and seed structure
