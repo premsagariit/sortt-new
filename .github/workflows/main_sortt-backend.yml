@@ -31,6 +31,9 @@ jobs:
           - name: Install all workspace dependencies
             run: pnpm install
 
+          - name: Build shared provider packages
+            run: pnpm --filter "@sortt/*" run build
+
           - name: Build backend TypeScript
             run: pnpm --filter backend run build
 
