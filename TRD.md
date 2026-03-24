@@ -1,6 +1,6 @@
 # [APP_NAME]
 ## Technical Requirements Document
-**v4.0 · Minimalist Professional UI · Azure PostgreSQL · Clerk Auth · Ably Realtime · Uploadthing Storage · WhatsApp OTP**
+**v4.0 · Minimalist Professional UI · Azure PostgreSQL · Clerk Auth · Ably Realtime · Cloudflare R2 Storage · WhatsApp OTP**
 
 > ⚠️ **APP NAME PLACEHOLDER NOTICE**
 > The name **"Sortt"** used throughout this document is a **placeholder only**. The final product name has not been decided. All references to "Sortt" should be read as `[APP_NAME]`. In code, always import from `constants/app.ts` — never hardcode the string. See MEMORY.md for full rebrand instructions.
@@ -1019,7 +1019,6 @@ CREATE TABLE order_status_history (
   created_at  TIMESTAMPTZ DEFAULT NOW()  -- Always DB-set, never client-supplied (V30)
 );
 
--- Order media (storage_path is Uploadthing file key)
 -- Order media (storage_path is Cloudflare R2 object key)
 -- order_id is NULL for KYC document rows — KYC is not linked to any order
 CREATE TABLE order_media (
@@ -1425,7 +1424,7 @@ sortt-app/
 │   ├── maps/                         # IMapProvider abstraction
 │   ├── realtime/                     # IRealtimeProvider → AblyRealtimeProvider
 │   ├── auth/                         # IAuthProvider → ClerkAuthProvider
-│   ├── storage/                      # IStorageProvider → UploadthingStorageProvider
+│   ├── storage/                      # IStorageProvider → R2StorageProvider
 │   └── analysis/                     # IAnalysisProvider abstraction
 ├── backend/                          # Node.js/Express — Azure App Service (Central India)
 │   └── src/
@@ -1442,7 +1441,7 @@ sortt-app/
 │       │   │   └── verifyPickupOtp.ts # POST /api/orders/:id/verify-otp
 │       │   └── admin/
 │       ├── scheduler.ts              # node-cron jobs (replaces pg_cron)
-│       ├── storage/                  # IStorageProvider → Uploadthing implementation
+│       ├── storage/                  # IStorageProvider → Cloudflare R2 implementation
 │       └── utils/
 │           └── rateLimit.ts          # Upstash Redis rate limiters
 ├── migrations/                       # Plain SQL migration files (replaces supabase/migrations)
@@ -1492,7 +1491,7 @@ These rules apply to every agent in every session:
 - Never hardcode API keys in any agent session. Reference environment variables only.
 - All agents must import colours and spacing exclusively from `constants/tokens.ts` — never hardcode hex values.
 - All agents must use DM Sans and DM Mono. No other typefaces.
-- No agent may call Meta WhatsApp API, Ably, Uploadthing, Clerk, or Google Maps directly — only through the provider abstraction packages in `packages/`.
+- No agent may call Meta WhatsApp API, Ably, Cloudflare R2 SDK, Clerk, or Google Maps directly — only through the provider abstraction packages in `packages/`.
 - No agent may import or reference `@supabase/supabase-js` or any Supabase package anywhere in the codebase.
 - On Days 1–3 (UI-only phase): no agent makes any backend or third-party API calls from the mobile app. All screen data is hardcoded fixture data. Real wiring begins Day 5.
 - Backend agents (Days 5–8): always call `SET LOCAL app.current_user_id = $userId` before DB queries in protected routes.
@@ -1508,7 +1507,7 @@ These rules apply to every agent in every session:
 | 5 | RLS policies + triggers + indexes + materialized views | PostgreSQL RLS, functions, 0002–0006 migrations |
 | 6 | Express backend foundation + auth wiring (WhatsApp OTP) | Express, Clerk JWT, Upstash Redis, Meta WhatsApp API |
 | 7 | Core API routes — orders, profiles, rates, push dispatch | pg pool, Expo push, auth middleware, node-cron setup |
-| 8 | Atomic operations — first-accept-wins, OTP verify, media | `FOR UPDATE SKIP LOCKED`, Uploadthing, sharp EXIF strip |
+| 8 | Atomic operations — first-accept-wins, OTP verify, media | `FOR UPDATE SKIP LOCKED`, Cloudflare R2, sharp EXIF strip |
 | 9 | Realtime (Ably token auth), chat, notifications | IRealtimeProvider, token auth endpoint, notifications API |
 | 10 | Disputes system, ratings, order lifecycle completion | disputes/evidence routes, 24hr rating window, status machine |
 | 11 | AI scrap analysis (Gemini Vision), invoice PDF generation | `IAnalysisProvider`, Gemini Flash, pdf-lib, GST format |
@@ -1557,7 +1556,7 @@ These rules apply to every agent in every session:
 | Azure PostgreSQL B1ms | 750 hrs/month (12 months) | 744 hrs | ~1% |
 | Ably Realtime | 200 conns, 6M msgs/month | ~100 peak conns | 50% |
 | Clerk Auth | 10,000 MAU | ~2,000 active users | 80% |
-| Uploadthing | 2GB storage, 500 uploads/month | ~200 uploads | 60% |
+| Cloudflare R2 | 10GB storage, 1M operations/month | ~200 uploads | ample |
 | Gemini Flash Vision | 1,500 req/day | ~200/day | 87% |
 | Upstash Redis | 10,000 req/day | ~3,000/day | 70% |
 | Meta WhatsApp | 1,000 conversations/month | ~300/month | 70% |
@@ -1759,7 +1758,7 @@ Aggregator pings `POST /api/aggregators/heartbeat` every 2 minutes. node-cron jo
 
 #### C3 — Offline Draft Tampering
 
-When seller captures scrap photo (online or offline), app queues image for upload as first operation on reconnect. Order submission must reference a `storage_path` (Uploadthing file key) validated by the backend: file must exist, uploaded by this user, created within last 24 hours.
+When seller captures scrap photo (online or offline), app queues image for upload as first operation on reconnect. Order submission must reference a `storage_path` (Cloudflare R2 object key) validated by the backend: file must exist, uploaded by this user, created within last 24 hours.
 
 ---
 
@@ -1934,7 +1933,7 @@ export interface IMapProvider {
 | `cors` | CORS allowlist | X1 |
 | `node-cron` | Scheduled jobs | Replaces pg_cron |
 | `pdf-lib` | PDF generation | GST invoices only |
-| `sharp` | Image re-encoding + EXIF stripping | V18 — before Gemini or Uploadthing |
+| `sharp` | Image re-encoding + EXIF stripping | V18 — before Gemini or Cloudflare R2 upload |
 | `sanitize-html` | Free-text sanitisation | I2 |
 | `@upstash/ratelimit` | Redis-backed rate limiting | All rate limiters + OTP store |
 | `phosphor-react-native` | Icon library | Outline, 1.5px stroke |
@@ -2015,4 +2014,4 @@ export interface IMapProvider {
 ---
 
 *— End of [APP_NAME] TRD v4.0 —*
-*Supersedes TRD v3.2. Reason for major version bump: complete removal of Supabase dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Clerk + Ably + Uploadthing + Express on Azure App Service.*
+*Supersedes TRD v3.2. Reason for major version bump: complete removal of Supabase dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Clerk + Ably + Cloudflare R2 + Express on Azure App Service.*

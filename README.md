@@ -19,7 +19,7 @@
 │   ├── auth/         # IAuthProvider (Clerk Auth)
 │   ├── maps/         # IMapProvider (Google/Ola Maps)
 │   ├── realtime/     # IRealtimeProvider (Ably Realtime)
-│   ├── storage/      # IStorageProvider (Uploadthing Storage)
+│   ├── storage/      # IStorageProvider (Cloudflare R2 Storage)
 │   └── analysis/     # IAnalysisProvider (Gemini Vision)
 ├── scraper/          # Python Price Scraper Agent
 └── migrations/       # PostgreSQL Migration Scripts

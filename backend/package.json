@@ -35,8 +35,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.20.0",
     "sanitize-html": "^2.13.0",
-    "sharp": "^0.33.4",
-    "uploadthing": "^7.7.4"
+    "sharp": "^0.33.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

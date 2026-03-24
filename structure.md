@@ -318,8 +318,8 @@
 │           ├── index.ts # IStorageProvider exports + factory
 │           ├── types.ts # IStorageProvider contract (private-file only)
 │           └── providers
-│               ├── UploadthingStorageProvider.ts # Default storage adapter
-│               └── StubStorageProvider.ts # Swap stub (NotImplementedError)
+│               ├── R2StorageProvider.ts # Default Cloudflare R2 storage adapter
+│               └── S3StorageProvider.ts # Swap stub (NotImplementedError)
 │
 ├── migrations # Database schema/data migrations
 │   ├── 0001_reference_tables.sql # Creates base reference tables and seed structure

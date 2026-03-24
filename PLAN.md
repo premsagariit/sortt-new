@@ -222,7 +222,7 @@
 
 **Infrastructure Decision** *(2026-03-01)*
 - [x] Supabase removed — India ISP block confirmed (Feb 2026). Firebase also blocked.
-- [x] Final stack decided: Azure PostgreSQL B1ms (free, Azure for Students) + Clerk + Ably + Uploadthing + Express on Azure App Service.
+- [x] Final stack decided: Azure PostgreSQL B1ms (free, Azure for Students) + Clerk + Ably + Cloudflare R2 + Express on Azure App Service.
 - [x] TRD updated to v4.0 reflecting new stack.
 - [x] PLAN.md updated to v2.0 reflecting new stack.
 - [x] §2.1 — Splash screen animation `SplashAnimation.tsx` (Updated to onboarding flow)
@@ -758,7 +758,7 @@
 ## ✅ DAY 10 — Media + Aggregator + Supporting Routes
 > **Goal:** Photo upload live with EXIF strip. Aggregator feed and heartbeat working. Chat message filter active. Market rates served.
 > **Time:** ~2.5 hours
-> **Rule:** EXIF must be stripped via `sharp` before ANY other processing — before Uploadthing, before Gemini. Signed URLs 5-min expiry only.
+> **Rule:** EXIF must be stripped via `sharp` before ANY other processing — before Cloudflare R2 upload, before Gemini. Signed URLs 5-min expiry only.
 
 ### 10.1 Media Routes (~50 min)
 - [x] `POST /api/orders/:id/media` — Clerk JWT, order parties only:
@@ -988,7 +988,7 @@
   - `signOut(): Promise<void>`.
   - `onAuthStateChange(callback): () => void`.
 
-- [x] **`packages/storage/`** — `IStorageProvider` interface + `UploadthingStorageProvider` (default):
+- [x] **`packages/storage/`** — `IStorageProvider` interface + `R2StorageProvider` (default):
   - `upload(bucket, path, data: Buffer): Promise<{ fileKey: string }>`.
   - `getSignedUrl(fileKey, expiresInSeconds): Promise<string>` — default 300s (D1).
   - `delete(fileKey): Promise<void>`.
@@ -1141,7 +1141,7 @@
 - [ ] **I1** — Gemini output: grep codebase for any path writing AI result to `confirmed_weight_kg` → 0 results.
 - [ ] **I2** — `sanitize-html`: POST XSS payload → sanitised. CSP header present on all web routes.
 - [ ] **I3** — PDF: `<script>` in GSTIN → rejected by regex. Raw user strings never in `pdf-lib` draw calls.
-- [ ] **D1** — All Uploadthing files private: no public URL ever returned. Only signed URLs via backend ownership check.
+- [ ] **D1** — All Cloudflare R2 files private: no public URL ever returned. Only signed URLs via backend ownership check.
 - [ ] **D2** — Push body audit: grep all `sendPush` calls for `address`, `name`, `phone`, `gstin` → 0 matches.
 - [ ] **D3** — Error handler: trigger intentional error → Sentry event has no `process.env` keys in payload.
 - [ ] **C1** — OTP screen: full transaction summary visible BEFORE OTP input (scroll test on iPhone SE).

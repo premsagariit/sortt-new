@@ -26,7 +26,7 @@ ALTER TABLE ratings ENABLE ROW LEVEL SECURITY;
 -- ------------------------------------------------------------
 -- INVOICES
 -- invoice_data JSONB NOT NULL: the legal GST record (TRD §14.4.5)
--- PDF is a rendering artifact only — storage_path is the Uploadthing key
+-- PDF is a rendering artifact only — storage_path is the Cloudflare R2 object key
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS invoices (
   id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -71,7 +71,7 @@ ALTER TABLE disputes ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------
 -- DISPUTE EVIDENCE
--- storage_path: Uploadthing file key (private, served via signed URLs)
+-- storage_path: Cloudflare R2 object key (private, served via signed URLs)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS dispute_evidence (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

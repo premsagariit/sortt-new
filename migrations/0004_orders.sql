@@ -74,7 +74,7 @@ ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------
 -- ORDER MEDIA
--- storage_path: Uploadthing file key — used to generate signed URLs (V27)
+-- storage_path: Cloudflare R2 object key — used to generate signed URLs (V27)
 -- uploaded_by: TRD column name (not uploader_id)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS order_media (
