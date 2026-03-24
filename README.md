@@ -1,6 +1,6 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** MVP Build (In Progress — Day 11 wiring complete, order display-id rollout complete)  
+> **Status:** MVP Build (In Progress — Day 13 complete, post-Day 13 stabilization updates applied)  
 > **Architecture:** pnpm Monorepo  
 > **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Azure PostgreSQL, Gemini AI.
 
@@ -91,8 +91,26 @@ pnpm dev:backend
 
 ---
 
-### 🗓 Current Status (2026-03-16)
+### 🗓 Current Status (2026-03-25)
 ✅ Core API and mobile wiring completed through Day 11 gates.
+
+✅ Day 13 realtime + push baseline remains complete (2026-03-20) and validated.
+
+✅ Seller address management and listing wizard integration updates applied:
+- Two-step seller address flow split into map-first + details form (`address-map` → `address-form`).
+- Shared draft persistence added via `addressStore` to preserve data while moving between map/details screens.
+- Seller listing step3 and addresses list entry points now route through map-first flow.
+- Post-save address routing returns to seller addresses list.
+
+✅ Live tracking and route-navigation stabilization updates applied:
+- Aggregator navigate screen now supports pickup-coordinate fallback via geocoding from pickup address.
+- Seller order detail live tracking map now supports pickup geocode fallback and resilient map-gating behavior.
+- Order store merge logic preserves live location fields (`aggregatorLat`, `aggregatorLng`, `liveDistanceKm`) across refresh polling.
+- Confirm execution screen stabilized for consistent back-blocking and animation state.
+
+✅ Seller lifetime earnings endpoint issue fixed:
+- `/api/orders/earnings` route registration corrected to avoid collision with dynamic `/:id` route.
+- Seller Home/Profile now reliably consume lifetime earnings from completed orders endpoint.
 
 ✅ Human-readable order number rollout completed:
 - `migrations/0018_order_number_per_seller.sql` applied.

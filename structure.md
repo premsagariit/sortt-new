@@ -1,4 +1,14 @@
 ﻿Sortt
+├── Recent implementation updates (2026-03-25)
+│   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
+│   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff
+│   ├── Listing wizard step3 + seller addresses list integrated with map-first address flow
+│   ├── Live tracking stabilization in:
+│   │   ├── `apps/mobile/app/(aggregator)/execution/navigate.tsx` (pickup geocode fallback + route rendering)
+│   │   └── `apps/mobile/app/(seller)/order/[id].tsx` (resilient live tracking map gating + fallback)
+│   ├── Order live-location field preservation in `apps/mobile/store/orderStore.ts`
+│   └── Seller earnings route collision fix in `backend/src/routes/orders/index.ts` (`/earnings` before `/:id`)
+│
 ├── MEMORY.md # Authoritative project memory, decisions, and lessons learned
 ├── PLAN.md # Master execution roadmap with status checkpoints
 ├── PRD.md # Product requirements, user journeys, and acceptance goals

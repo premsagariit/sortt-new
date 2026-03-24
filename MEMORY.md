@@ -5,7 +5,18 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 13 Realtime + Push Complete (2026-03-20)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 13 Realtime + Push Complete (2026-03-20), Post-Day13 Stabilization Active (2026-03-25)
+
+> ✅ **Implementation Sync Note (2026-03-25)**
+> - Seller addresses refactor completed: two-page map-first flow (`address-map` → `address-form`) with shared draft handoff in `addressStore` and listing step3 integration.
+> - Live tracking/map stabilization completed across aggregator navigate and seller order detail screens, including pickup-coordinate geocode fallback when stored coordinates are absent.
+> - Order store merge hardening completed to preserve `pickupLat/pickupLng`, `aggregatorLat/aggregatorLng`, and `liveDistanceKm` across silent refresh cycles.
+> - Seller lifetime earnings route regression fixed: `/api/orders/earnings` now registered before dynamic `/:id`, preventing UUID parse collisions.
+> - Validation snapshot: backend and workspace type-checks pass after above changes.
+
+> ✅ **Learned Lesson (Route Safety)**
+> - In Express routers, always register static routes (e.g., `/feed`, `/earnings`) before dynamic `/:id` routes.
+> - Never declare `router.get(...)` inside another route handler body; nested registration can cause runtime-only route availability and parameter collisions.
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 

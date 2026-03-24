@@ -28,6 +28,20 @@
 >   - Notification rows now persist structured metadata in `notifications.data` (`order_id`, `order_display_id`, `kind`) and mobile notification taps route to role-specific order detail paths.
 >   - DTO phone exposure uses explicit viewer-type + status gating and aggregator surfaces keep icon-only dialer behavior without rendering phone number text.
 
+> ✅ **Implementation Sync Note (2026-03-25)**
+> - Seller address management refactor completed with two-step map-first flow:
+>   - `apps/mobile/app/(seller)/address-map.tsx` for pin + reverse geocode.
+>   - `apps/mobile/app/(seller)/address-form.tsx` for address details and persistence.
+>   - `apps/mobile/store/addressStore.ts` draft handoff state (`setDraft`/`clearDraft`) to avoid data loss while navigating map/details.
+> - Listing wizard integration completed:
+>   - Seller listing step3 and seller addresses list now route through map-first address creation/edit flow.
+> - Live tracking stabilization completed:
+>   - Aggregator navigate screen and seller order detail now use pickup-coordinate fallback geocoding from pickup address when coordinates are unavailable.
+>   - `apps/mobile/store/orderStore.ts` merge logic preserves live-location fields (`aggregatorLat`, `aggregatorLng`, `liveDistanceKm`) across silent polling refresh.
+> - Seller earnings API regression fixed:
+>   - `/api/orders/earnings` route now registers before dynamic `/:id`, preventing UUID parse collisions when requesting earnings.
+>   - Seller home/profile lifetime earnings now resolve from completed orders endpoint without route collision failures.
+
 
 ---
 

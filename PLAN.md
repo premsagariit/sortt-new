@@ -49,6 +49,27 @@
 
 ---
 
+## ✅ POST-DAY 13 IMPLEMENTATION SYNC (2026-03-25)
+
+> These items were completed as stabilization/quality updates after Day 13 gate completion, while keeping the sequential build model intact.
+
+- [x] Seller address flow split into two pages: `address-map` (pin + reverse geocode) and `address-form` (details + save).
+- [x] Added shared draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff without data loss.
+- [x] Integrated map-first address creation from seller addresses list and listing wizard step3.
+- [x] Fixed post-save address routing to return to seller addresses list.
+- [x] Implemented live tracking map improvements:
+  - [x] Aggregator navigate map now uses pickup geocode fallback if pickup coordinates are unavailable.
+  - [x] Seller order detail live tracking now uses resilient coordinate gating and fallback map behavior.
+  - [x] Order store merges now preserve live location fields across polling refreshes.
+- [x] Fixed seller earnings API route collision:
+  - [x] `/api/orders/earnings` is registered before dynamic `/:id` route.
+  - [x] UUID parse failure (`"earnings"`) regression removed.
+- [x] Validation snapshots passed after updates:
+  - [x] Backend type-check (`pnpm --filter backend type-check`)
+  - [x] Workspace type-check (`pnpm type-check`)
+
+---
+
 ## ✅ DAY 1 — Foundation & Design System
 ### [GATE PASSED — 2026-02-26]
 
