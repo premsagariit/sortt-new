@@ -1,12 +1,6 @@
 ﻿import type { IRealtimeProvider } from './types';
-import { AblyBackendProvider } from './providers/AblyBackendProvider';
-import { AblyMobileProvider } from './providers/AblyMobileProvider';
-import { SoketiProvider } from './providers/SoketiProvider';
 
 export { IRealtimeProvider, RealtimeMessage } from './types';
-export { AblyBackendProvider } from './providers/AblyBackendProvider';
-export { AblyMobileProvider } from './providers/AblyMobileProvider';
-export { SoketiProvider } from './providers/SoketiProvider';
 
 /**
  * Factory function to create realtime provider based on environment variable.
@@ -17,13 +11,22 @@ export function createRealtimeProvider(platform: 'backend' | 'mobile'): IRealtim
 
   if (provider === 'ably') {
     if (platform === 'mobile') {
+      const { AblyMobileProvider } = require('./providers/AblyMobileProvider') as {
+        AblyMobileProvider: new () => IRealtimeProvider;
+      };
       return new AblyMobileProvider();
     } else {
+      const { AblyBackendProvider } = require('./providers/AblyBackendProvider') as {
+        AblyBackendProvider: new () => IRealtimeProvider;
+      };
       return new AblyBackendProvider();
     }
   }
 
   if (provider === 'soketi') {
+    const { SoketiProvider } = require('./providers/SoketiProvider') as {
+      SoketiProvider: new () => IRealtimeProvider;
+    };
     return new SoketiProvider();
   }
 
@@ -35,9 +38,20 @@ export async function createRealtimeTokenRequest(
   capability: Record<string, string[]>,
   ttl?: number
 ): Promise<Record<string, unknown>> {
-  const provider = createRealtimeProvider('backend');
-  if (!(provider instanceof AblyBackendProvider)) {
-    throw new Error('Token request is only supported for Ably backend provider');
+  if ((process.env.REALTIME_PROVIDER || 'ably') !== 'ably') {
+    throw new Error('Token request is only supported for Ably provider');
   }
+
+  const { AblyBackendProvider } = require('./providers/AblyBackendProvider') as {
+    AblyBackendProvider: new () => {
+      createTokenRequest(
+        clientId: string,
+        capability: Record<string, string[]>,
+        ttl?: number
+      ): Promise<Record<string, unknown>>;
+    };
+  };
+
+  const provider = new AblyBackendProvider();
   return provider.createTokenRequest(clientId, capability, ttl);
 }

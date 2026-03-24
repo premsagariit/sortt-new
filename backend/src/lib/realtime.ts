@@ -7,10 +7,10 @@
  */
 
 import * as Sentry from '@sentry/node';
-import { AblyBackendProvider, createRealtimeTokenRequest } from '@sortt/realtime';
+import { createRealtimeProvider, createRealtimeTokenRequest, type IRealtimeProvider } from '@sortt/realtime';
 import { getChannelHmacPrefix } from '../utils/channelHelper';
 
-const realtimeProvider = new AblyBackendProvider();
+const realtimeProvider: IRealtimeProvider = createRealtimeProvider('backend');
 
 /**
  * Publish an event to an Ably channel.
