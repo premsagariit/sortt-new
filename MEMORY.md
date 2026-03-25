@@ -17,10 +17,32 @@
 >   - `packages/maps/src/providers/OlaMapsProvider.ts` implemented for geocode/reverse + autocomplete helper.
 >   - `backend/src/routes/maps.ts` now includes authenticated autocomplete endpoint.
 >   - Mobile map screens now use MapLibre + Ola tiles with Expo Go fallback gate (`MAP_RENDERING_AVAILABLE=false` by default).
+> - Aggregator distance/header reliability fix completed:
+>   - Numeric parsing hardened for coordinate/distance fields in `apps/mobile/store/orderStore.ts` and feed distance mapping in `apps/mobile/store/aggregatorStore.ts`.
+>   - Pre-accept order header now falls back to `liveDistanceKm` when direct coordinate-based calculation is unavailable.
+> - External navigation flow corrected for execution screen:
+>   - `apps/mobile/utils/mapNavigation.ts` now offers user app choice (Google Maps / MapmyIndia / Ola Maps / other maps app) instead of forcing Ola-first launch.
+> - Chat + media reliability pass completed:
+>   - Shared chat supports image messages end-to-end (mobile attach, backend route, signed URL rendering, realtime payload handling).
+>   - Chat header/meta strip and quick-reply chips were hardened for 320–360dp screens to prevent overflow and clipping.
+>   - Seller listing step2 and aggregator weighing photo action rows were converted to vertical stacks for narrow-device safety.
+>   - Realtime unsubscription cleanup was adjusted to reduce `Channel detached` runtime errors on navigation transitions.
+
+> ✅ **Learned Lesson (Numeric Mapping Safety)**
+> - DB/API numeric fields may arrive as strings (especially for decimal coordinates); strict `typeof value === 'number'` checks can silently drop valid distance/location data.
+> - Always normalize with safe number parsing in mobile mappers before UI-level distance formatting.
 
 > ✅ **Learned Lesson (Route Safety)**
 > - In Express routers, always register static routes (e.g., `/feed`, `/earnings`) before dynamic `/:id` routes.
 > - Never declare `router.get(...)` inside another route handler body; nested registration can cause runtime-only route availability and parameter collisions.
+
+> ✅ **Learned Lesson (Responsive Action Rows)**
+> - Horizontal multi-button rows near camera/photo sections can overflow on 320–360dp devices.
+> - Prefer vertical stacking for secondary action pairs (capture / remove / retake) in constrained-width flows.
+
+> ✅ **Learned Lesson (Realtime Cleanup Discipline)**
+> - For focus-scoped subscriptions, removing listeners is usually sufficient during screen cleanup.
+> - Force-removing channels during routine unmounts can trigger detached-state runtime noise and brittle reconnect behavior.
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 

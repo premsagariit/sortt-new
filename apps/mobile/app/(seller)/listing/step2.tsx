@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Image, Modal, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Camera, Tray, WarningCircle, CheckCircle, ArrowRight, Warning } from 'phosphor-react-native';
@@ -22,6 +22,7 @@ import { colors, colorExtended, radius, spacing } from '../../../constants/token
 import { useListingStore } from '../../../store/listingStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../utils/navigation';
+import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
 
 const ALL_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom'];
 
@@ -29,10 +30,11 @@ export default function Step2Screen() {
   const {
     selectedMaterials,
     weights,
-    photoUri: storedPhotoUri,
+    photoUris,
     aiHintShown,
     setWeight,
-    setPhotoUri,
+    addPhotoUri,
+    removePhotoAt,
     setAiHintShown,
     setMaterials,
     customNames,
@@ -48,16 +50,20 @@ export default function Step2Screen() {
   // Sync hook URI into store whenever a new photo is captured
   useEffect(() => {
     if (photoUri) {
-      setPhotoUri(photoUri);
+      addPhotoUri(photoUri);
       setAiHintShown(false);
     }
-  }, [photoUri, setPhotoUri, setAiHintShown]);
+  }, [photoUri, addPhotoUri, setAiHintShown]);
 
-  const handleRetake = async () => {
-    resetPhoto();
-    setPhotoUri(null);
-    setAiHintShown(false);
+  const handleAddPhoto = async () => {
     await capturePhoto();
+  };
+
+  const handleRemoveLast = () => {
+    if (photoUris.length === 0) return;
+    removePhotoAt(photoUris.length - 1);
+    resetPhoto();
+    setAiHintShown(false);
   };
 
   const handleAddMaterial = (code: MaterialCode) => {
@@ -66,22 +72,22 @@ export default function Step2Screen() {
   };
 
   // Source of truth for UI: store (so disabled state is never local state)
-  const capturedUri = storedPhotoUri;
+  const capturedUris = photoUris;
 
   const hasOneValidWeight = selectedMaterials.some(
     (m) => parseFloat(weights[m] || '0') > 0
   );
 
   // Disabled state reads from STORE (not local state) per hard rules
-  const canProceed = capturedUri !== null && hasOneValidWeight;
+  const canProceed = capturedUris.length > 0 && hasOneValidWeight;
 
   // Mock AI hint (still local — Day 8 replaces with Gemini Vision result)
   useEffect(() => {
-    if (capturedUri && !aiHintShown) {
+    if (capturedUris.length > 0 && !aiHintShown) {
       const timer = setTimeout(() => setAiHintShown(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, [capturedUri, aiHintShown, setAiHintShown]);
+  }, [capturedUris, aiHintShown, setAiHintShown]);
 
   if (selectedMaterials.length === 0) {
     return (
@@ -132,10 +138,10 @@ export default function Step2Screen() {
 
           {/* Photo Section */}
           <View style={styles.section}>
-            {!capturedUri ? (
+            {capturedUris.length === 0 ? (
               <Pressable
                 style={styles.photoBoxEmpty}
-                onPress={capturePhoto}
+                onPress={handleAddPhoto}
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -144,23 +150,24 @@ export default function Step2Screen() {
                   <Camera size={32} color={colors.muted} weight="light" />
                 )}
                 <Text variant="label" style={{ marginTop: spacing.sm, textAlign: 'center' }}>
-                  {isLoading ? 'Opening camera...' : 'Tap to take photo'}
+                  {isLoading ? 'Opening camera...' : 'Tap to take first photo'}
                 </Text>
               </Pressable>
             ) : (
               <View style={styles.photoBoxFilled}>
-                <Image
-                  source={{ uri: capturedUri }}
-                  style={styles.thumbnail}
-                  resizeMode="cover"
-                />
+                <ImageCarouselViewer images={capturedUris} height={180} autoScrollIntervalMs={4000} />
                 <View style={styles.photoHeaderRow}>
                   <View style={styles.photoStatus}>
                     <CheckCircle size={14} color={colors.teal} weight="fill" />
-                    <Text variant="label" color={colors.teal}>Photo added</Text>
+                    <Text variant="label" color={colors.teal}>{capturedUris.length} photo{capturedUris.length > 1 ? 's' : ''} added</Text>
                   </View>
-                  <View style={{ width: 100 }}>
-                    <SecondaryButton label="Retake" onPress={handleRetake} />
+                  <View style={styles.photoActionsRow}>
+                    <View style={styles.photoActionBtnWrap}>
+                      <SecondaryButton label="Add More" onPress={handleAddPhoto} />
+                    </View>
+                    <View style={styles.photoActionBtnWrap}>
+                      <SecondaryButton label="Remove" onPress={handleRemoveLast} />
+                    </View>
                   </View>
                 </View>
 
@@ -252,7 +259,7 @@ export default function Step2Screen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={photoUri ? "Next" : "Next (Add photo first)"}
+            label={capturedUris.length > 0 ? "Next" : "Next (Add photo first)"}
             icon={<ArrowRight size={18} color={colors.surface} weight="bold" />}
             disabled={!canProceed}
             onPress={() => router.push('/(seller)/listing/step3')}
@@ -340,9 +347,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   photoHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
   photoStatus: {
     flexDirection: 'row',
@@ -353,11 +360,13 @@ const styles = StyleSheet.create({
     backgroundColor: colorExtended.tealLight,
     borderRadius: 8,
   },
-  thumbnail: {
+  photoActionsRow: {
+    flexDirection: 'column',
     width: '100%',
-    height: 180,
-    borderRadius: radius.card,
-    backgroundColor: colors.border,
+    gap: spacing.xs,
+  },
+  photoActionBtnWrap: {
+    flex: 1,
   },
   permissionBanner: {
     flexDirection: 'row',

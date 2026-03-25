@@ -20,6 +20,7 @@ export interface ListingState {
   // Step 2
   weights: Record<MaterialCode, string>;
   photoUri: string | null;
+  photoUris: string[];
   aiHintShown: boolean;
   customNames: Record<string, string>;
 
@@ -35,6 +36,8 @@ export interface ListingState {
   setMaterials: (m: MaterialCode[]) => void;
   setWeight: (code: MaterialCode, val: string) => void;
   setPhotoUri: (uri: string | null) => void;
+  addPhotoUri: (uri: string) => void;
+  removePhotoAt: (index: number) => void;
   setAiHintShown: (v: boolean) => void;
   setCustomName: (code: string, name: string) => void;
   setPickupType: (t: 'scheduled' | 'dropoff') => void;
@@ -52,6 +55,7 @@ const initialState = {
   selectedMaterials: [],
   weights: {} as Record<MaterialCode, string>,
   photoUri: null,
+  photoUris: [],
   aiHintShown: false,
   customNames: {},
   pickupType: null,
@@ -81,7 +85,27 @@ export const useListingStore = create<ListingState>((set, get) => ({
       weights: { ...state.weights, [code]: val }
     })),
 
-  setPhotoUri: (photoUri) => set({ photoUri }),
+  setPhotoUri: (photoUri) => set({ photoUri, photoUris: photoUri ? [photoUri] : [] }),
+
+  addPhotoUri: (uri) => set((state) => {
+    if (!uri) return state;
+    if (state.photoUris.includes(uri)) {
+      return { photoUri: uri };
+    }
+    return {
+      photoUri: uri,
+      photoUris: [...state.photoUris, uri],
+    };
+  }),
+
+  removePhotoAt: (index) => set((state) => {
+    if (index < 0 || index >= state.photoUris.length) return state;
+    const nextPhotoUris = state.photoUris.filter((_, idx) => idx !== index);
+    return {
+      photoUris: nextPhotoUris,
+      photoUri: nextPhotoUris.length > 0 ? nextPhotoUris[nextPhotoUris.length - 1] : null,
+    };
+  }),
 
   setAiHintShown: (aiHintShown) => set({ aiHintShown }),
 
@@ -128,21 +152,27 @@ export const useListingStore = create<ListingState>((set, get) => ({
       
       const orderId = res.data.order?.id;
 
-      if (orderId && state.photoUri) {
-        try {
-          const formData = new FormData();
-          formData.append('media_type', 'scrap_photo');
-          formData.append('file', {
-            uri: state.photoUri,
-            name: 'scrap_photo.jpg',
-            type: 'image/jpeg',
-          } as any);
+      const uploadUris = state.photoUris.length > 0
+        ? state.photoUris
+        : (state.photoUri ? [state.photoUri] : []);
 
-          await api.post(`/api/orders/${orderId}/media`, formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-            },
-          });
+      if (orderId && uploadUris.length > 0) {
+        try {
+          for (let idx = 0; idx < uploadUris.length; idx += 1) {
+            const formData = new FormData();
+            formData.append('media_type', 'scrap_photo');
+            formData.append('file', {
+              uri: uploadUris[idx],
+              name: `scrap_photo_${idx + 1}.jpg`,
+              type: 'image/jpeg',
+            } as any);
+
+            await api.post(`/api/orders/${orderId}/media`, formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            });
+          }
         } catch (err: any) {
           console.warn('Failed to upload order photo (non-fatal):', err.message);
         }

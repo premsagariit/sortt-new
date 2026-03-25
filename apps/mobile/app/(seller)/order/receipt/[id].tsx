@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,6 +33,7 @@ import { PrimaryButton } from '../../../../components/ui/Button';
 import { Input } from '../../../../components/ui/Input';
 import { api } from '../../../../lib/api';
 import { safeBack } from '../../../../utils/navigation';
+import { ImageCarouselViewer } from '../../../../components/ui/ImageCarouselViewer';
 
 type SellerOrderItemRow = {
   material_code: string;
@@ -72,7 +72,7 @@ export default function SellerOrderReceiptScreen() {
   const [ratingError, setRatingError] = React.useState<string | null>(null);
   const [ratingSubmitted, setRatingSubmitted] = React.useState(false);
 
-  const [mediaUrl, setMediaUrl] = React.useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = React.useState(false);
 
   const order = orders.find((o: any) => o.orderId === id);
@@ -95,19 +95,25 @@ export default function SellerOrderReceiptScreen() {
     api.get(`/api/orders/${id}/media`)
       .then(async (res) => {
         const items: any[] = res.data.media ?? [];
-        const preferred = items.find((m: any) => m.media_type === 'scrap_photo');
-        const fallback = items[0];
-        const selected = preferred ?? fallback;
+        const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
+        const selectedItems = scrapPhotos.length > 0 ? scrapPhotos : items;
 
-        if (!selected?.id) {
-          setMediaUrl(null);
+        if (selectedItems.length === 0) {
+          setMediaUrls([]);
           return;
         }
 
-        const urlRes = await api.get(`/api/orders/${id}/media/${selected.id}/url`).catch(() => null);
-        setMediaUrl(urlRes?.data?.url ?? null);
+        const urls = await Promise.all(
+          selectedItems.map((item: any) =>
+            api.get(`/api/orders/${id}/media/${item.id}/url`)
+              .then((urlRes) => urlRes?.data?.url as string)
+              .catch(() => null)
+          )
+        );
+
+        setMediaUrls(urls.filter((url): url is string => typeof url === 'string' && url.length > 0));
       })
-      .catch(() => setMediaUrl(null))
+      .catch(() => setMediaUrls([]))
       .finally(() => setMediaLoading(false));
   }, [id]);
 
@@ -295,8 +301,8 @@ export default function SellerOrderReceiptScreen() {
               <View style={styles.mediaLoaderWrap}>
                 <ActivityIndicator color={colors.navy} />
               </View>
-            ) : mediaUrl ? (
-              <Image source={{ uri: mediaUrl }} style={styles.scrapImage} />
+            ) : mediaUrls.length > 0 ? (
+              <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
             ) : (
               <EmptyState
                 icon={<ImageSquare size={44} color={colors.muted} weight="thin" />}
@@ -565,12 +571,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.input,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  scrapImage: {
-    width: '100%',
-    height: 220,
-    borderRadius: radius.input,
-    backgroundColor: colors.skeleton,
   },
   tableHeader: {
     flexDirection: 'row',

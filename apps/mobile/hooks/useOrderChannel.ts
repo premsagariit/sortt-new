@@ -87,6 +87,8 @@ export function useOrderChannel(
         id?: string;
         sender_id?: string;
         content?: string;
+        message_type?: 'text' | 'image';
+        media_url?: string | null;
         created_at?: string;
       };
       // Skip messages sent by self — already in store via optimistic update
@@ -97,6 +99,8 @@ export function useOrderChannel(
         orderId,
         senderId: payload.sender_id ?? 'unknown',
         body: payload.content ?? '',
+        messageType: payload.message_type === 'image' ? 'image' : 'text',
+        mediaUrl: typeof payload.media_url === 'string' ? payload.media_url : null,
         sentAt: payload.created_at ?? new Date().toISOString(),
         read: false,
         status: 'sent',

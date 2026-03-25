@@ -74,6 +74,15 @@ export function getOrderDisplayAmount(order: Pick<Order, 'displayAmount' | 'conf
   return 0;
 }
 
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 // Maps API response shape → internal Order type
 export function mapApiOrder(o: any): Order {
   // Normalize preferred_pickup_window
@@ -141,11 +150,11 @@ export function mapApiOrder(o: any): Order {
     sellerPhone: typeof o.seller_phone === 'string' ? o.seller_phone : (o.sellerPhone ?? null),  // SP1
     chatChannelToken: o.chatChannelToken ?? o.chat_channel ?? null,      // BLOCK: map from API
     orderChannelToken: o.orderChannelToken ?? o.order_channel ?? null,   // BLOCK: map from API
-    pickupLat: typeof o.pickup_lat === 'number' ? o.pickup_lat : (typeof o.pickupLat === 'number' ? o.pickupLat : null),
-    pickupLng: typeof o.pickup_lng === 'number' ? o.pickup_lng : (typeof o.pickupLng === 'number' ? o.pickupLng : null),
-    aggregatorLat: typeof o.aggregator_lat === 'number' ? o.aggregator_lat : (typeof o.aggregatorLat === 'number' ? o.aggregatorLat : null),
-    aggregatorLng: typeof o.aggregator_lng === 'number' ? o.aggregator_lng : (typeof o.aggregatorLng === 'number' ? o.aggregatorLng : null),
-    liveDistanceKm: typeof o.distance_km === 'number' ? o.distance_km : (typeof o.liveDistanceKm === 'number' ? o.liveDistanceKm : null),
+    pickupLat: toNumberOrNull(o.pickup_lat ?? o.pickupLat),
+    pickupLng: toNumberOrNull(o.pickup_lng ?? o.pickupLng),
+    aggregatorLat: toNumberOrNull(o.aggregator_lat ?? o.aggregatorLat),
+    aggregatorLng: toNumberOrNull(o.aggregator_lng ?? o.aggregatorLng),
+    liveDistanceKm: toNumberOrNull(o.distance_km ?? o.liveDistanceKm),
     rating: typeof o.rating === 'number' ? o.rating : undefined,
     sellerHasRated: typeof o.seller_has_rated === 'boolean' ? o.seller_has_rated : undefined,
     window: windowLabel,

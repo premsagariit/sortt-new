@@ -55,11 +55,11 @@ class CompatChannel implements ChannelCompat {
       unsubscribe();
     }
     this.unsubscribers = [];
-    this.providerRef.removeChannel(this.channel);
   }
 
   async detach(): Promise<void> {
     this.unsubscribe();
+    this.providerRef.removeChannel(this.channel);
   }
 }
 

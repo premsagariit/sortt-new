@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
@@ -15,6 +15,8 @@ import { useOrderStore } from '../../store/orderStore';
 import { safeBack } from '../../utils/navigation';
 import { Avatar } from '../../components/ui/Avatar';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { api } from '../../lib/api';
+import { ImageCarouselViewer } from '../../components/ui/ImageCarouselViewer';
 
 /**
  * app/(aggregator)/order-history-detail.tsx
@@ -63,6 +65,8 @@ export default function OrderHistoryDetailScreen() {
     const [selectedRating, setSelectedRating] = useState(0);
     const [reviewText, setReviewText] = useState('');
     const [isReviewSubmitted, setIsReviewSubmitted] = useState(false);
+    const [mediaLoading, setMediaLoading] = useState(false);
+    const [mediaUrls, setMediaUrls] = useState<string[]>([]);
 
     // Always fetch full order detail to get orderItems with confirmed weights + rates
     React.useEffect(() => {
@@ -70,6 +74,35 @@ export default function OrderHistoryDetailScreen() {
             void fetchOrder(id, true);
         }
     }, [id, fetchOrder]);
+
+    React.useEffect(() => {
+        if (!id || !isCompleted) return;
+
+        setMediaLoading(true);
+        api.get(`/api/orders/${id}/media`)
+            .then(async (res) => {
+                const items: any[] = res.data.media ?? [];
+                const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
+                const selectedItems = scrapPhotos.length > 0 ? scrapPhotos : items;
+
+                if (selectedItems.length === 0) {
+                    setMediaUrls([]);
+                    return;
+                }
+
+                const urls = await Promise.all(
+                    selectedItems.map((item: any) =>
+                        api.get(`/api/orders/${id}/media/${item.id}/url`)
+                            .then((urlRes) => urlRes?.data?.url as string)
+                            .catch(() => null)
+                    )
+                );
+
+                setMediaUrls(urls.filter((url): url is string => typeof url === 'string' && url.length > 0));
+            })
+            .catch(() => setMediaUrls([]))
+            .finally(() => setMediaLoading(false));
+    }, [id, isCompleted]);
 
     // Seed fallbacks
     const displayOrder = order
@@ -239,11 +272,19 @@ export default function OrderHistoryDetailScreen() {
                             <Camera size={16} color={colors.navy} />
                             <Text variant="label" color={colors.slate} style={styles.cardTitle}>ORDER PHOTO</Text>
                         </View>
-                        <EmptyState
-                          icon={<Image size={48} color={colors.muted} weight="thin" />}
-                          heading="No media attached"
-                          body="Order photos are not available for this order."
-                        />
+                        {mediaLoading ? (
+                            <View style={styles.mediaLoaderWrap}>
+                                <ActivityIndicator color={colors.navy} />
+                            </View>
+                        ) : mediaUrls.length > 0 ? (
+                            <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
+                        ) : (
+                            <EmptyState
+                              icon={<Image size={48} color={colors.muted} weight="thin" />}
+                              heading="No media attached"
+                              body="Order photos are not available for this order."
+                            />
+                        )}
                     </View>
                 )}
 
@@ -506,6 +547,15 @@ const styles = StyleSheet.create({
         borderColor: colors.border,
         padding: spacing.md,
         gap: 10,
+    },
+    mediaLoaderWrap: {
+        height: 220,
+        borderRadius: radius.input,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface2,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     photoContainer: {
         borderRadius: 10,

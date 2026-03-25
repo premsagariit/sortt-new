@@ -72,6 +72,16 @@
   - [x] Backend maps routes now include authenticated autocomplete endpoint (`GET /api/maps/autocomplete`).
   - [x] Mobile map rendering migrated to MapLibre + Ola tiles with `MAP_RENDERING_AVAILABLE` fallback gate for Expo Go.
   - [x] Aggregator route planner map now renders store-backed order pins when map rendering is enabled.
+- [x] Aggregator distance display stabilization completed:
+  - [x] Numeric parsing hardened for coordinate/distance fields in mobile order/feed mappers (`orderStore` + `aggregatorStore`).
+  - [x] Pre-accept order header now falls back to `liveDistanceKm` when coordinate-based distance is unavailable.
+- [x] External navigation handoff behavior corrected:
+  - [x] Execution route launch now opens a user-choice app picker flow (Google Maps / MapmyIndia / Ola Maps / other maps app) via `apps/mobile/utils/mapNavigation.ts`.
+- [x] Chat/media stabilization and UI hardening completed:
+  - [x] Shared chat now supports end-to-end image messages (gallery attach, backend upload, signed URL history, realtime fanout).
+  - [x] Chat header/meta and quick-reply layout hardened for small screens (320–360dp) to avoid text/button overflow.
+  - [x] Seller listing step2 and aggregator weighing photo action buttons now stack safely on narrow screens.
+  - [x] Realtime cleanup adjusted to avoid detached-channel runtime errors during screen transitions.
 
 ---
 

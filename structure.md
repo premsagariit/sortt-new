@@ -12,6 +12,13 @@
 │   ├── Backend maps route expansion in `backend/src/routes/maps.ts` (`/geocode`, `/reverse`, `/autocomplete`)
 │   ├── Mobile map rendering migrated to MapLibre + Ola tiles with Expo Go-safe gate in `apps/mobile/utils/mapAvailable.ts`
 │   └── Provider-aware external map navigation helper added at `apps/mobile/utils/mapNavigation.ts`
+│   ├── Aggregator distance display fix: numeric parsing hardening in `apps/mobile/store/orderStore.ts` and `apps/mobile/store/aggregatorStore.ts`
+│   ├── Pre-accept header distance fallback added in `apps/mobile/app/(aggregator)/order/[id].tsx` (`liveDistanceKm` fallback)
+│   └── External navigation chooser flow added in `apps/mobile/utils/mapNavigation.ts` (Google Maps / MapmyIndia / Ola Maps / other app)
+│   ├── End-to-end chat image messages implemented across mobile + backend + realtime (`apps/mobile/store/chatStore.ts`, `apps/mobile/hooks/useOrderChannel.ts`, `backend/src/routes/messages.ts`)
+│   ├── Shared chat UI modernization and small-screen hardening completed in `apps/mobile/app/(shared)/chat/[id].tsx` and `apps/mobile/components/ui/MessageBubble.tsx`
+│   ├── Realtime cleanup adjusted in `apps/mobile/lib/realtime.ts` to reduce detached-channel transition errors
+│   └── Narrow-screen action-button overflow fixes applied in seller listing and aggregator weighing photo flows (`apps/mobile/app/(seller)/listing/step2.tsx`, `apps/mobile/app/(aggregator)/execution/weighing/[id].tsx`)
 │
 ├── MEMORY.md # Authoritative project memory, decisions, and lessons learned
 ├── PLAN.md # Master execution roadmap with status checkpoints

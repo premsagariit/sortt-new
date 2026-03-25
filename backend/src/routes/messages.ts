@@ -1,13 +1,27 @@
 import { Router, Request, Response } from 'express';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
+import multer from 'multer';
+import sharp from 'sharp';
+import { createClerkClient } from '@clerk/backend';
 import { query } from '../lib/db';
 import { createNotification } from '../lib/notifications';
 import { channelName } from '../utils/channelHelper';
 import { sendPushToUsers } from '../utils/pushNotifications';
 import { publishEvent } from '../lib/realtime';
+import { storageProvider } from '../lib/storage';
 
 const router = Router();
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/heic', 'image/webp'];
+        allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
+    }
+});
 
 const stripHtml = (text?: string) =>
     text ? sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} }) : '';
@@ -16,6 +30,34 @@ const stripHtml = (text?: string) =>
 const PHONE_REGEX = /(?:\+91|0)?[6-9]\d{9}/g;
 const sanitizePhone = (content: string) =>
     content.replace(PHONE_REGEX, '[phone number removed]');
+const MESSAGE_IMAGE_PREFIX = '__image__:';
+
+const resolveMessageRow = async (row: any) => {
+    const content = String(row.content ?? '');
+    const isImage = content.startsWith(MESSAGE_IMAGE_PREFIX);
+    if (!isImage) {
+        return {
+            ...row,
+            message_type: 'text',
+            media_url: null,
+        };
+    }
+
+    const storageKey = content.slice(MESSAGE_IMAGE_PREFIX.length);
+    let mediaUrl: string | null = null;
+    try {
+        mediaUrl = await storageProvider.getSignedUrl(storageKey, 3600);
+    } catch {
+        mediaUrl = null;
+    }
+
+    return {
+        ...row,
+        content: '[image]',
+        message_type: 'image',
+        media_url: mediaUrl,
+    };
+};
 
 // POST /api/messages
 // Body: { order_id, content }
@@ -77,6 +119,8 @@ router.post('/', async (req: Request, res: Response) => {
                         order_id,
                         sender_id: senderId,
                         content: cleanContent,
+                        message_type: 'text',
+                        media_url: null,
                         created_at: msg.created_at
                     };
                     await publishEvent(sellerChannel, 'message', payload);
@@ -113,10 +157,127 @@ router.post('/', async (req: Request, res: Response) => {
         return res.status(201).json({
             messageId: msg.id,
             content: msg.content,
+            messageType: 'text',
+            mediaUrl: null,
             createdAt: msg.created_at
         });
     } catch (e: any) {
         console.error('POST /api/messages error:', e);
+        Sentry.captureException(e);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/messages/image
+// multipart/form-data: { order_id, file }
+router.post('/image', upload.single('file'), async (req: Request, res: Response) => {
+    try {
+        const senderId = req.user?.id;
+        if (!senderId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const orderId = String(req.body?.order_id || '');
+        if (!orderId) {
+            return res.status(400).json({ error: 'order_id is required' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'file is required' });
+        }
+
+        const orderRes = await query(`
+            SELECT o.seller_id, o.aggregator_id, s.clerk_user_id as seller_clerk, a.clerk_user_id as agg_clerk
+            FROM orders o
+            LEFT JOIN users s ON s.id = o.seller_id
+            LEFT JOIN users a ON a.id = o.aggregator_id
+            WHERE o.id = $1 AND o.deleted_at IS NULL
+        `, [orderId]);
+        if (orderRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const order = orderRes.rows[0];
+        const isParty = order.seller_id === senderId || order.aggregator_id === senderId;
+        if (!isParty) return res.status(403).json({ error: 'Forbidden: not a party to this order' });
+
+        const normalizedBuffer = await sharp(req.file.buffer)
+            .rotate()
+            .resize({ width: 1440, height: 1440, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 82 })
+            .toBuffer();
+
+        const storageKey = await storageProvider.uploadFile(
+            normalizedBuffer,
+            `messages_${orderId}_${Date.now()}_${senderId}.jpg`,
+            'image/jpeg'
+        );
+
+        const messageContent = `${MESSAGE_IMAGE_PREFIX}${storageKey}`;
+        const insertRes = await query(
+            `INSERT INTO messages (order_id, sender_id, content)
+             VALUES ($1, $2, $3)
+             RETURNING id, content, created_at`,
+            [orderId, senderId, messageContent]
+        );
+
+        const msg = insertRes.rows[0];
+        const mediaUrl = await storageProvider.getSignedUrl(storageKey, 3600);
+
+        setImmediate(async () => {
+            try {
+                const recipientId = senderId === order.seller_id ? order.aggregator_id : order.seller_id;
+
+                try {
+                    const sellerChannel = channelName(order.seller_clerk, 'chat', orderId);
+                    const payload = {
+                        id: msg.id,
+                        order_id: orderId,
+                        sender_id: senderId,
+                        content: '[image]',
+                        message_type: 'image',
+                        media_url: mediaUrl,
+                        created_at: msg.created_at,
+                    };
+                    await publishEvent(sellerChannel, 'message', payload);
+
+                    if (order.aggregator_id && order.agg_clerk) {
+                        const aggChannel = channelName(order.agg_clerk, 'chat', orderId);
+                        await publishEvent(aggChannel, 'message', payload);
+                    }
+                } catch (ablyErr) {
+                    console.error('Ably image message publish failed:', ablyErr);
+                }
+
+                if (recipientId) {
+                    await createNotification(
+                        recipientId,
+                        'New Image',
+                        'You have received an image message',
+                        'message'
+                    );
+
+                    await sendPushToUsers(
+                        [recipientId],
+                        'New image',
+                        'You received an image message',
+                        { order_id: orderId, kind: 'new_message_image' }
+                    );
+                }
+            } catch (err) {
+                console.error('Failed to create notification for image message:', err);
+            }
+        });
+
+        return res.status(201).json({
+            messageId: msg.id,
+            content: '[image]',
+            messageType: 'image',
+            mediaUrl,
+            createdAt: msg.created_at,
+        });
+    } catch (e: any) {
+        if (e.message === 'Invalid file type') {
+            return res.status(400).json({ error: e.message });
+        }
+        console.error('POST /api/messages/image error:', e);
         Sentry.captureException(e);
         return res.status(500).json({ error: 'Internal server error' });
     }
@@ -196,7 +357,13 @@ router.get('/', async (req: Request, res: Response) => {
 
         // Verify party membership
         const orderRes = await query(
-            'SELECT seller_id, aggregator_id FROM orders WHERE id = $1 AND deleted_at IS NULL',
+            `SELECT o.seller_id, o.aggregator_id,
+                    su.name AS seller_name, su.clerk_user_id AS seller_clerk,
+                    au.name AS aggregator_name, au.clerk_user_id AS aggregator_clerk
+             FROM orders o
+             LEFT JOIN users su ON su.id = o.seller_id
+             LEFT JOIN users au ON au.id = o.aggregator_id
+             WHERE o.id = $1 AND o.deleted_at IS NULL`,
             [order_id]
         );
         if (orderRes.rows.length === 0) {
@@ -215,7 +382,35 @@ router.get('/', async (req: Request, res: Response) => {
             [order_id]
         );
 
-        return res.json({ messages: result.rows });
+        const mappedMessages = await Promise.all(result.rows.map(resolveMessageRow));
+
+        let sellerAvatarUrl: string | null = null;
+        let aggregatorAvatarUrl: string | null = null;
+        try {
+            if (order.seller_clerk) {
+                const sellerClerkUser = await clerkClient.users.getUser(order.seller_clerk);
+                sellerAvatarUrl = sellerClerkUser.imageUrl ?? null;
+            }
+            if (order.aggregator_clerk) {
+                const aggClerkUser = await clerkClient.users.getUser(order.aggregator_clerk);
+                aggregatorAvatarUrl = aggClerkUser.imageUrl ?? null;
+            }
+        } catch {
+            sellerAvatarUrl = null;
+            aggregatorAvatarUrl = null;
+        }
+
+        return res.json({
+            messages: mappedMessages,
+            participants: {
+                seller_id: order.seller_id,
+                seller_name: order.seller_name,
+                seller_avatar_url: sellerAvatarUrl,
+                aggregator_id: order.aggregator_id,
+                aggregator_name: order.aggregator_name,
+                aggregator_avatar_url: aggregatorAvatarUrl,
+            },
+        });
     } catch (e: any) {
         console.error('GET /api/messages error:', e);
         Sentry.captureException(e);

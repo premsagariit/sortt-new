@@ -10,7 +10,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput,
     KeyboardAvoidingView, Platform, Pressable,
-    ActivityIndicator, Image, BackHandler,
+    ActivityIndicator, BackHandler,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,6 +26,7 @@ import { MaterialCode } from '../../../../components/ui/Card';
 import { usePhotoCapture } from '../../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../../utils/navigation';
 import { api } from '../../../../lib/api';
+import { ImageCarouselViewer } from '../../../../components/ui/ImageCarouselViewer';
 
 const MATERIAL_MAP: Record<MaterialCode, { label: string }> = {
     metal: { label: 'Metal / Iron' },
@@ -51,8 +52,10 @@ export default function WeighingScreen() {
     // usePhotoCapture is the ONLY place camera is launched — never inline in screens
     const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
     const {
-        scalePhotoUri,
-        setScalePhotoUri,
+        scalePhotoUris,
+        addScalePhotoUri,
+        removeScalePhotoAt,
+        clearScalePhotos,
         uploadOrderMediaApi,
         finalizeWeighingApi,
         materialRates,
@@ -66,6 +69,8 @@ export default function WeighingScreen() {
     useFocusEffect(
         useCallback(() => {
             let active = true;
+
+            clearScalePhotos();
 
             if (id) {
                 fetchOrder(id, true);
@@ -94,7 +99,7 @@ export default function WeighingScreen() {
             return () => {
                 active = false;
             };
-        }, [id, fetchOrder, fetchAggregatorRates])
+        }, [id, fetchOrder, fetchAggregatorRates, clearScalePhotos])
     );
 
     useEffect(() => {
@@ -171,8 +176,8 @@ export default function WeighingScreen() {
 
     // Sync hook URI into aggregatorStore whenever a new photo is captured
     useEffect(() => {
-        if (photoUri) setScalePhotoUri(photoUri);
-    }, [photoUri, setScalePhotoUri]);
+        if (photoUri) addScalePhotoUri(photoUri);
+    }, [photoUri, addScalePhotoUri]);
 
     useEffect(() => {
         const onBackPress = () => true; // Block hardware back
@@ -180,10 +185,14 @@ export default function WeighingScreen() {
         return () => subscription.remove();
     }, []);
 
-    const handleRetake = async () => {
-        resetPhoto();
-        setScalePhotoUri(null);
+    const handleAddPhoto = async () => {
         await capturePhoto();
+    };
+
+    const handleRemoveLastPhoto = () => {
+        if (scalePhotoUris.length === 0) return;
+        removeScalePhotoAt(scalePhotoUris.length - 1);
+        resetPhoto();
     };
 
     const calculateTotal = () =>
@@ -197,10 +206,10 @@ export default function WeighingScreen() {
     );
 
     // CTA disabled state reads from STORE (scalePhotoUri), not local state — per hard rules
-    const canSubmit = allWeightsEntered && scalePhotoUri !== null;
+    const canSubmit = allWeightsEntered && scalePhotoUris.length > 0;
 
     const handleNext = async () => {
-        if (!id || !scalePhotoUri) {
+        if (!id || scalePhotoUris.length === 0) {
             return;
         }
 
@@ -210,7 +219,9 @@ export default function WeighingScreen() {
         setErrorMsg(null);
 
         try {
-            await uploadOrderMediaApi(id, scalePhotoUri, 'scale_photo');
+            for (const uri of scalePhotoUris) {
+                await uploadOrderMediaApi(id, uri, 'scale_photo');
+            }
 
             const lineItems = materials.map((mat, idx) => {
                 const key = `${mat.code}-${idx}`;
@@ -319,10 +330,10 @@ export default function WeighingScreen() {
                         </View>
                     )}
 
-                    {!scalePhotoUri ? (
+                    {scalePhotoUris.length === 0 ? (
                         <Pressable
                             style={styles.photoBoxEmpty}
-                            onPress={capturePhoto}
+                            onPress={handleAddPhoto}
                             disabled={isLoading}
                         >
                             {isLoading
@@ -330,22 +341,23 @@ export default function WeighingScreen() {
                                 : <Camera size={32} color={colors.muted} weight="light" />
                             }
                             <Text variant="label" style={styles.photoLabel}>
-                                {isLoading ? 'Opening camera...' : 'Take a photo of the reading on your scale'}
+                                {isLoading ? 'Opening camera...' : 'Take first photo of the reading on your scale'}
                             </Text>
                         </Pressable>
                     ) : (
                         <View style={styles.photoBoxFilled}>
-                            <Image
-                                source={{ uri: scalePhotoUri }}
-                                style={styles.photoThumbnail}
-                                resizeMode="cover"
-                            />
+                            <ImageCarouselViewer images={scalePhotoUris} height={160} autoScrollIntervalMs={4000} />
                             <View style={styles.photoHeader}>
                                 <View style={styles.capturedBadge}>
-                                    <Text variant="label" color={colors.teal}>✓ Scale photo captured</Text>
+                                    <Text variant="label" color={colors.teal}>✓ {scalePhotoUris.length} scale photo{scalePhotoUris.length > 1 ? 's' : ''} captured</Text>
                                 </View>
-                                <View style={{ width: 90 }}>
-                                    <SecondaryButton label="Retake" onPress={handleRetake} />
+                                <View style={styles.photoActions}>
+                                    <View style={styles.photoActionBtnWrap}>
+                                        <SecondaryButton label="Add More" onPress={handleAddPhoto} />
+                                    </View>
+                                    <View style={styles.photoActionBtnWrap}>
+                                        <SecondaryButton label="Remove" onPress={handleRemoveLastPhoto} />
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -474,16 +486,18 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         gap: spacing.sm,
     },
-    photoThumbnail: {
-        width: '100%',
-        height: 160,
-        borderRadius: radius.input,
-        backgroundColor: colors.border,
-    },
     photoHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: spacing.sm,
+    },
+    photoActions: {
+        flexDirection: 'column',
+        width: '100%',
+        gap: spacing.xs,
+    },
+    photoActionBtnWrap: {
+        flex: 1,
     },
     capturedBadge: {
         paddingVertical: 4,

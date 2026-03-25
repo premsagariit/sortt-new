@@ -135,6 +135,7 @@ interface AggregatorStoreState {
 
   // ── Photo Capture State ────────────────────────────────────────
   scalePhotoUri: string | null;
+  scalePhotoUris: string[];
   kycAadhaarFrontUri: string | null;
   kycAadhaarBackUri: string | null;
   kycSelfieUri: string | null;
@@ -162,6 +163,9 @@ interface AggregatorStoreState {
   acceptOrder: (orderId: string) => void;
 
   setScalePhotoUri: (uri: string | null) => void;
+  addScalePhotoUri: (uri: string) => void;
+  removeScalePhotoAt: (index: number) => void;
+  clearScalePhotos: () => void;
   setKycAadhaarFrontUri: (uri: string | null) => void;
   setKycAadhaarBackUri: (uri: string | null) => void;
   setKycSelfieUri: (uri: string | null) => void;
@@ -229,6 +233,8 @@ const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
 
 // Maps feed API order → NewOrderRequest (V25: never includes pickup_address)
 function mapFeedOrder(o: any): NewOrderRequest {
+  const parsedDistance = Number(o.distance_km ?? o.distanceKm ?? 0);
+  const distanceKm = Number.isFinite(parsedDistance) ? parsedDistance : 0;
   const createdAt = o.created_at ? new Date(o.created_at) : new Date();
   const postedMinutesAgo = Math.floor((Date.now() - createdAt.getTime()) / 60000);
   
@@ -249,7 +255,7 @@ function mapFeedOrder(o: any): NewOrderRequest {
         ? o.order_display_id
         : `#${String(o.id ?? '').slice(0, 8).toUpperCase()}`,
     locality: o.pickup_locality ?? 'Unknown area',    // V25: only locality, never full address
-    distanceKm: typeof o.distance_km === 'number' ? o.distance_km : 0,
+    distanceKm,
     materials: (o.material_codes ?? []) as MaterialCode[],
     estimatedKg: typeof o.estimated_weight_kg === 'number' ? o.estimated_weight_kg : 0,
     postedMinutesAgo,
@@ -344,6 +350,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   error: null,
   isNetworkError: false,
   scalePhotoUri: null,
+  scalePhotoUris: [],
   kycAadhaarFrontUri: null,
   kycAadhaarBackUri: null,
   kycSelfieUri: null,
@@ -426,7 +433,32 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     };
   }),
 
-  setScalePhotoUri: (uri) => set({ scalePhotoUri: uri }),
+  setScalePhotoUri: (uri) => set({
+    scalePhotoUri: uri,
+    scalePhotoUris: uri ? [uri] : [],
+  }),
+  addScalePhotoUri: (uri) => set((state) => {
+    if (!uri) return state;
+    if (state.scalePhotoUris.includes(uri)) {
+      return { scalePhotoUri: uri };
+    }
+    return {
+      scalePhotoUri: uri,
+      scalePhotoUris: [...state.scalePhotoUris, uri],
+    };
+  }),
+  removeScalePhotoAt: (index) => set((state) => {
+    if (index < 0 || index >= state.scalePhotoUris.length) return state;
+    const nextScalePhotoUris = state.scalePhotoUris.filter((_, idx) => idx !== index);
+    return {
+      scalePhotoUris: nextScalePhotoUris,
+      scalePhotoUri: nextScalePhotoUris.length > 0 ? nextScalePhotoUris[nextScalePhotoUris.length - 1] : null,
+    };
+  }),
+  clearScalePhotos: () => set({
+    scalePhotoUri: null,
+    scalePhotoUris: [],
+  }),
   setKycAadhaarFrontUri: (uri) => set({ kycAadhaarFrontUri: uri }),
   setKycAadhaarBackUri: (uri) => set({ kycAadhaarBackUri: uri }),
   setKycSelfieUri: (uri) => set({ kycSelfieUri: uri }),
@@ -465,7 +497,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     earningsError: null,
     isOnline: true, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: null, lastAcceptedAt: null, error: null,
     isNetworkError: false,
-    scalePhotoUri: null, kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
+    scalePhotoUri: null, scalePhotoUris: [], kycAadhaarFrontUri: null, kycAadhaarBackUri: null,
     kycSelfieUri: null, kycShopPhotoUri: null, kycVehiclePhotoUri: null,
   }),
 

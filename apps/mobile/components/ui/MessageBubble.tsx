@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Check, Checks, Clock } from 'phosphor-react-native';
+import { View, StyleSheet, Image, Pressable, Modal } from 'react-native';
+import { Check, Checks, Clock, X } from 'phosphor-react-native';
 import { Text, Numeric } from './Typography';
 import { colors, spacing } from '../../constants/tokens';
 
@@ -10,21 +10,25 @@ export interface MessageBubbleProps {
     isOwn: boolean;
     senderName?: string;
     isSystemMessage?: boolean;
+    messageType?: 'text' | 'image';
+    mediaUrl?: string | null;
     status?: 'sending' | 'sent' | 'read';
 }
 
 function DeliveryTick({ status }: { status: 'sending' | 'sent' | 'read' }) {
     if (status === 'sending') {
-        return <Clock size={12} color="rgba(255,255,255,0.5)" weight="regular" />;
+        return <Clock size={12} color={colors.whiteAlpha70} weight="regular" />;
     }
     if (status === 'read') {
         return <Checks size={13} color={colors.teal} weight="bold" />;
     }
     // 'sent'
-    return <Check size={13} color="rgba(255,255,255,0.6)" weight="bold" />;
+    return <Check size={13} color={colors.whiteAlpha70} weight="bold" />;
 }
 
-export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage, status }: MessageBubbleProps) {
+export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage, messageType = 'text', mediaUrl, status }: MessageBubbleProps) {
+    const [fullScreenOpen, setFullScreenOpen] = React.useState(false);
+
     if (isSystemMessage) {
         return (
             <View style={styles.systemContainer}>
@@ -45,11 +49,17 @@ export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage, 
                 </Text>
             )}
             <View style={[styles.bubble, isOwn ? styles.bubbleMe : styles.bubbleThem]}>
-                <Text variant="body" color={isOwn ? colors.surface : colors.navy}>
-                    {body}
-                </Text>
+                {messageType === 'image' && mediaUrl ? (
+                    <Pressable onPress={() => setFullScreenOpen(true)}>
+                        <Image source={{ uri: mediaUrl }} style={styles.chatImage} resizeMode="cover" />
+                    </Pressable>
+                ) : (
+                    <Text variant="body" color={isOwn ? colors.surface : colors.navy}>
+                        {body}
+                    </Text>
+                )}
                 <View style={styles.metaRow}>
-                    <Numeric size={10} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.muted}>
+                    <Numeric size={10} color={isOwn ? colors.whiteAlpha70 : colors.muted}>
                         {time}
                     </Numeric>
                     {isOwn && status && (
@@ -59,6 +69,21 @@ export function MessageBubble({ body, time, isOwn, senderName, isSystemMessage, 
                     )}
                 </View>
             </View>
+            {messageType === 'image' && mediaUrl && (
+                <Modal
+                    visible={fullScreenOpen}
+                    animationType="fade"
+                    transparent={false}
+                    onRequestClose={() => setFullScreenOpen(false)}
+                >
+                    <View style={styles.fullscreenContainer}>
+                        <Pressable onPress={() => setFullScreenOpen(false)} style={styles.closeButton}>
+                            <X size={24} color={colors.surface} weight="bold" />
+                        </Pressable>
+                        <Image source={{ uri: mediaUrl }} style={styles.fullscreenImage} resizeMode="contain" />
+                    </View>
+                </Modal>
+            )}
         </View>
     );
 }
@@ -77,7 +102,7 @@ const styles = StyleSheet.create({
         borderColor: colors.border,
     },
     bubbleContainer: {
-        maxWidth: '80%',
+        maxWidth: '82%',
         gap: 2,
     },
     bubbleContainerMe: {
@@ -88,21 +113,22 @@ const styles = StyleSheet.create({
     },
     senderName: {
         fontSize: 10,
-        marginLeft: 4,
+        marginLeft: 2,
         marginBottom: 2,
     },
     bubble: {
-        padding: spacing.md,
-        borderRadius: 18,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: 16,
         gap: 4,
     },
     bubbleMe: {
         backgroundColor: colors.navy,
-        borderBottomRightRadius: 4,
+        borderBottomRightRadius: 6,
     },
     bubbleThem: {
         backgroundColor: colors.surface,
-        borderBottomLeftRadius: 4,
+        borderBottomLeftRadius: 6,
         borderWidth: 1,
         borderColor: colors.border,
     },
@@ -112,6 +138,30 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-end',
         gap: 3,
         marginTop: 2,
+    },
+    chatImage: {
+        width: 170,
+        height: 170,
+        borderRadius: 12,
+        backgroundColor: colors.skeleton,
+    },
+    fullscreenContainer: {
+        flex: 1,
+        backgroundColor: colors.black,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.md,
+    },
+    closeButton: {
+        position: 'absolute',
+        top: spacing.xl,
+        right: spacing.md,
+        zIndex: 10,
+        padding: spacing.xs,
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '90%',
     },
     tickContainer: {
         justifyContent: 'center',

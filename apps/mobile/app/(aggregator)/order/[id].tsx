@@ -179,8 +179,12 @@ export default function AggregatorOrderByIdScreen() {
       return `${feedOrder.distanceKm.toFixed(1)} km`;
     }
 
+    if (typeof storeOrder?.liveDistanceKm === 'number' && storeOrder.liveDistanceKm > 0) {
+      return `${storeOrder.liveDistanceKm.toFixed(1)} km`;
+    }
+
     return '—';
-  }, [currentLocation, storeOrder?.pickupLat, storeOrder?.pickupLng, feedOrder?.distanceKm]);
+  }, [currentLocation, storeOrder?.pickupLat, storeOrder?.pickupLng, storeOrder?.liveDistanceKm, feedOrder?.distanceKm]);
   const orderLocality = storeOrder?.pickupLocality ?? feedOrder?.locality ?? '—';
   const orderWindow = storeOrder?.window
     ?? feedOrder?.window

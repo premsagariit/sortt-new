@@ -25,7 +25,7 @@ interface OrderTimelineProps {
 const statusMap: Record<string, string> = {
   created: 'Order Created',
   accepted: 'Aggregator Accepted',
-  en_route: 'Aggregator En-route',
+  en_route: 'Aggregator On the Way',
   arrived: 'Aggregator Arrived',
   weighing_in_progress: 'Weighing started',
   completed: 'Order Completed',
@@ -36,7 +36,7 @@ const statusMap: Record<string, string> = {
 // Summary steps for the collapsed bar
 const STEPS = [
   { key: 'listing', label: 'Listing', statuses: ['created', 'accepted'], icon: Package },
-  { key: 'en_route', label: 'En-route', statuses: ['en_route'], icon: Clock },
+  { key: 'en_route', label: 'On the Way', statuses: ['en_route'], icon: Clock },
   { key: 'pickup', label: 'Pickup', statuses: ['arrived', 'weighing_in_progress'], icon: MapPin },
   { key: 'paid', label: 'Paid', statuses: ['completed'], icon: CurrencyInr },
 ];

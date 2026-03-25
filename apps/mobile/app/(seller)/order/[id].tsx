@@ -4,7 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -36,6 +35,7 @@ import { useOrderChannel } from '../../../hooks/useOrderChannel';
 import { MAP_RENDERING_AVAILABLE } from '../../../utils/mapAvailable';
 import { getMapLibreModule } from '../../../lib/maplibre';
 import { OLA_TILE_STYLE_URL } from '../../../lib/olaMaps';
+import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
 
 const OTP_ACTIVE_STATUSES = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'];
 
@@ -63,6 +63,7 @@ export default function SellerOrderDetailScreen() {
   const [rates, setRates] = React.useState<any[]>([]);
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
+  const [mediaLoading, setMediaLoading] = React.useState(false);
   const [resolvedPickupCoords, setResolvedPickupCoords] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
   const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
@@ -112,24 +113,30 @@ export default function SellerOrderDetailScreen() {
 
   React.useEffect(() => {
     if (!id) return;
+    setMediaLoading(true);
     api.get(`/api/orders/${id}/media`)
       .then(async (res) => {
         const items: any[] = res.data.media ?? [];
         const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
-        if (scrapPhotos.length === 0) {
+        const selectedItems = (scrapPhotos.length > 0 ? scrapPhotos : items);
+
+        if (selectedItems.length === 0) {
           setMediaUrls([]);
           return;
         }
+
         const urls = await Promise.all(
-          scrapPhotos.map((m: any) =>
-            api.get(`/api/orders/${id}/media/${m.id}/url`)
-              .then((r) => r.data.url as string)
+          selectedItems.map((item: any) =>
+            api.get(`/api/orders/${id}/media/${item.id}/url`)
+              .then((urlRes) => urlRes?.data?.url as string)
               .catch(() => null)
           )
         );
-        setMediaUrls(urls.filter(Boolean) as string[]);
+
+        setMediaUrls(urls.filter((url): url is string => typeof url === 'string' && url.length > 0));
       })
-      .catch(() => {});
+      .catch(() => setMediaUrls([]))
+      .finally(() => setMediaLoading(false));
   }, [id]);
 
   React.useEffect(() => {
@@ -451,16 +458,12 @@ export default function SellerOrderDetailScreen() {
             <ImageSquare size={16} color={colors.navy} />
             <Text variant="label" color={colors.slate}>SCRAP IMAGE</Text>
           </View>
-          {mediaUrls.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {mediaUrls.map((url, idx) => (
-                <Image
-                  key={idx}
-                  source={{ uri: url }}
-                  style={styles.scrapPhoto}
-                />
-              ))}
-            </ScrollView>
+          {mediaLoading ? (
+            <View style={styles.mediaLoaderWrap}>
+              <ActivityIndicator color={colors.navy} />
+            </View>
+          ) : mediaUrls.length > 0 ? (
+            <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
           ) : (
             <EmptyState
               icon={<ImageSquare size={44} color={colors.muted} weight="thin" />}
@@ -680,12 +683,14 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     flex: 1,
   },
-  scrapPhoto: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    marginRight: spacing.sm,
-    backgroundColor: colors.skeleton,
+  mediaLoaderWrap: {
+    height: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cancelAction: {
     alignSelf: 'center',
