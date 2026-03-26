@@ -22,6 +22,8 @@ export interface ListingState {
   photoUri: string | null;
   photoUris: string[];
   aiHintShown: boolean;
+  aiEstimateHint: { material_code: string; estimated_weight_kg: number; confidence: number } | null;
+  isAiEstimate: boolean;
   customNames: Record<string, string>;
 
   // Step 3
@@ -39,6 +41,7 @@ export interface ListingState {
   addPhotoUri: (uri: string) => void;
   removePhotoAt: (index: number) => void;
   setAiHintShown: (v: boolean) => void;
+  setAiEstimate: (hint: { material_code: string; estimated_weight_kg: number; confidence: number } | null) => void;
   setCustomName: (code: string, name: string) => void;
   setPickupType: (t: 'scheduled' | 'dropoff') => void;
   setScheduledDate: (d: string) => void;
@@ -57,6 +60,8 @@ const initialState = {
   photoUri: null,
   photoUris: [],
   aiHintShown: false,
+  aiEstimateHint: null,
+  isAiEstimate: false,
   customNames: {},
   pickupType: null,
   scheduledDate: '',
@@ -104,10 +109,19 @@ export const useListingStore = create<ListingState>((set, get) => ({
     return {
       photoUris: nextPhotoUris,
       photoUri: nextPhotoUris.length > 0 ? nextPhotoUris[nextPhotoUris.length - 1] : null,
+      aiEstimateHint: null,
+      isAiEstimate: false,
+      aiHintShown: false,
     };
   }),
 
   setAiHintShown: (aiHintShown) => set({ aiHintShown }),
+
+  setAiEstimate: (hint) => set({
+    aiEstimateHint: hint,
+    isAiEstimate: !!hint,
+    aiHintShown: !!hint,
+  }),
 
   setCustomName: (code, name) =>
     set((state) => ({

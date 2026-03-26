@@ -10,7 +10,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Nut, Jar, FileText, Laptop, TShirt, Martini, Lightbulb, ArrowRight } from 'phosphor-react-native';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
@@ -41,8 +41,16 @@ const RATE_ESTIMATES: Record<MaterialCode, { min: number; max: number }> = {
 };
 
 export default function Step1Screen() {
+  const { fresh } = useLocalSearchParams<{ fresh?: string }>();
   const selectedMaterials = useListingStore((s) => s.selectedMaterials);
   const setMaterials = useListingStore((s) => s.setMaterials);
+  const resetListing = useListingStore((s) => s.resetListing);
+
+  React.useEffect(() => {
+    if (fresh === '1') {
+      resetListing();
+    }
+  }, [fresh, resetListing]);
 
   const toggleMaterial = (code: MaterialCode) => {
     if (selectedMaterials.includes(code)) {

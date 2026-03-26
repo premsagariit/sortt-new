@@ -228,8 +228,14 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
                         COALESCE(SUM(item_totals.total_weight_kg), 0) AS total_weight_kg
                  FROM orders o
                  JOIN LATERAL (
-                   SELECT COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS order_total,
-                          COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS total_weight_kg
+                                     SELECT COALESCE(
+                                                        NULLIF(o.confirmed_value, 0),
+                                                        NULLIF(o.confirmed_total, 0),
+                                                        NULLIF(o.estimated_value, 0),
+                                                        NULLIF(o.estimated_total, 0),
+                                                        COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, oi.estimated_weight_kg * oi.rate_per_kg, 0)), 0)
+                                                    ) AS order_total,
+                                                    COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg
                    FROM order_items oi
                    WHERE oi.order_id = o.id
                  ) item_totals ON true
@@ -242,7 +248,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
             query(
                 `SELECT oi.material_code,
                         COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS amount,
-                        COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS weight_kg
+                        COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS weight_kg
                  FROM orders o
                  JOIN order_items oi ON oi.order_id = o.id
                  WHERE o.aggregator_id = $1

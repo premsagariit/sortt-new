@@ -10,7 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, Tray, WarningCircle, CheckCircle, ArrowRight, Warning } from 'phosphor-react-native';
+import { Camera, Tray, WarningCircle, CheckCircle, ArrowRight, Warning, Sparkle } from 'phosphor-react-native';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
@@ -23,6 +23,7 @@ import { useListingStore } from '../../../store/listingStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../utils/navigation';
 import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
+import { api } from '../../../lib/api';
 
 const ALL_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom'];
 
@@ -31,29 +32,102 @@ export default function Step2Screen() {
     selectedMaterials,
     weights,
     photoUris,
-    aiHintShown,
+    aiEstimateHint,
     setWeight,
     addPhotoUri,
     removePhotoAt,
-    setAiHintShown,
+    setAiEstimate,
     setMaterials,
     customNames,
     setCustomName,
   } = useListingStore();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<'manual' | null>(null);
   const remainingMaterials = ALL_MATERIALS.filter(m => !selectedMaterials.includes(m));
 
   // usePhotoCapture is the ONLY place camera is launched — never inline in screens
   const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
 
-  // Sync hook URI into store whenever a new photo is captured
+  const analyzePhoto = async (photoUriToAnalyze: string) => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      console.log('[Scrap] Photo URI:', photoUriToAnalyze);
+      console.log('[Scrap] API base URL:', api.defaults.baseURL);
+
+      const formData = new FormData();
+      formData.append('image', {
+        uri: photoUriToAnalyze,
+        type: 'image/jpeg',
+        name: 'scrap.jpg',
+      } as any);
+
+      console.log('[Scrap] FormData created with image');
+      console.log('[Scrap] FormData._parts:', (formData as any)._parts?.length || 'unknown');
+
+      // Extend timeout for Gemini Vision API (can be slow on first call)
+      const originalTimeout = api.defaults.timeout;
+      api.defaults.timeout = 30000; // 30s for image analysis
+
+      console.log('[Scrap] Sending request to:', api.defaults.baseURL + '/api/scrap/analyze');
+      console.log('[Scrap] FormData keys:', Object.keys(formData));
+      console.log('[Scrap] Timeout set to: 30000ms');
+
+      try {
+        console.log('[Scrap] Making POST request...');
+        const response = await api.post('/api/scrap/analyze', formData);
+        console.log('[Scrap] Response received:', response.status);
+
+        const data = response.data;
+        if (data?.manual_entry_required || data?.status === 'analysis_failed') {
+          setAiEstimate(null);
+          setAnalysisError('manual');
+        } else {
+          setAiEstimate({
+            material_code: data.material_code,
+            estimated_weight_kg: Number(data.estimated_weight_kg || 0),
+            confidence: Number(data.confidence || 0),
+          });
+        }
+      } catch (requestError: any) {
+        console.log('[Scrap] Request failed with error:', {
+          message: requestError?.message,
+          code: requestError?.code,
+          status: requestError?.response?.status,
+          errorType: requestError?.constructor?.name,
+          responseData: requestError?.response?.data,
+          isAxiosError: requestError?.isAxiosError,
+          timeout: requestError?.code === 'ECONNABORTED',
+        });
+        throw requestError;
+      } finally {
+        // Restore original timeout
+        api.defaults.timeout = originalTimeout;
+      }
+    } catch (error: any) {
+      console.warn('[Scrap] Analysis error', {
+        message: error?.message,
+        status: error?.response?.status,
+        timeout: error?.code === 'ECONNABORTED',
+        errorCode: error?.code,
+        errorType: error?.constructor?.name,
+      });
+      setAiEstimate(null);
+      setAnalysisError('manual');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   useEffect(() => {
     if (photoUri) {
       addPhotoUri(photoUri);
-      setAiHintShown(false);
+      setAiEstimate(null);
+      analyzePhoto(photoUri);
     }
-  }, [photoUri, addPhotoUri, setAiHintShown]);
+  }, [photoUri, addPhotoUri, setAiEstimate]);
 
   const handleAddPhoto = async () => {
     await capturePhoto();
@@ -63,7 +137,8 @@ export default function Step2Screen() {
     if (photoUris.length === 0) return;
     removePhotoAt(photoUris.length - 1);
     resetPhoto();
-    setAiHintShown(false);
+    setAiEstimate(null);
+    setAnalysisError(null);
   };
 
   const handleAddMaterial = (code: MaterialCode) => {
@@ -80,14 +155,6 @@ export default function Step2Screen() {
 
   // Disabled state reads from STORE (not local state) per hard rules
   const canProceed = capturedUris.length > 0 && hasOneValidWeight;
-
-  // Mock AI hint (still local — Day 8 replaces with Gemini Vision result)
-  useEffect(() => {
-    if (capturedUris.length > 0 && !aiHintShown) {
-      const timer = setTimeout(() => setAiHintShown(true), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [capturedUris, aiHintShown, setAiHintShown]);
 
   if (selectedMaterials.length === 0) {
     return (
@@ -173,28 +240,30 @@ export default function Step2Screen() {
 
                 {/* AI Hint Box */}
                 <View style={styles.aiBox}>
-                  {!aiHintShown ? (
+                  {isAnalyzing ? (
                     <View style={styles.aiLoading}>
                       <ActivityIndicator size="small" color={colors.navy} />
                       <Text variant="caption" style={{ marginLeft: spacing.sm }}>Analyzing photo...</Text>
                     </View>
-                  ) : (
-                    <View>
-                      <View style={styles.aiResultRowHeader}>
-                        <View style={styles.aiEstimateTag}>
-                          <Text variant="caption" color={colors.surface} style={{ fontWeight: '700' }}>AI ESTIMATE</Text>
-                        </View>
-                        <Text variant="caption" color={colors.teal} style={{ fontWeight: '600' }}>Analysis complete</Text>
-                      </View>
-                      <View style={styles.aiResultRowBody}>
-                        <Text variant="label" color={colors.navy}>
-                          Detected: ~12 kg Metal
-                        </Text>
-                        <Text variant="label" color={colors.navy} style={{ fontWeight: '700' }}>
-                          ₹380–₹490
-                        </Text>
-                      </View>
+                  ) : analysisError === 'manual' ? (
+                    <View style={styles.analysisErrorBanner}>
+                      <Text variant="caption" color={colors.slate}>Couldn't analyse photo — please enter weight manually</Text>
                     </View>
+                  ) : aiEstimateHint ? (
+                    <View style={styles.aiHintCard}>
+                      <View style={styles.aiHintRow}>
+                        <Sparkle size={16} color={colors.amber} />
+                        <Text variant="caption" color={colors.slate}>AI estimate — verify before submitting</Text>
+                      </View>
+                      <Text variant="label" color={colors.amber} style={styles.aiHintWeight}>
+                        {(MATERIAL_LABELS as any)[aiEstimateHint.material_code] || aiEstimateHint.material_code}: ~{aiEstimateHint.estimated_weight_kg.toFixed(1)} kg
+                      </Text>
+                      <Text variant="caption" color={colors.muted}>
+                        Confidence: {Math.round(aiEstimateHint.confidence * 100)}%
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text variant="caption" color={colors.muted}>Capture a photo to get an AI estimate hint.</Text>
                   )}
                 </View>
               </View>
@@ -378,14 +447,33 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   aiBox: {
-    backgroundColor: colors.blackAlpha3,
-    borderRadius: 8,
-    padding: spacing.sm,
+    backgroundColor: colorExtended.amberLight,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
   aiLoading: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.sm,
+  },
+  analysisErrorBanner: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.amber,
+    paddingLeft: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  aiHintCard: {
+    gap: spacing.xs,
+  },
+  aiHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  aiHintWeight: {
+    fontFamily: 'DMMono-Regular',
   },
   aiResultRow: {
     flexDirection: 'row',

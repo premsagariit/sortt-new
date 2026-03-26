@@ -134,34 +134,31 @@ export default function SellerOrdersScreen() {
 
       <NavBar variant="light" title="My Orders" />
 
-      {/* Filter Chips */}
+      {/* Filter Tabs */}
       <View style={styles.filterContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
+        <View style={styles.tabContainer}>
           {FILTERS.map(filter => {
             const isActive = activeFilter === filter;
             return (
               <Pressable
                 key={filter}
-                style={[styles.chip, isActive && styles.chipActive]}
                 onPress={() => setActiveFilter(filter)}
+                style={[styles.tab, isActive && styles.tabActive]}
                 accessible
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
                 <Text
-                  variant="caption"
-                  style={[styles.chipText, isActive && styles.chipTextActive] as any}
+                  variant="label"
+                  numberOfLines={1}
+                  style={[styles.tabText, isActive && styles.tabTextActive]}
                 >
                   {filter}
                 </Text>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       </View>
 
       {/* Active Order Banner */}
@@ -273,33 +270,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    height: 56,
-  },
-  filterScroll: {
     paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    gap: spacing.sm,
+    paddingVertical: spacing.sm,
   },
-  chip: {
-    height: 48,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  tabContainer: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  tab: {
+    flex: 1,
+    height: 34,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 17,
+    paddingHorizontal: 4,
+    backgroundColor: colors.surface,
   },
-  chipActive: {
+  tabActive: {
     backgroundColor: colors.navy,
-    borderColor: colors.navy,
   },
-  chipText: {
-    color: colors.slate,
-    fontWeight: '600',
+  tabText: {
+    color: colors.muted,
+    fontSize: 12,
   },
-  chipTextActive: {
-    color: colors.surface,
+  tabTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'DMSans-SemiBold',
+    fontSize: 12,
   },
   activeBanner: {
     borderRadius: 12,

@@ -21,6 +21,7 @@ import notificationsRouter from './routes/notifications';
 import realtimeRouter from './routes/realtime';
 import addressesRouter from './routes/addresses';
 import mapsRouter from './routes/maps';
+import scrapRouter from './routes/scrap';
 import { startScheduler } from './scheduler';
 
 const app = express();
@@ -78,6 +79,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/sellers/addresses', addressesRouter);
 app.use('/api/rates', ratesRouter);
 app.use('/api/maps', mapsRouter);
+app.use('/api/scrap', scrapRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);

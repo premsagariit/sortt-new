@@ -67,10 +67,46 @@ export interface Order {
   history?: any[];
 }
 
-export function getOrderDisplayAmount(order: Pick<Order, 'displayAmount' | 'confirmedAmount' | 'estimatedAmount'>): number {
-  if (typeof order.displayAmount === 'number' && Number.isFinite(order.displayAmount)) return order.displayAmount;
-  if (typeof order.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount)) return order.confirmedAmount;
-  if (typeof order.estimatedAmount === 'number' && Number.isFinite(order.estimatedAmount)) return order.estimatedAmount;
+export function getOrderDisplayAmount(order: any): number {
+  if (typeof order?.displayAmount === 'number' && Number.isFinite(order.displayAmount) && order.displayAmount > 0) return order.displayAmount;
+  if (typeof order?.confirmedAmount === 'number' && Number.isFinite(order.confirmedAmount) && order.confirmedAmount > 0) return order.confirmedAmount;
+  if (typeof order?.confirmedTotal === 'number' && Number.isFinite(order.confirmedTotal) && order.confirmedTotal > 0) return order.confirmedTotal;
+  if (typeof order?.confirmed_total === 'number' && Number.isFinite(order.confirmed_total) && order.confirmed_total > 0) return order.confirmed_total;
+  if (typeof order?.orderAmount === 'number' && Number.isFinite(order.orderAmount) && order.orderAmount > 0) return order.orderAmount;
+
+  const lineItems = Array.isArray(order?.lineItems)
+    ? order.lineItems
+    : (Array.isArray(order?.line_items) ? order.line_items : []);
+  const orderItems = Array.isArray(order?.orderItems)
+    ? order.orderItems
+    : (Array.isArray(order?.order_items) ? order.order_items : []);
+
+  const fromLineItems = lineItems.reduce((sum: number, item: any) => {
+    const amount = Number(item?.amount ?? 0);
+    if (Number.isFinite(amount) && amount > 0) return sum + amount;
+
+    const weight = Number(item?.weightKg ?? item?.weight_kg ?? item?.confirmed_weight_kg ?? item?.confirmedWeightKg ?? item?.estimated_weight_kg ?? item?.estimatedWeightKg ?? 0);
+    const rate = Number(item?.ratePerKg ?? item?.rate_per_kg ?? 0);
+    if (!Number.isFinite(weight) || !Number.isFinite(rate)) return sum;
+    return sum + (weight * rate);
+  }, 0);
+  if (fromLineItems > 0) return fromLineItems;
+
+  const fromOrderItems = orderItems.reduce((sum: number, item: any) => {
+    const amount = Number(item?.amount ?? 0);
+    if (Number.isFinite(amount) && amount > 0) return sum + amount;
+
+    const weight = Number(item?.confirmedWeightKg ?? item?.confirmed_weight_kg ?? item?.estimatedWeightKg ?? item?.estimated_weight_kg ?? 0);
+    const rate = Number(item?.ratePerKg ?? item?.rate_per_kg ?? 0);
+    if (!Number.isFinite(weight) || !Number.isFinite(rate)) return sum;
+    return sum + (weight * rate);
+  }, 0);
+  if (fromOrderItems > 0) return fromOrderItems;
+
+  if (typeof order?.display_amount === 'number' && Number.isFinite(order.display_amount) && order.display_amount > 0) return order.display_amount;
+  if (typeof order?.estimatedTotal === 'number' && Number.isFinite(order.estimatedTotal) && order.estimatedTotal > 0) return order.estimatedTotal;
+  if (typeof order?.estimated_total === 'number' && Number.isFinite(order.estimated_total) && order.estimated_total > 0) return order.estimated_total;
+  if (typeof order?.estimatedAmount === 'number' && Number.isFinite(order.estimatedAmount) && order.estimatedAmount > 0) return order.estimatedAmount;
   return 0;
 }
 

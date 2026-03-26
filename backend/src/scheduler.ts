@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { query } from './lib/db';
 import * as Sentry from '@sentry/node';
+import path from 'path';
+import { spawn } from 'child_process';
 
 // Define the jobs and their queries
 const jobs = [
@@ -21,6 +23,47 @@ const jobs = [
         schedule: '*/15 * * * *', // Every 15 minutes
         task: async () => {
             await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY aggregator_rating_stats`);
+        },
+    },
+    {
+        name: 'Price Scraper (Python Spawn)',
+        schedule: '0 0 * * *',
+        task: async () => {
+            await new Promise<void>((resolve, reject) => {
+                const pythonBin = process.env.PYTHON_BIN || 'python';
+                const scraperPath = path.resolve(process.cwd(), 'scraper', 'main.py');
+                const child = spawn(pythonBin, [scraperPath], {
+                    cwd: process.cwd(),
+                    env: process.env,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                });
+
+                let stderr = '';
+
+                child.stdout.on('data', (chunk) => {
+                    console.log(`[Scheduler][PriceScraper] ${String(chunk).trim()}`);
+                });
+
+                child.stderr.on('data', (chunk) => {
+                    const text = String(chunk);
+                    stderr += text;
+                    console.error(`[Scheduler][PriceScraper][stderr] ${text.trim()}`);
+                });
+
+                child.on('error', (error) => {
+                    reject(error);
+                });
+
+                child.on('close', (code) => {
+                    if (code === 0) {
+                        resolve();
+                        return;
+                    }
+
+                    const error = new Error(`Price scraper exited with code ${code}. ${stderr}`.trim());
+                    reject(error);
+                });
+            });
         },
     },
     {

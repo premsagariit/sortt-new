@@ -218,7 +218,7 @@ export default function NavigateScreen() {
             Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-        return `${(earthRadiusKm * c).toFixed(1)} km away`;
+        return `${(earthRadiusKm * c).toFixed(1)} km`;
     }, [currentLocation, resolvedPickupCoords]);
 
     const openNavigationRoute = React.useCallback(async () => {

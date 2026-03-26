@@ -13,6 +13,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@sortt/analysis": "workspace:*",
     "@sortt/maps": "workspace:*",
     "@sortt/realtime": "workspace:*",

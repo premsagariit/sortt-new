@@ -16,6 +16,7 @@ import { createNotification } from '../../lib/notifications';
 import { channelName } from '../../utils/channelHelper';
 import { sendPushToUsers } from '../../utils/pushNotifications';
 import { publishEvent } from '../../lib/realtime';
+import { generateAndStoreInvoice } from '../../utils/invoiceGenerator';
 
 // Multer for media uploads (5MB, images only)
 const upload = multer({
@@ -450,8 +451,12 @@ router.get('/earnings', verifyUserRole('seller'), async (req, res) => {
               COALESCE(SUM(order_totals.total_weight_kg), 0) AS total_weight_kg
          FROM (
            SELECT o.id AS order_id,
-                  COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, 0)), 0) AS order_total,
-                  COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, 0)), 0) AS total_weight_kg
+                  COALESCE(
+                    NULLIF(o.confirmed_value, 0),
+                    NULLIF(o.estimated_value, 0),
+                    COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, oi.estimated_weight_kg * oi.rate_per_kg, 0)), 0)
+                  ) AS order_total,
+                  COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg
              FROM orders o
              LEFT JOIN order_items oi ON oi.order_id = o.id
             WHERE o.seller_id = $1
@@ -470,6 +475,49 @@ router.get('/earnings', verifyUserRole('seller'), async (req, res) => {
     console.error('GET /api/orders/earnings error:', e);
     Sentry.captureException(e);
     return res.status(500).json({ error: 'Failed to load earnings' });
+  }
+});
+
+router.get('/:id/invoice', verifyUserRole(['seller', 'aggregator']), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const orderId = req.params.id;
+
+    const ownerRes = await query(
+      `SELECT seller_id, aggregator_id FROM orders WHERE id = $1`,
+      [orderId]
+    );
+
+    if (ownerRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const { seller_id, aggregator_id } = ownerRes.rows[0];
+    const isOrderParticipant = seller_id === userId || aggregator_id === userId;
+
+    if (!isOrderParticipant) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const invoiceRes = await query(
+      `SELECT storage_path FROM invoices WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    );
+
+    if (invoiceRes.rows.length === 0 || !invoiceRes.rows[0].storage_path) {
+      return res.status(404).json({ error: 'invoice_not_ready' });
+    }
+
+    const url = await storageProvider.getSignedUrl(invoiceRes.rows[0].storage_path, 300);
+    const expiresAt = new Date(Date.now() + 300_000).toISOString();
+    return res.json({ url, expiresAt });
+  } catch (error) {
+    Sentry.captureException(error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -1504,7 +1552,9 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     }
   }
 
-  // Publish order completion status update to Ably (both seller and aggregator channels)
+  const responsePayload = { success: true };
+  res.status(200).json(responsePayload);
+
   setImmediate(async () => {
     try {
       const orderRes = await query(
@@ -1530,12 +1580,15 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
     }
   });
 
-  // Non-blocking invoice generation placeholder
   setImmediate(() => {
-    // TODO Day 15: triggerInvoiceGeneration(orderId)
+    generateAndStoreInvoice(orderId).catch((err) =>
+      Sentry.captureException(err, {
+        tags: { context: 'invoice_generation', order_id: orderId },
+      })
+    );
   });
 
-  return res.status(200).json({ success: true });
+  return;
 });
 
 export default router;

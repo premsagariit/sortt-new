@@ -3,3 +3,9 @@ psycopg2-binary
 requests
 python-dotenv
 pandas
+
+
+requests==2.32.3
+beautifulsoup4==4.12.3
+python-dotenv==1.0.1
+sentry-sdk==2.19.0

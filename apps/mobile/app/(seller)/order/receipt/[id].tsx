@@ -19,7 +19,9 @@ import {
   Phone,
   User,
   CaretLeft,
+  DownloadSimple,
 } from 'phosphor-react-native';
+import * as Linking from 'expo-linking';
 
 import { colors, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
@@ -30,10 +32,12 @@ import { useChatStore } from '../../../../store/chatStore';
 import { ContactCard } from '../../../../components/order/ContactCard';
 import { OrderTimeline } from '../../../../components/order/OrderTimeline';
 import { PrimaryButton } from '../../../../components/ui/Button';
+import { SecondaryButton } from '../../../../components/ui/Button';
 import { Input } from '../../../../components/ui/Input';
 import { api } from '../../../../lib/api';
 import { safeBack } from '../../../../utils/navigation';
 import { ImageCarouselViewer } from '../../../../components/ui/ImageCarouselViewer';
+import * as WebBrowser from 'expo-web-browser';
 
 type SellerOrderItemRow = {
   material_code: string;
@@ -54,15 +58,16 @@ const MATERIAL_COLORS: Record<string, string> = {
 };
 
 export default function SellerOrderReceiptScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const routeOrderId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const orders = useOrderStore((s: any) => s.orders);
   const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
   const isLoading = useOrderStore((s: any) => s.isLoading);
   const receiptUserId = useAuthStore((s: any) => s.userId);
   const chatUnread = useChatStore((state) => {
-    if (!receiptUserId || !id) return 0;
-    return (state.messages[id] ?? []).filter(m => m.senderId !== receiptUserId && !m.read).length;
+    if (!receiptUserId || !routeOrderId) return 0;
+    return (state.messages[routeOrderId] ?? []).filter(m => m.senderId !== receiptUserId && !m.read).length;
   });
 
   const [rates, setRates] = React.useState<any[]>([]);
@@ -71,28 +76,30 @@ export default function SellerOrderReceiptScreen() {
   const [ratingSubmitting, setRatingSubmitting] = React.useState(false);
   const [ratingError, setRatingError] = React.useState<string | null>(null);
   const [ratingSubmitted, setRatingSubmitted] = React.useState(false);
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = React.useState(false);
+  const [invoiceError, setInvoiceError] = React.useState<string | null>(null);
 
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = React.useState(false);
 
-  const order = orders.find((o: any) => o.orderId === id);
+  const order = orders.find((o: any) => o.orderId === routeOrderId);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!routeOrderId) return;
     (async () => {
       await Promise.all([
-        fetchOrder(id),
+        fetchOrder(routeOrderId),
         api.get('/api/rates')
           .then(res => setRates(res.data.rates || []))
           .catch(() => setRates([])),
       ]);
     })();
-  }, [id, fetchOrder]);
+  }, [routeOrderId, fetchOrder]);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!routeOrderId) return;
     setMediaLoading(true);
-    api.get(`/api/orders/${id}/media`)
+    api.get(`/api/orders/${routeOrderId}/media`)
       .then(async (res) => {
         const items: any[] = res.data.media ?? [];
         const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
@@ -105,7 +112,7 @@ export default function SellerOrderReceiptScreen() {
 
         const urls = await Promise.all(
           selectedItems.map((item: any) =>
-            api.get(`/api/orders/${id}/media/${item.id}/url`)
+            api.get(`/api/orders/${routeOrderId}/media/${item.id}/url`)
               .then((urlRes) => urlRes?.data?.url as string)
               .catch(() => null)
           )
@@ -115,7 +122,7 @@ export default function SellerOrderReceiptScreen() {
       })
       .catch(() => setMediaUrls([]))
       .finally(() => setMediaLoading(false));
-  }, [id]);
+  }, [routeOrderId]);
 
   React.useEffect(() => {
     if (order?.sellerHasRated) {
@@ -124,6 +131,49 @@ export default function SellerOrderReceiptScreen() {
   }, [order?.sellerHasRated]);
 
   const isCompleted = order?.status === 'completed';
+  const isBusinessOrder =
+    (order as any)?.profile_type === 'business' ||
+    (order as any)?.profileType === 'business' ||
+    (order as any)?.account_type === 'business' ||
+    (order as any)?.accountType === 'business' ||
+    (order as any)?.sellerType === 'business';
+  const invoiceOrderId = order?.orderId ?? routeOrderId ?? null;
+
+  const handleDownloadInvoice = React.useCallback(async () => {
+    if (!invoiceOrderId) {
+      console.warn('[Invoice] Missing order id for download');
+      setInvoiceError('Could not load invoice — please try again');
+      return;
+    }
+
+    setIsDownloadingInvoice(true);
+    setInvoiceError(null);
+    try {
+      console.log('[Invoice] Requesting signed URL for order', invoiceOrderId);
+      const response = await api.get(`/api/orders/${invoiceOrderId}/invoice`);
+      const signedUrl = response?.data?.signedUrl ?? response?.data?.url;
+      if (!signedUrl) {
+        console.warn('[Invoice] Missing signed URL in response', response?.data);
+        setInvoiceError('Could not load invoice — please try again');
+        return;
+      }
+      const result = await WebBrowser.openBrowserAsync(signedUrl, {
+        controlsColor: colors.navy,
+        toolbarColor: colors.surface,
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      });
+      console.log('[Invoice] Browser result', result.type);
+    } catch (err: any) {
+      console.warn('[Invoice] Download failed', err?.message || err);
+      if (err?.response?.status === 404) {
+        setInvoiceError('Invoice is being generated — try again in a moment');
+      } else {
+        setInvoiceError('Could not load invoice — please try again');
+      }
+    } finally {
+      setIsDownloadingInvoice(false);
+    }
+  }, [invoiceOrderId]);
 
   const completedAt = useMemo(() => {
     const completedEvent = Array.isArray(order?.history)
@@ -194,6 +244,8 @@ export default function SellerOrderReceiptScreen() {
     return computed > 0 ? computed : Number(order?.estimatedAmount ?? 0);
   }, [mappedItems, order?.confirmedTotal, order?.confirmedAmount, order?.displayAmount, order?.estimatedAmount]);
 
+  const showInvoiceButton = isBusinessOrder || (totalAmount ?? 0) > 50000;
+
   const totalWeight = useMemo(
     () => mappedItems.reduce((sum: number, item) => sum + Number(item.weight || 0), 0),
     [mappedItems]
@@ -261,9 +313,22 @@ export default function SellerOrderReceiptScreen() {
         stickyHeaderIndices={[0]}
       >
         <View style={styles.heroSection}>
-          <Pressable onPress={() => safeBack('/(seller)/orders?tab=Completed')} style={styles.heroBackButton}>
-            <CaretLeft size={18} color={colors.surface} weight="regular" />
-          </Pressable>
+          <View style={styles.heroTopRow}>
+            <Pressable onPress={() => safeBack('/(seller)/orders?tab=Completed')} style={styles.heroBackButton}>
+              <CaretLeft size={18} color={colors.surface} weight="regular" />
+            </Pressable>
+            <Pressable
+              onPress={handleDownloadInvoice}
+              style={styles.heroDownloadButton}
+              disabled={isDownloadingInvoice}
+            >
+              {isDownloadingInvoice ? (
+                <ActivityIndicator size="small" color={colors.surface} />
+              ) : (
+                <DownloadSimple size={18} color={colors.surface} weight="regular" />
+              )}
+            </Pressable>
+          </View>
           <View style={styles.heroStatusWrap}>
             <CheckCircle size={44} color={colors.surface} weight="fill" />
             <Text variant="heading" color={colors.surface} style={styles.heroTitle}>
@@ -409,6 +474,26 @@ export default function SellerOrderReceiptScreen() {
             currentStatus={order.status}
           />
 
+          {showInvoiceButton ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <DownloadSimple size={16} color={colors.navy} />
+                <Text variant="label" color={colors.slate}>INVOICE</Text>
+              </View>
+              <SecondaryButton
+                label={isDownloadingInvoice ? 'Loading Invoice...' : 'Download Invoice'}
+                icon={isDownloadingInvoice ? <ActivityIndicator size="small" color={colors.navy} /> : <DownloadSimple size={16} color={colors.navy} />}
+                onPress={handleDownloadInvoice}
+                disabled={isDownloadingInvoice}
+              />
+              {invoiceError ? (
+                <Text variant="caption" color={colors.muted} style={styles.invoiceErrorText}>
+                  {invoiceError}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <Star size={16} color={colors.amber} weight="fill" />
@@ -492,8 +577,20 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
   },
+  heroTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   heroBackButton: {
-    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroDownloadButton: {
     backgroundColor: 'transparent',
     width: 24,
     height: 24,
@@ -676,6 +773,9 @@ const styles = StyleSheet.create({
   },
   submitReviewButton: {
     marginTop: spacing.lg,
+  },
+  invoiceErrorText: {
+    marginTop: spacing.sm,
   },
   submittedWrap: {
     alignItems: 'center',

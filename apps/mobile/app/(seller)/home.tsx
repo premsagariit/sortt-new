@@ -200,7 +200,10 @@ export default function SellerHomeScreen() {
 
 
   const resetListing = useListingStore((s) => s.resetListing);
-  const handleCreateListing = () => { resetListing(); router.push('/(seller)/listing/step1'); };
+  const handleCreateListing = () => {
+    resetListing();
+    router.push({ pathname: '/(seller)/listing/step1', params: { fresh: '1' } } as any);
+  };
   const handleNotifications = () => router.push('/(shared)/notifications' as any);
   const handleMarketRates = () => router.push('/(seller)/prices');
   const handleMyOrders = () => router.push('/(seller)/orders');

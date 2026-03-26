@@ -173,7 +173,10 @@ export default function AggregatorProfileScreen() {
       <View style={styles.bottomBar}>
         <PrimaryButton
           label="List Scrap for Pickup"
-          onPress={() => { resetListing(); router.push('/(seller)/listing/step1'); }}
+          onPress={() => {
+            resetListing();
+            router.push({ pathname: '/(seller)/listing/step1', params: { fresh: '1' } } as any);
+          }}
         />
       </View>
     </View>

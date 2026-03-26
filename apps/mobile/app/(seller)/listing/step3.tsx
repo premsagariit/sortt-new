@@ -77,21 +77,6 @@ export default function Step3Screen() {
           pickup_locality: selected.pickup_locality,
         });
       }
-      return;
-    }
-
-    const defaultAddress = addresses.find((item) => item.is_default) || addresses[0];
-    if (defaultAddress) {
-      setSelectedAddress({
-        id: defaultAddress.id,
-        label: defaultAddress.label,
-        building_name: defaultAddress.building_name,
-        street: defaultAddress.street,
-        colony: defaultAddress.colony,
-        city: defaultAddress.city,
-        pincode: defaultAddress.pincode,
-        pickup_locality: defaultAddress.pickup_locality,
-      });
     }
   }, [addresses, selectedAddressId, setSelectedAddress]);
 
@@ -105,8 +90,7 @@ export default function Step3Screen() {
   };
 
   const canProceed =
-    !!selectedAddressId &&
-    (pickupType === 'dropoff' || (pickupType === 'scheduled' && !!scheduledDate && !!scheduledTime));
+    (pickupType === 'dropoff' || (pickupType === 'scheduled' && !!selectedAddressId && !!scheduledDate && !!scheduledTime));
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -153,38 +137,42 @@ export default function Step3Screen() {
           </View>
 
           <View style={styles.detailsContainer}>
-            <View style={styles.addressHeaderRow}>
-              <Text variant="subheading">Saved Pickup Address</Text>
-              <Pressable onPress={() => router.push('/(seller)/addresses' as any)}>
-                <Text variant="caption" color={colors.red}>Manage</Text>
-              </Pressable>
-            </View>
+            {pickupType === 'scheduled' && (
+              <>
+                <View style={styles.addressHeaderRow}>
+                  <Text variant="subheading">Saved Pickup Address</Text>
+                  <Pressable onPress={() => router.push('/(seller)/addresses' as any)}>
+                    <Text variant="caption" color={colors.red}>Manage</Text>
+                  </Pressable>
+                </View>
 
-            <Pressable style={styles.addressCard} onPress={() => setShowAddressSelector(true)}>
-              {selectedAddressSnapshot ? (
-                <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                    <MapPin size={16} color={colors.navy} />
-                    <Text variant="label" color={colors.navy}>{selectedAddressSnapshot.label}</Text>
-                  </View>
-                  <Text variant="caption" color={colors.slate} numberOfLines={2}>
-                    {formatAddress(selectedAddressSnapshot)}
-                  </Text>
-                </>
-              ) : (
-                <Text variant="caption" color={colors.muted}>
-                  {loadingAddresses ? 'Loading saved addresses...' : 'Select a saved address to continue'}
-                </Text>
-              )}
-            </Pressable>
+                <Pressable style={styles.addressCard} onPress={() => setShowAddressSelector(true)}>
+                  {selectedAddressSnapshot ? (
+                    <>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <MapPin size={16} color={colors.navy} />
+                        <Text variant="label" color={colors.navy}>{selectedAddressSnapshot.label}</Text>
+                      </View>
+                      <Text variant="caption" color={colors.slate} numberOfLines={2}>
+                        {formatAddress(selectedAddressSnapshot)}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text variant="caption" color={colors.muted}>
+                      {loadingAddresses ? 'Loading saved addresses...' : 'Select a saved address to continue'}
+                    </Text>
+                  )}
+                </Pressable>
 
-            {!selectedAddressId && !loadingAddresses ? (
-              <SecondaryButton
-                label="Add New Address"
-                icon={<Plus size={14} color={colors.navy} weight="bold" />}
-                onPress={() => router.push('/(seller)/address-map' as any)}
-              />
-            ) : null}
+                {!selectedAddressId && !loadingAddresses ? (
+                  <SecondaryButton
+                    label="Add New Address"
+                    icon={<Plus size={14} color={colors.navy} weight="bold" />}
+                    onPress={() => router.push('/(seller)/address-map' as any)}
+                  />
+                ) : null}
+              </>
+            )}
 
             {pickupType === 'scheduled' && (
               <>

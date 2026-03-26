@@ -42,6 +42,7 @@ export default function Step4Screen() {
     notes,
     customNames,
     submitListing,
+    resetListing,
   } = useListingStore();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,9 +94,10 @@ export default function Step4Screen() {
       ]).start();
 
       timerRef.current = setTimeout(() => {
+        resetListing();
         router.dismissAll(); // Resets the listing stack back to step1
         router.replace('/(seller)/home');
-      }, 4000);
+      }, 3000);
     }
 
     return () => {
@@ -133,6 +135,7 @@ export default function Step4Screen() {
     
     setIsSubmitting(false);
     if (res.success) {
+      resetListing();
       setShowSuccess(true);
     } else {
       const errStr = res.error || '';
@@ -152,7 +155,15 @@ export default function Step4Screen() {
 
   if (showSuccess) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.teal }}>
+      <Pressable
+        style={styles.successOverlay}
+        onPress={() => {
+          if (timerRef.current) clearTimeout(timerRef.current);
+          resetListing();
+          router.dismissAll();
+          router.replace('/(seller)/home');
+        }}
+      >
         <SafeAreaView style={styles.successContainer} edges={['top', 'bottom']}>
           <Animated.View style={[styles.successContent, { opacity: fadeAnim }]}>
             <Animated.View style={[styles.successCircle, { transform: [{ scale: scaleAnim }] }]}>
@@ -163,22 +174,9 @@ export default function Step4Screen() {
             <Text variant="body" style={styles.successBody}>
               We're finding nearby aggregators. You'll get a notification when someone accepts.
             </Text>
-
-            <View style={styles.successFooter}>
-              <Pressable
-                style={styles.backHomeBtn}
-                onPress={() => {
-                  if (timerRef.current) clearTimeout(timerRef.current);
-                  router.dismissAll();
-                  router.replace('/(seller)/home');
-                }}
-              >
-                <Text style={styles.backHomeBtnText}>Back to Home</Text>
-              </Pressable>
-            </View>
           </Animated.View>
         </SafeAreaView>
-      </View>
+      </Pressable>
     );
   }
 
@@ -439,6 +437,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.teal,
   },
+  successOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+    backgroundColor: colors.teal,
+  },
   successContent: {
     flex: 1,
     alignItems: 'center',
@@ -466,23 +470,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     lineHeight: 1.5 * 14,
-  },
-  successFooter: {
-    marginTop: 40,
-    width: '100%',
-  },
-  backHomeBtn: {
-    backgroundColor: colors.surface,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  backHomeBtnText: {
-    color: colors.teal,
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: 'DMSans-Bold',
   },
 });

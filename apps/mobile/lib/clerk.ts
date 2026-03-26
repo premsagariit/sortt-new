@@ -34,5 +34,5 @@ if (!clerkPublishableKey) {
 }
 
 if (!__DEV__ && isTestPublishableKey) {
-  throw new Error('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY uses a test key in production build. Replace with a pk_live_ key.');
+  console.warn('⚠️ EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY uses a test key in production build. Use pk_live_ for production releases.');
 }

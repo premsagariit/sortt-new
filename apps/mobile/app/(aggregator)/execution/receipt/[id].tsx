@@ -1,14 +1,4 @@
-/**
- * app/(aggregator)/execution/receipt/[id].tsx
- * ──────────────────────────────────────────────────────────────────
- * Aggregator Pickup Receipt / Completion screen.
- *
- * Moved from (shared) to (aggregator) at user request.
- * High-fidelity receipt display with weight breakdown and rating.
- * ──────────────────────────────────────────────────────────────────
- */
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -18,24 +8,36 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, Star, Receipt, ImageSquare, CaretLeft } from 'phosphor-react-native';
+import {
+  CheckCircle,
+  CalendarBlank,
+  Hash,
+  ImageSquare,
+  Star,
+  Scales,
+  MapPin,
+  Phone,
+  CaretLeft,
+  DownloadSimple,
+  Receipt,
+  User,
+} from 'phosphor-react-native';
+import * as Linking from 'expo-linking';
 
 import { colors, spacing, radius } from '../../../../constants/tokens';
 import { Text, Numeric } from '../../../../components/ui/Typography';
-import { PrimaryButton } from '../../../../components/ui/Button';
-import { useOrderStore } from '../../../../store/orderStore';
-import { useAggregatorStore } from '../../../../store/aggregatorStore';
 import { EmptyState } from '../../../../components/ui/EmptyState';
+import { useOrderStore } from '../../../../store/orderStore';
+import { useAuthStore } from '../../../../store/authStore';
+import { useChatStore } from '../../../../store/chatStore';
+import { useAggregatorStore } from '../../../../store/aggregatorStore';
+import { OrderTimeline } from '../../../../components/order/OrderTimeline';
+import { PrimaryButton, SecondaryButton } from '../../../../components/ui/Button';
+import { Input } from '../../../../components/ui/Input';
 import { api } from '../../../../lib/api';
 import { safeBack } from '../../../../utils/navigation';
 import { ImageCarouselViewer } from '../../../../components/ui/ImageCarouselViewer';
-
-type WeightEntry = {
-  material: string;
-  materialKey: string;
-  weightKg: number;
-  ratePerKg: number;
-};
+import * as WebBrowser from 'expo-web-browser';
 
 const MATERIAL_COLORS: Record<string, string> = {
   paper: colors.material.paper.fg,
@@ -44,73 +46,54 @@ const MATERIAL_COLORS: Record<string, string> = {
   ewaste: colors.material.ewaste.fg,
   fabric: colors.material.fabric.fg,
   glass: colors.material.glass.fg,
+  custom: colors.material.custom.fg,
 };
 
 export default function AggregatorReceiptScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [rating, setRating] = useState(0);
-  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [rates, setRates] = useState<any[]>([]);
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const routeOrderId = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const { orders } = useOrderStore();
+  const orders = useOrderStore((s: any) => s.orders);
+  const fetchOrder = useOrderStore((s: any) => s.fetchOrder);
+  const receiptUserId = useAuthStore((s: any) => s.userId);
+  const chatUnread = useChatStore((state) => {
+    if (!receiptUserId || !routeOrderId) return 0;
+    return (state.messages[routeOrderId] ?? []).filter((m: any) => m.senderId !== receiptUserId && !m.read).length;
+  });
+
   const { executionDraftByOrderId, clearExecutionDraft } = useAggregatorStore();
-  const order = orders.find(o => o.orderId === id);
-  const draft = id ? executionDraftByOrderId[id] : undefined;
+
+  const [rates, setRates] = React.useState<any[]>([]);
+  const [ratingScore, setRatingScore] = React.useState<number>(0);
+  const [ratingReview, setRatingReview] = React.useState('');
+  const [ratingSubmitting, setRatingSubmitting] = React.useState(false);
+  const [ratingError, setRatingError] = React.useState<string | null>(null);
+  const [ratingSubmitted, setRatingSubmitted] = React.useState(false);
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = React.useState(false);
+  const [invoiceError, setInvoiceError] = React.useState<string | null>(null);
+
+  const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
+  const [mediaLoading, setMediaLoading] = React.useState(false);
+
+  const order = orders.find((o: any) => o.orderId === routeOrderId);
+  const draft = routeOrderId ? executionDraftByOrderId[routeOrderId] : undefined;
 
   React.useEffect(() => {
-    if (!id) return;
-    api.get('/api/rates')
-      .then(res => setRates(res.data.rates || []))
-      .catch(() => setRates([]));
-  }, [id]);
-
-  const weightItems: WeightEntry[] = draft
-    ? draft.lineItems.map((item) => ({
-        material: item.label,
-        materialKey: item.materialCode,
-        weightKg: item.weightKg,
-        ratePerKg: item.ratePerKg,
-      }))
-    : Array.isArray(order?.lineItems) && order!.lineItems!.length > 0
-      ? order!.lineItems!.map((item) => ({
-          material: item.materialCode.charAt(0).toUpperCase() + item.materialCode.slice(1),
-          materialKey: item.materialCode,
-          weightKg: Number(item.weightKg ?? 0),
-          ratePerKg: Number(item.ratePerKg ?? 0),
-        }))
-      : Object.entries(order?.estimatedWeights ?? {}).map(([materialCode, weight]) => ({
-          material: materialCode.charAt(0).toUpperCase() + materialCode.slice(1),
-          materialKey: materialCode,
-          weightKg: Number(weight ?? 0),
-          ratePerKg: Number(rates.find((r) => r.material_code === materialCode)?.rate_per_kg ?? 0),
-        }));
-
-  // First try draft, then confirmed DB values, then fallback to estimates
-  let totalAmount = 0;
-  if (draft?.totalAmount && draft.totalAmount > 0) {
-    totalAmount = draft.totalAmount;
-  } else if (typeof order?.confirmedTotal === 'number' && order.confirmedTotal > 0) {
-    totalAmount = order.confirmedTotal;
-  } else if (typeof order?.confirmedAmount === 'number' && order.confirmedAmount > 0) {
-    totalAmount = order.confirmedAmount;
-  } else if (typeof order?.displayAmount === 'number' && order.displayAmount > 0) {
-    totalAmount = order.displayAmount;
-  } else if (typeof order?.estimatedAmount === 'number' && order.estimatedAmount > 0) {
-    totalAmount = order.estimatedAmount;
-  }
-
-  // If no total found, compute from lineItems
-  if (totalAmount <= 0 && weightItems.length > 0) {
-    totalAmount = weightItems.reduce((sum, item) => sum + (item.weightKg * item.ratePerKg), 0);
-  }
-
-  const totalWeight = draft?.totalWeight ?? weightItems.reduce((s, i) => s + i.weightKg, 0);
+    if (!routeOrderId) return;
+    (async () => {
+      await Promise.all([
+        fetchOrder ? fetchOrder(routeOrderId).catch(() => null) : Promise.resolve(),
+        api.get('/api/rates')
+          .then(res => setRates(res.data.rates || []))
+          .catch(() => setRates([])),
+      ]);
+    })();
+  }, [routeOrderId, fetchOrder]);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!routeOrderId) return;
     setMediaLoading(true);
-    api.get(`/api/orders/${id}/media`)
+    api.get(`/api/orders/${routeOrderId}/media`)
       .then(async (res) => {
         const items: any[] = res.data.media ?? [];
         const scrapPhotos = items.filter((m: any) => m.media_type === 'scrap_photo');
@@ -123,7 +106,7 @@ export default function AggregatorReceiptScreen() {
 
         const urls = await Promise.all(
           selectedItems.map((item: any) =>
-            api.get(`/api/orders/${id}/media/${item.id}/url`)
+            api.get(`/api/orders/${routeOrderId}/media/${item.id}/url`)
               .then((urlRes) => urlRes?.data?.url as string)
               .catch(() => null)
           )
@@ -133,13 +116,170 @@ export default function AggregatorReceiptScreen() {
       })
       .catch(() => setMediaUrls([]))
       .finally(() => setMediaLoading(false));
-  }, [id]);
+  }, [routeOrderId]);
+
+  React.useEffect(() => {
+    if (order?.aggregatorHasRated) {
+      setRatingSubmitted(true);
+    }
+  }, [order?.aggregatorHasRated]);
+
+  const invoiceOrderId = order?.orderId ?? routeOrderId ?? null;
+
+  const handleDownloadInvoice = React.useCallback(async () => {
+    if (!invoiceOrderId) {
+      console.warn('[Invoice] Missing order id for download');
+      setInvoiceError('Could not load invoice — please try again');
+      return;
+    }
+
+    setIsDownloadingInvoice(true);
+    setInvoiceError(null);
+    try {
+      console.log('[Invoice] Requesting signed URL for order', invoiceOrderId);
+      const response = await api.get(`/api/orders/${invoiceOrderId}/invoice`);
+      const signedUrl = response?.data?.signedUrl ?? response?.data?.url;
+      if (!signedUrl) {
+        console.warn('[Invoice] Missing signed URL in response', response?.data);
+        setInvoiceError('Could not load invoice — please try again');
+        return;
+      }
+      const result = await WebBrowser.openBrowserAsync(signedUrl, {
+        controlsColor: colors.navy,
+        toolbarColor: colors.surface,
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      });
+      console.log('[Invoice] Browser result', result.type);
+    } catch (err: any) {
+      console.warn('[Invoice] Download failed', err?.message || err);
+      if (err?.response?.status === 404) {
+        setInvoiceError('Invoice is being generated — try again in a moment');
+      } else {
+        setInvoiceError('Could not load invoice — please try again');
+      }
+    } finally {
+      setIsDownloadingInvoice(false);
+    }
+  }, [invoiceOrderId]);
+
+  const completedAt = useMemo(() => {
+    const completedEvent = Array.isArray(order?.history)
+      ? [...order.history].reverse().find((entry: any) => entry?.new_status === 'completed')
+      : undefined;
+
+    const iso = completedEvent?.created_at ?? order?.updatedAt ?? order?.createdAt;
+    if (!iso) return '—';
+
+    const date = new Date(iso);
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [order?.history, order?.updatedAt, order?.createdAt]);
+
+  const mappedItems = useMemo(() => {
+    if (draft && draft.lineItems?.length > 0) {
+      return draft.lineItems.map((item: any) => ({
+        material_code: item.materialCode,
+        material_label: item.label,
+        weight: item.weightKg,
+        price_per_kg: item.ratePerKg,
+        amount: item.weightKg * item.ratePerKg,
+      }));
+    }
+    if (Array.isArray(order?.orderItems) && order.orderItems.length > 0) {
+      return order.orderItems.map((item: any) => {
+        const confirmedWeight = typeof item.confirmedWeightKg === 'number' ? item.confirmedWeightKg : 0;
+        const estimatedWeight = typeof item.estimatedWeightKg === 'number' ? item.estimatedWeightKg : 0;
+        const weight = confirmedWeight > 0 ? confirmedWeight : estimatedWeight;
+        const hasRate = typeof item.ratePerKg === 'number' && Number.isFinite(item.ratePerKg) && item.ratePerKg > 0;
+        const rate = hasRate ? item.ratePerKg : null;
+        const amount = hasRate && weight > 0 ? weight * (item.ratePerKg as number) : 0;
+        return {
+          material_code: item.materialCode,
+          material_label: item.materialLabel || item.materialCode,
+          weight,
+          price_per_kg: rate,
+          amount,
+        };
+      });
+    }
+
+    if (Array.isArray(order?.lineItems) && order.lineItems.length > 0) {
+      return order.lineItems.map((item: any) => ({
+        material_code: item.materialCode,
+        material_label: item.materialCode,
+        weight: Number(item.weightKg) || 0,
+        price_per_kg: Number(item.ratePerKg) || null,
+        amount: Number(item.amount) || 0,
+      }));
+    }
+
+    return Object.entries(order?.estimatedWeights || {}).map(([code, weight]) => ({
+      material_code: code,
+      material_label: code,
+      weight: Number(weight) || 0,
+      price_per_kg: rates.find((r) => r.material_code === code)?.rate_per_kg ?? null,
+      amount: 0,
+    }));
+  }, [order?.orderItems, order?.lineItems, order?.estimatedWeights, draft, rates]);
+
+  const totalAmount = useMemo(() => {
+    if (draft?.totalAmount && draft.totalAmount > 0) return draft.totalAmount;
+    if (typeof order?.confirmedTotal === 'number' && order.confirmedTotal > 0) return order.confirmedTotal;
+    if (typeof order?.confirmedAmount === 'number' && order.confirmedAmount > 0) return order.confirmedAmount;
+    if (typeof order?.displayAmount === 'number' && order.displayAmount > 0) return order.displayAmount;
+
+    const computed = mappedItems.reduce((sum: number, item: any) => sum + item.amount, 0);
+    return computed > 0 ? computed : Number(order?.estimatedAmount ?? 0);
+  }, [draft, mappedItems, order?.confirmedTotal, order?.confirmedAmount, order?.displayAmount, order?.estimatedAmount]);
+
+  const totalWeight = useMemo(
+    () => draft?.totalWeight ?? mappedItems.reduce((sum: number, item: any) => sum + Number(item.weight || 0), 0),
+    [draft, mappedItems]
+  );
+
+  const isBusinessOrder =
+    (order as any)?.profile_type === 'business' ||
+    (order as any)?.profileType === 'business' ||
+    (order as any)?.account_type === 'business' ||
+    (order as any)?.accountType === 'business' ||
+    (order as any)?.sellerType === 'business';
+  const showInvoiceButton = isBusinessOrder || (totalAmount ?? 0) > 50000;
+  const sellerPhone = (typeof order?.sellerPhone === 'string' && order.sellerPhone.trim().length > 0)
+    ? order.sellerPhone.trim()
+    : null;
+
+  const submitRating = React.useCallback(async () => {
+    if (!order?.orderId || !order?.sellerId || ratingScore < 1 || ratingSubmitting) return;
+    setRatingSubmitting(true);
+    setRatingError(null);
+    try {
+      await api.post('/api/ratings', {
+        order_id: order.orderId,
+        ratee_id: order.sellerId,
+        score: ratingScore,
+        review: ratingReview.trim().slice(0, 500),
+      });
+      setRatingSubmitted(true);
+      if (fetchOrder) await fetchOrder(order.orderId, true);
+    } catch (e: any) {
+      if (e?.response?.status === 409) {
+        setRatingSubmitted(true);
+        if (fetchOrder) await fetchOrder(order.orderId, true);
+      } else {
+        setRatingError("Couldn't submit review. Please try again.");
+      }
+    } finally {
+      setRatingSubmitting(false);
+    }
+  }, [order?.orderId, order?.sellerId, ratingScore, ratingReview, ratingSubmitting, fetchOrder]);
 
   const handleFinish = () => {
-    if (id) {
-      clearExecutionDraft(id);
+    if (routeOrderId) {
+      clearExecutionDraft(routeOrderId);
     }
-    // Navigate back to orders list, clearing execution stack
     router.dismissAll();
     router.replace('/(aggregator)/home');
   };
@@ -150,153 +290,251 @@ export default function AggregatorReceiptScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
       >
-        {/* ── Teal confirmation header ──────────────────────── */}
-        <View style={styles.successHeader}>
-          <Pressable
-            onPress={() => safeBack('/(aggregator)/orders?tab=Completed')}
-            style={styles.heroBackButton}
-          >
-            <CaretLeft size={18} color={colors.surface} weight="regular" />
-          </Pressable>
-          <View style={styles.iconCircle}>
-             <CheckCircle size={48} color={colors.teal} weight="fill" />
-          </View>
-          <Text variant="heading" color={colors.surface} style={styles.successTitle}>
-            Pickup Complete!
-          </Text>
-          <Numeric size={32} color={colors.surface} style={styles.successAmount}>
-            ₹{totalAmount.toFixed(0)} paid
-          </Numeric>
-          <Numeric
-            size={12}
-            color={colors.surface}
-            style={{ opacity: 0.6, marginTop: 4 }}
-          >
-            {order?.orderNumber || '#000000'}
-          </Numeric>
-        </View>
-
-        {/* ── Weight table ───────────────────────────────────── */}
-        <View style={styles.summarySection}>
-            <Text
-              variant="caption"
-              color={colors.navy}
-              style={styles.sectionLabel}
+        <View style={styles.heroSection}>
+          <View style={styles.heroTopRow}>
+            <Pressable onPress={() => safeBack('/(aggregator)/orders?tab=Completed')} style={styles.heroBackButton}>
+              <CaretLeft size={18} color={colors.surface} weight="regular" />
+            </Pressable>
+            <Pressable
+              onPress={handleDownloadInvoice}
+              style={styles.heroDownloadButton}
+              disabled={isDownloadingInvoice}
             >
-              SCRAP IMAGE
-            </Text>
-
-            <View style={styles.mediaCard}>
-              {mediaLoading ? (
-                <View style={styles.mediaLoaderWrap}>
-                  <ActivityIndicator color={colors.navy} />
-                </View>
-              ) : mediaUrls.length > 0 ? (
-                <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
+              {isDownloadingInvoice ? (
+                <ActivityIndicator size="small" color={colors.surface} />
               ) : (
-                <EmptyState
-                  icon={<ImageSquare size={48} color={colors.muted} weight="thin" />}
-                  heading="No scrap photo available"
-                  body="Pickup image is not attached for this order."
-                />
+                <DownloadSimple size={18} color={colors.surface} weight="regular" />
               )}
-            </View>
+            </Pressable>
+          </View>
+          <View style={styles.heroStatusWrap}>
+            <CheckCircle size={44} color={colors.surface} weight="fill" />
+            <Text variant="heading" color={colors.surface} style={styles.heroTitle}>
+              Pickup Complete!
+            </Text>
+            <Numeric size={32} color={colors.surface} style={styles.heroAmount}>
+              ₹{Math.round(totalAmount).toLocaleString('en-IN')}
+            </Numeric>
+          </View>
         </View>
 
-        <View style={styles.summarySection}>
-            <Text
-              variant="caption"
-              color={colors.navy}
-              style={styles.sectionLabel}
-            >
-              TRANSACTION SUMMARY
-            </Text>
-    
-            <View style={styles.weightTable}>
-              {weightItems.length === 0 ? (
-                <View style={{ padding: spacing.md }}>
-                  <EmptyState
-                    icon={<Receipt size={48} color={colors.muted} weight="thin" />}
-                    heading="Receipt details unavailable"
-                    body="No weighed material breakdown was found for this order."
-                  />
-                </View>
-              ) : weightItems.map((item) => {
-                const lineTotal = item.weightKg * item.ratePerKg;
-                return (
-                  <View key={item.materialKey} style={styles.weightRow}>
+        <View style={styles.bodyContainer}>
+          <View style={styles.infoBanner}>
+            <View style={styles.infoItem}>
+              <Hash size={14} color={colors.muted} />
+              <Numeric size={12} color={colors.navy} style={styles.monoText}>{order?.orderNumber || '#000000'}</Numeric>
+            </View>
+            <View style={styles.bannerDivider} />
+            <View style={styles.infoItem}>
+              <CalendarBlank size={14} color={colors.muted} />
+              <Text variant="caption" color={colors.slate}>{completedAt}</Text>
+            </View>
+            <View style={styles.bannerDivider} />
+            <View style={styles.completedPill}>
+              <Text variant="caption" color={colors.teal} style={styles.completedPillText}>Completed</Text>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <ImageSquare size={16} color={colors.navy} />
+              <Text variant="label" color={colors.slate}>SCRAP IMAGE</Text>
+            </View>
+            {mediaLoading ? (
+              <View style={styles.mediaLoaderWrap}>
+                <ActivityIndicator color={colors.navy} />
+              </View>
+            ) : mediaUrls.length > 0 ? (
+              <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
+            ) : (
+              <EmptyState
+                icon={<ImageSquare size={44} color={colors.muted} weight="thin" />}
+                heading="No scrap photo available"
+                body="Pickup image is not attached for this order."
+              />
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Scales size={16} color={colors.navy} />
+              <Text variant="label" color={colors.slate}>ORDER SUMMARY</Text>
+            </View>
+
+            <View style={styles.tableHeader}>
+              <Text variant="caption" color={colors.muted} style={[styles.colMat, styles.col]}>Material</Text>
+              <Text variant="caption" color={colors.muted} style={[styles.colWeight, styles.colRight]}>Weight</Text>
+              <Text variant="caption" color={colors.muted} style={[styles.colRate, styles.colRight]}>Rate</Text>
+              <Text variant="caption" color={colors.muted} style={[styles.colTotal, styles.colRight]}>Amount</Text>
+            </View>
+
+            {mappedItems.map((item: any, index: number) => {
+              const lineTotal = item.amount > 0
+                ? item.amount
+                : Number(item.weight || 0) * Number(item.price_per_kg || 0);
+
+              const cleanMaterialCode = (item.material_code || '').toLowerCase();
+
+              return (
+                <View key={`${item.material_code}-${index}`} style={styles.tableRow}>
+                  <View style={[styles.colMat, styles.rowMaterial]}>
                     <View
                       style={[
-                        styles.weightDot,
-                        { backgroundColor: MATERIAL_COLORS[item.materialKey] ?? colors.muted },
+                        styles.materialDot,
+                        { backgroundColor: MATERIAL_COLORS[cleanMaterialCode] ?? colors.muted },
                       ]}
                     />
-                    <Text variant="caption" color={colors.slate} style={styles.weightMat}>
-                      {item.material}
-                    </Text>
-                    <Numeric size={13} color={colors.navy} style={styles.weightKg}>
-                      {item.weightKg.toFixed(1)} kg
-                    </Numeric>
-                    <Text variant="caption" color={colors.muted} style={styles.weightRate}>
-                      ×₹{item.ratePerKg}
-                    </Text>
-                    <Numeric size={12} color={colors.amber} style={styles.weightTotal}>
-                      ₹{lineTotal.toFixed(0)}
-                    </Numeric>
+                    <Text variant="caption" color={colors.slate}>{item.material_label}</Text>
                   </View>
-                );
-              })}
-              {/* Total row */}
-              <View style={[styles.weightRow, styles.weightTotalRow]}>
-                <Text variant="label" color={colors.navy} style={{ flex: 1 }}>
-                  Total Paid
-                </Text>
-                <Numeric size={13} color={colors.navy}>
-                  {totalWeight.toFixed(1)} kg
-                </Numeric>
-                <Numeric size={14} color={colors.amber} style={{ marginLeft: 'auto' }}>
-                  ₹{totalAmount.toFixed(0)}
-                </Numeric>
+                  <Numeric size={12} color={colors.navy} style={[styles.colWeight, styles.colRight]}>
+                    {Number(item.weight).toFixed(1)} kg
+                  </Numeric>
+                  <Numeric size={12} color={colors.muted} style={[styles.colRate, styles.colRight]}>
+                    ₹{Math.round(Number(item.price_per_kg || 0))}
+                  </Numeric>
+                  <Numeric size={12} color={colors.amber} style={[styles.colTotal, styles.colRight]}>
+                    ₹{Math.round(lineTotal)}
+                  </Numeric>
+                </View>
+              );
+            })}
+
+            {mappedItems.length === 0 && (
+              <View style={{ paddingVertical: spacing.md }}>
+                <EmptyState
+                  icon={<Receipt size={48} color={colors.muted} weight="thin" />}
+                  heading="No items found"
+                  body="No material breakdown available."
+                />
               </View>
+            )}
+
+            <View style={styles.summaryTotalRow}>
+              <Text variant="label" color={colors.navy}>Total</Text>
+              <Numeric size={13} color={colors.navy}>{totalWeight.toFixed(1)} kg</Numeric>
+              <Numeric size={16} color={colors.amber} style={styles.summaryTotalAmount}>
+                ₹{Math.round(totalAmount).toLocaleString('en-IN')}
+              </Numeric>
             </View>
-        </View>
+          </View>
 
-        <View style={styles.divider} />
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <User size={16} color={colors.navy} />
+              <Text variant="label" color={colors.slate}>SELLER DETAILS</Text>
+            </View>
 
-        {/* ── Rating Card (Embedded in receipt for smoother flow) ─ */}
-        <View style={styles.ratingCard}>
-           <Text variant="subheading" color={colors.navy}>Rate the Seller</Text>
-           <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', marginBottom: spacing.md }}>
-             How was your experience with {order?.sellerName || 'the seller'}?
-           </Text>
-           <View style={styles.starsRow}>
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Pressable key={s} onPress={() => setRating(s)}>
-                  <Star
-                    size={40}
-                    color={s <= rating ? colors.amber : colors.border}
-                    weight={s <= rating ? 'fill' : 'regular'}
-                  />
-                </Pressable>
-              ))}
-           </View>
-        </View>
+            <View style={styles.detailRow}>
+              <Text variant="caption" color={colors.muted}>Seller</Text>
+              <Text variant="body" color={colors.slate}>{order?.sellerName || 'Unavailable'}</Text>
+            </View>
 
-        <View style={styles.actions}>
-          <PrimaryButton
-            label="Submit & Back to Feed"
-            onPress={handleFinish}
-            disabled={rating === 0}
-          />
-          <Pressable
-            onPress={() => router.push('/(shared)/dispute' as any)}
-            style={styles.reportIssue}
-          >
-            <Text variant="caption" style={styles.reportIssueText}>
-              Report an issue
+            <View style={styles.detailRowAddress}>
+              <View style={styles.detailLabelInline}>
+                <MapPin size={14} color={colors.muted} />
+                <Text variant="caption" color={colors.muted}>Pickup Address</Text>
+              </View>
+              <Text variant="body" color={colors.slate} style={styles.addressValue}>
+                {order?.pickupAddress || order?.pickupLocality || 'Address unavailable'}
+              </Text>
+            </View>
+          </View>
+
+          {order && (
+            <OrderTimeline
+              history={order.history || []}
+              currentStatus={order.status}
+            />
+          )}
+
+          {showInvoiceButton ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <DownloadSimple size={16} color={colors.navy} />
+                <Text variant="label" color={colors.slate}>INVOICE</Text>
+              </View>
+              <SecondaryButton
+                label={isDownloadingInvoice ? 'Loading Invoice...' : 'Download Invoice'}
+                icon={isDownloadingInvoice ? <ActivityIndicator size="small" color={colors.navy} /> : <DownloadSimple size={16} color={colors.navy} />}
+                onPress={handleDownloadInvoice}
+                disabled={isDownloadingInvoice}
+              />
+              {invoiceError ? (
+                <Text variant="caption" color={colors.muted} style={styles.invoiceErrorText}>
+                  {invoiceError}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Star size={16} color={colors.amber} weight="fill" />
+              <Text variant="label" color={colors.slate}>RATINGS & REVIEW</Text>
+            </View>
+
+            <Text variant="caption" color={colors.muted} style={styles.ratingHelperText}>
+              How was your experience with {order?.sellerName || 'the seller'}?
             </Text>
-          </Pressable>
+
+            {ratingSubmitted ? (
+              <View style={styles.submittedWrap}>
+                <Star size={28} color={colors.teal} weight="fill" />
+                <Text variant="body" color={colors.teal} style={styles.submittedText}>Review submitted</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.starsRow}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Pressable key={star} onPress={() => setRatingScore(star)} style={styles.starPress}>
+                      <Star
+                        size={30}
+                        color={star <= ratingScore ? colors.amber : colors.border}
+                        weight={star <= ratingScore ? 'fill' : 'regular'}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Input
+                  multiline
+                  numberOfLines={3}
+                  maxLength={500}
+                  value={ratingReview}
+                  onChangeText={setRatingReview}
+                  placeholder="Optional review (max 500 characters)"
+                  placeholderTextColor={colors.muted}
+                  style={styles.reviewInput}
+                />
+
+                {ratingError ? (
+                  <Text variant="caption" color={colors.red} style={styles.ratingErrorText}>
+                    {ratingError}
+                  </Text>
+                ) : null}
+
+                <PrimaryButton
+                  label={ratingSubmitting ? 'Submitting...' : 'Submit Review'}
+                  onPress={submitRating}
+                  style={styles.submitReviewButton}
+                  disabled={ratingSubmitting || ratingScore < 1}
+                />
+              </>
+            )}
+          </View>
+          
+          <View style={styles.actions}>
+            <Pressable
+              onPress={() => router.push('/(shared)/dispute' as any)}
+              style={styles.reportIssue}
+            >
+              <Text variant="caption" style={styles.reportIssueText}>
+                Report an issue
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -306,58 +544,107 @@ export default function AggregatorReceiptScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.teal,
+    backgroundColor: colors.bg,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scroll: {
     flex: 1,
-    backgroundColor: colors.teal,
   },
   scrollContent: {
-    paddingTop: 0,
     paddingBottom: spacing.xl,
   },
-
-  successHeader: {
+  heroSection: {
     backgroundColor: colors.teal,
-    alignItems: 'center',
-    paddingVertical: 40,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  heroTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   heroBackButton: {
-    alignSelf: 'flex-start',
     backgroundColor: 'transparent',
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconCircle: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: spacing.md,
+  heroDownloadButton: {
+    backgroundColor: 'transparent',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  successTitle: {
-    marginBottom: spacing.xs,
+  heroStatusWrap: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+    gap: spacing.xs,
   },
-  successAmount: {
+  heroTitle: {
+    textAlign: 'center',
+  },
+  heroAmount: {
     fontFamily: 'DMMono-Bold',
   },
-
-  summarySection: {
-      marginTop: spacing.lg,
-      paddingHorizontal: spacing.md,
+  bodyContainer: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    gap: spacing.md,
   },
-  mediaCard: {
+  infoBanner: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  monoText: {
+    fontFamily: 'DMMono-Medium',
+  },
+  bannerDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: colors.border,
+  },
+  completedPill: {
+    backgroundColor: colors.tealLight,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  completedPillText: {
+    fontFamily: 'DMSans-Bold',
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.md,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
   mediaLoaderWrap: {
     height: 180,
@@ -368,79 +655,123 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  sectionLabel: {
-    marginBottom: spacing.sm,
-    letterSpacing: 1,
-    fontWeight: '700',
-  },
-
-  weightTable: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    overflow: 'hidden',
-  },
-  weightRow: {
+  tableHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
+    paddingBottom: spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  weightTotalRow: {
-    borderBottomWidth: 0,
-    backgroundColor: colors.bg,
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  weightDot: {
+  col: {
+    fontFamily: 'DMSans-Medium',
+  },
+  colMat: {
+    flex: 1.5,
+  },
+  colWeight: {
+    flex: 1.1,
+  },
+  colRate: {
+    flex: 0.8,
+  },
+  colTotal: {
+    flex: 1,
+  },
+  colRight: {
+    textAlign: 'right',
+  },
+  rowMaterial: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  materialDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  weightMat: {
-    flex: 1,
-    fontFamily: 'DMSans-Medium',
+  summaryTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    gap: spacing.md,
   },
-  weightKg: {
-    fontFamily: 'DMMono-Regular',
+  summaryTotalAmount: {
+    marginLeft: 'auto',
+    fontFamily: 'DMMono-Bold',
   },
-  weightRate: {
-    marginLeft: 6,
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
   },
-  weightTotal: {
-    fontFamily: 'DMMono-Medium',
-    minWidth: 40,
-    textAlign: 'right',
+  detailRowAddress: {
+    paddingVertical: spacing.xs,
   },
-
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.lg,
-    marginHorizontal: spacing.md,
-  },
-
-  ratingCard: {
-    marginTop: spacing.lg,
-    marginHorizontal: spacing.md,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+  detailLabelInline: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    marginBottom: 2,
+  },
+  addressValue: {
+    lineHeight: 20,
+  },
+  ratingHelperText: {
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
   starsRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: spacing.md,
+    marginBottom: spacing.md,
   },
-
+  starPress: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewInput: {
+    minHeight: 96,
+    maxHeight: 160,
+    textAlignVertical: 'top',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  ratingErrorText: {
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  submitReviewButton: {
+    marginTop: spacing.lg,
+  },
+  invoiceErrorText: {
+    marginTop: spacing.sm,
+  },
+  submittedWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  submittedText: {
+    marginTop: spacing.sm,
+  },
   actions: {
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
     paddingBottom: spacing.md,
     gap: spacing.md,
   },

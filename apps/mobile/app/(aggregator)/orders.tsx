@@ -303,7 +303,9 @@ export default function AggregatorOrdersScreen() {
     const isHistorical = order.status === 'completed' || order.status === 'cancelled';
 
     const handleCardPress = () => {
-      if (isHistorical) {
+      if (order.status === 'completed') {
+        router.push({ pathname: '/(aggregator)/execution/receipt/[id]', params: { id: order.id } } as any);
+      } else if (order.status === 'cancelled') {
         router.push({ pathname: '/(aggregator)/order-history-detail', params: { id: order.id, status: order.status } });
       } else {
         routeToExecutionStage(order);

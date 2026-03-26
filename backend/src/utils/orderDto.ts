@@ -81,8 +81,6 @@ export function buildOrderDto(
       : (typeof order.confirmed_value === 'number' ? order.confirmed_value : 0);
   const estimatedValue = estimatedTotal;
   const confirmedValue = confirmedTotal > 0 ? confirmedTotal : (typeof order.confirmed_value === 'number' ? order.confirmed_value : null);
-  const displayAmount = confirmedValue ?? estimatedValue ?? 0;
-  const isFinalAmount = confirmedValue !== null;
 
   const normalizedOrderItems = Array.isArray(order.order_items)
     ? order.order_items
@@ -106,6 +104,28 @@ export function buildOrderDto(
         rate_per_kg: item.rate_per_kg ?? 0,
         amount: item.amount ?? 0,
       }));
+
+  const lineItemAmount = normalizedLineItems.reduce((sum, item) => {
+    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : 0;
+    if (amount > 0) return sum + amount;
+    const weight = Number(item.weight_kg ?? 0);
+    const rate = Number(item.rate_per_kg ?? 0);
+    return sum + (Number.isFinite(weight) && Number.isFinite(rate) ? weight * rate : 0);
+  }, 0);
+
+  const orderItemAmount = normalizedOrderItems.reduce((sum, item) => {
+    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : 0;
+    if (amount > 0) return sum + amount;
+    const weight = Number(item.confirmed_weight_kg ?? item.estimated_weight_kg ?? 0);
+    const rate = Number(item.rate_per_kg ?? 0);
+    return sum + (Number.isFinite(weight) && Number.isFinite(rate) ? weight * rate : 0);
+  }, 0);
+
+  let displayAmount = confirmedValue ?? estimatedValue ?? 0;
+  if (displayAmount <= 0 && order.status === 'completed') {
+    displayAmount = orderItemAmount > 0 ? orderItemAmount : lineItemAmount;
+  }
+  const isFinalAmount = confirmedValue !== null || (order.status === 'completed' && displayAmount > 0);
 
   const normalizedPickupLocality = order.pickup_locality ?? null;
 
