@@ -20,6 +20,7 @@ import {
   User,
   CaretLeft,
   DownloadSimple,
+  Prohibit,
 } from 'phosphor-react-native';
 import * as Linking from 'expo-linking';
 
@@ -131,18 +132,35 @@ export default function SellerOrderReceiptScreen() {
   }, [order?.sellerHasRated]);
 
   const isCompleted = order?.status === 'completed';
-  const isBusinessOrder =
-    (order as any)?.profile_type === 'business' ||
-    (order as any)?.profileType === 'business' ||
-    (order as any)?.account_type === 'business' ||
-    (order as any)?.accountType === 'business' ||
-    (order as any)?.sellerType === 'business';
   const invoiceOrderId = order?.orderId ?? routeOrderId ?? null;
+  // Show invoice section for all completed orders (backend generates for all)
+  const showInvoiceButton = isCompleted;
+
+  const completedAtDate = useMemo(() => {
+    const completedEvent = Array.isArray(order?.history)
+      ? [...order.history].reverse().find((entry: any) => entry?.new_status === 'completed')
+      : undefined;
+
+    const iso = completedEvent?.created_at ?? order?.updatedAt ?? order?.createdAt;
+    return iso ? new Date(iso) : null;
+  }, [order?.history, order?.updatedAt, order?.createdAt]);
+
+  // Invoice expires 30 days after order completion
+  const isInvoiceExpired = useMemo(() => {
+    if (!completedAtDate) return false;
+    const expiryDate = new Date(completedAtDate);
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    return new Date() > expiryDate;
+  }, [completedAtDate]);
 
   const handleDownloadInvoice = React.useCallback(async () => {
     if (!invoiceOrderId) {
       console.warn('[Invoice] Missing order id for download');
       setInvoiceError('Could not load invoice — please try again');
+      return;
+    }
+    if (isInvoiceExpired) {
+      setInvoiceError('Invoice has expired — available for 30 minutes after completion');
       return;
     }
 
@@ -165,7 +183,9 @@ export default function SellerOrderReceiptScreen() {
       console.log('[Invoice] Browser result', result.type);
     } catch (err: any) {
       console.warn('[Invoice] Download failed', err?.message || err);
-      if (err?.response?.status === 404) {
+      if (err?.response?.status === 410) {
+        setInvoiceError('Invoice has expired — available for 30 minutes after completion');
+      } else if (err?.response?.status === 404) {
         setInvoiceError('Invoice is being generated — try again in a moment');
       } else {
         setInvoiceError('Could not load invoice — please try again');
@@ -173,23 +193,16 @@ export default function SellerOrderReceiptScreen() {
     } finally {
       setIsDownloadingInvoice(false);
     }
-  }, [invoiceOrderId]);
+  }, [invoiceOrderId, isInvoiceExpired]);
 
   const completedAt = useMemo(() => {
-    const completedEvent = Array.isArray(order?.history)
-      ? [...order.history].reverse().find((entry: any) => entry?.new_status === 'completed')
-      : undefined;
-
-    const iso = completedEvent?.created_at ?? order?.updatedAt ?? order?.createdAt;
-    if (!iso) return '—';
-
-    const date = new Date(iso);
-    return date.toLocaleDateString('en-IN', {
+    if (!completedAtDate) return '—';
+    return completedAtDate.toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
-  }, [order?.history, order?.updatedAt, order?.createdAt]);
+  }, [completedAtDate]);
 
   const mappedItems = useMemo<SellerOrderItemRow[]>(() => {
     if (Array.isArray(order?.orderItems) && order.orderItems.length > 0) {
@@ -244,7 +257,7 @@ export default function SellerOrderReceiptScreen() {
     return computed > 0 ? computed : Number(order?.estimatedAmount ?? 0);
   }, [mappedItems, order?.confirmedTotal, order?.confirmedAmount, order?.displayAmount, order?.estimatedAmount]);
 
-  const showInvoiceButton = isBusinessOrder || (totalAmount ?? 0) > 50000;
+  // showInvoiceButton declared above (after isCompleted)
 
   const totalWeight = useMemo(
     () => mappedItems.reduce((sum: number, item) => sum + Number(item.weight || 0), 0),
@@ -318,12 +331,14 @@ export default function SellerOrderReceiptScreen() {
               <CaretLeft size={18} color={colors.surface} weight="regular" />
             </Pressable>
             <Pressable
-              onPress={handleDownloadInvoice}
-              style={styles.heroDownloadButton}
-              disabled={isDownloadingInvoice}
+              onPress={isInvoiceExpired ? undefined : handleDownloadInvoice}
+              style={[styles.heroDownloadButton, isInvoiceExpired && styles.heroDownloadButtonExpired]}
+              disabled={isDownloadingInvoice || isInvoiceExpired}
             >
               {isDownloadingInvoice ? (
                 <ActivityIndicator size="small" color={colors.surface} />
+              ) : isInvoiceExpired ? (
+                <Prohibit size={18} color={colors.surface} weight="regular" style={{ opacity: 0.5 }} />
               ) : (
                 <DownloadSimple size={18} color={colors.surface} weight="regular" />
               )}
@@ -477,15 +492,24 @@ export default function SellerOrderReceiptScreen() {
           {showInvoiceButton ? (
             <View style={styles.card}>
               <View style={styles.cardHeaderRow}>
-                <DownloadSimple size={16} color={colors.navy} />
-                <Text variant="label" color={colors.slate}>INVOICE</Text>
+                <DownloadSimple size={16} color={isInvoiceExpired ? colors.muted : colors.navy} />
+                <Text variant="label" color={isInvoiceExpired ? colors.muted : colors.slate}>INVOICE</Text>
               </View>
-              <SecondaryButton
-                label={isDownloadingInvoice ? 'Loading Invoice...' : 'Download Invoice'}
-                icon={isDownloadingInvoice ? <ActivityIndicator size="small" color={colors.navy} /> : <DownloadSimple size={16} color={colors.navy} />}
-                onPress={handleDownloadInvoice}
-                disabled={isDownloadingInvoice}
-              />
+              {isInvoiceExpired ? (
+                <View style={styles.invoiceExpiredWrap}>
+                  <Prohibit size={20} color={colors.muted} />
+                  <Text variant="caption" color={colors.muted} style={styles.invoiceExpiredText}>
+                    Invoice expired — available for 30 days after order completion
+                  </Text>
+                </View>
+              ) : (
+                <SecondaryButton
+                  label={isDownloadingInvoice ? 'Loading Invoice...' : 'Download Invoice'}
+                  icon={isDownloadingInvoice ? <ActivityIndicator size="small" color={colors.navy} /> : <DownloadSimple size={16} color={colors.navy} />}
+                  onPress={handleDownloadInvoice}
+                  disabled={isDownloadingInvoice}
+                />
+              )}
               {invoiceError ? (
                 <Text variant="caption" color={colors.muted} style={styles.invoiceErrorText}>
                   {invoiceError}
@@ -776,6 +800,19 @@ const styles = StyleSheet.create({
   },
   invoiceErrorText: {
     marginTop: spacing.sm,
+  },
+  heroDownloadButtonExpired: {
+    opacity: 0.5,
+  },
+  invoiceExpiredWrap: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  invoiceExpiredText: {
+    flex: 1,
+    lineHeight: 18,
   },
   submittedWrap: {
     alignItems: 'center',

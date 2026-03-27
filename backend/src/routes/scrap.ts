@@ -13,24 +13,26 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/webp'];
-    cb(null, allowed.includes(file.mimetype));
+    const isAllowed = allowed.includes(file.mimetype);
+    console.error('[Scrap] multer fileFilter - fieldname:', file.fieldname, '| mimetype:', file.mimetype, '| allowed:', isAllowed);
+    cb(null, isAllowed);
   },
 });
 
 const VALID_CODES = new Set(['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass']);
 
-router.post('/analyze', upload.single('image'), async (req: any, res: any, next) => {
+router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
   try {
+    console.error('[Scrap] POST /analyze called');
+    console.error('[SCrap] hasUser:', !!req.user?.id, 'hasFile:', !!req.file?.buffer);
+
     if (!req.user?.id) {
+      console.error('[Scrap] No user');
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     if (!req.file?.buffer) {
-      console.warn('[Scrap] Missing uploaded image buffer', {
-        hasFile: !!req.file,
-        contentType: req.headers['content-type'],
-        userId: req.user?.id,
-      });
+      console.error('[Scrap] No file buffer — content-type:', req.headers['content-type'], '| req.files:', JSON.stringify(req.files), '| req.body keys:', Object.keys(req.body || {}));
       return res.status(400).json({ status: 'analysis_failed' });
     }
 
@@ -57,25 +59,30 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any, next)
       const cached = await redis.get<string>(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        return res.json({ ...parsed, is_ai_estimate: true });
+        // parsed could be an array of items
+        const items = Array.isArray(parsed) ? parsed : (parsed.items || []);
+        return res.json({ items: items.map((i: any) => ({ ...i, is_ai_estimate: true })) });
       }
     }
 
     const strippedBuffer = await sharp(req.file.buffer).toBuffer();
 
     try {
+      console.log('[Scrap] About to create provider');
       const provider = createAnalysisProvider();
-      const result = await provider.analyzeScrapImage(strippedBuffer);
+      console.log('[Scrap] Provider created, calling analyzeScrapImage');
 
-      console.log('[Scrap] Gemini analysis response', {
-        userId: req.user?.id,
-        material_code: result.material_code,
-        estimated_weight_kg: result.estimated_weight_kg,
-        confidence: result.confidence,
-        is_ai_estimate: result.is_ai_estimate,
+      const resultsRaw = await provider.analyzeScrapImage(strippedBuffer);
+      const resultsArray = Array.isArray(resultsRaw) ? resultsRaw : (resultsRaw as any).items || [];
+
+      console.log('[Scrap] Analysis complete, items mapped:', resultsArray.length);
+
+      const validItems = resultsArray.filter((result: any) => {
+        return VALID_CODES.has(result.material_code) && Number(result.estimated_weight_kg) > 0;
       });
 
-      if (!VALID_CODES.has(result.material_code) || Number(result.estimated_weight_kg) <= 0) {
+      if (validItems.length === 0) {
+        console.warn('[Scrap] Analysis validation failed or no valid items found');
         return res.status(400).json({ status: 'analysis_failed' });
       }
 
@@ -93,27 +100,31 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any, next)
       }
 
       if (redis) {
-        await redis.set(cacheKey, JSON.stringify(result), { ex: 86400 });
+        await redis.set(cacheKey, JSON.stringify(validItems), { ex: 86400 });
         await redis.incr(dayKey);
         await redis.expire(dayKey, 86400);
         await redis.incr(legacyGlobalKey);
       }
 
       return res.json({
-        ...result,
-        is_ai_estimate: true,
+        items: validItems.map(i => ({ ...i, is_ai_estimate: true })),
         image_key: imageUrl || null
       });
     } catch (providerError: any) {
-      console.error('[Scrap] Provider initialization or analysis error', {
-        error: providerError?.message,
+      console.error('[Scrap] Provider error - CRITICAL', {
+        message: providerError?.message,
         code: providerError?.code,
+        stack: providerError?.stack?.split('\n').slice(0, 5).join('\n'),
         userId: req.user?.id,
       });
       return res.status(400).json({ status: 'analysis_failed' });
     }
-  } catch (error) {
-    console.error('[Scrap] Analysis failed', error);
+  } catch (error: any) {
+    console.error('[Scrap] Outer catch - CRITICAL', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
     return res.status(400).json({ status: 'analysis_failed' });
   }
 });

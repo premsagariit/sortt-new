@@ -81,8 +81,8 @@ export default function OrderSummary() {
                       heading="No completed pickups yet"
                       body="Completed order history will appear here."
                     />
-                ) : completedOrders.map((order: any) => (
-                    <View key={order.orderId} style={styles.orderCard}>
+                ) : completedOrders.map((order: any, index: number) => (
+                    <View key={order.orderId || order.id || index} style={styles.orderCard}>
                         <View style={styles.tealBar} />
                         <View style={styles.orderContent}>
                             <View style={styles.orderTop}>
@@ -98,8 +98,8 @@ export default function OrderSummary() {
                             </View>
 
                             <View style={styles.materialsRow}>
-                                {(order.material_codes ?? order.materials ?? []).map((m: any) => (
-                                    <MaterialChip key={m} material={m} variant="chip" />
+                                {(order.material_codes ?? order.materials ?? []).map((m: any, mIndex: number) => (
+                                    <MaterialChip key={m.code || m.id || m || mIndex} material={m} variant="chip" />
                                 ))}
                             </View>
                         </View>

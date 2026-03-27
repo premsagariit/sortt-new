@@ -21,5 +21,5 @@ export interface IAnalysisProvider {
    * V18: EXIF stripping happens INSIDE this method BEFORE Gemini call.
    * I1: Returns { ...result, is_ai_estimate: true } — type guarantees non-authoritative.
    */
-  analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult>;
+  analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult[]>;
 }

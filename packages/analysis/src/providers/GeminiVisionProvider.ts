@@ -2,8 +2,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { IAnalysisProvider, AnalysisResult } from '../types';
 
 const ANALYZE_PROMPT = `Analyse this scrap/recyclable material image.
+Identify all distinct types of scrap materials present. For each material type found, estimate its weight.
 Return ONLY a valid JSON object with this exact shape:
-{ "material_code": "<one of: metal|plastic|paper|ewaste|fabric|glass>", "estimated_weight_kg": <positive number>, "confidence": <0.0 to 1.0> }
+{ "items": [
+  { "material_code": "<one of: metal|plastic|paper|ewaste|fabric|glass>", "estimated_weight_kg": <positive number>, "confidence": <0.0 to 1.0> }
+] }
 No preamble, no explanation, no markdown formatting. JSON only.`;
 
 const VALID_CODES = new Set(['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass']);
@@ -67,7 +70,7 @@ export class GeminiVisionProvider implements IAnalysisProvider {
     this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
-  async analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult> {
+  async analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult[]> {
     const model = this.client.getGenerativeModel({ model: this.modelName });
     const response = await model.generateContent({
       contents: [
@@ -92,19 +95,30 @@ export class GeminiVisionProvider implements IAnalysisProvider {
 
     const text = response.response.text().trim();
     const parsed = extractJsonObject(text);
+    
+    const items = parsed?.items || [];
+    if (!Array.isArray(items)) {
+      return [];
+    }
 
-    const materialCode = normalizeCode(parsed?.material_code);
-    const estimatedWeightRaw = Number(parsed?.estimated_weight_kg);
-    const estimatedWeight = Number.isFinite(estimatedWeightRaw) && estimatedWeightRaw > 0
-      ? estimatedWeightRaw
-      : 0.001;
-    const confidence = Number(parsed?.confidence);
+    const results: AnalysisResult[] = [];
+    
+    for (const item of items) {
+      const materialCode = normalizeCode(item?.material_code);
+      const estimatedWeightRaw = Number(item?.estimated_weight_kg);
+      const estimatedWeight = Number.isFinite(estimatedWeightRaw) && estimatedWeightRaw > 0
+        ? estimatedWeightRaw
+        : 0.001;
+      const confidence = Number(item?.confidence);
 
-    return {
-      material_code: materialCode,
-      estimated_weight_kg: estimatedWeight,
-      confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0,
-      is_ai_estimate: true,
-    };
+      results.push({
+        material_code: materialCode,
+        estimated_weight_kg: estimatedWeight,
+        confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0,
+        is_ai_estimate: true,
+      });
+    }
+
+    return results;
   }
 }

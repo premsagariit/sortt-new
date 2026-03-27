@@ -205,11 +205,10 @@ export default function WeighingScreen() {
         (mat, idx) => parseFloat(weights[`${mat.code}-${idx}`] || '0') > 0
     );
 
-    // CTA disabled state reads from STORE (scalePhotoUri), not local state — per hard rules
-    const canSubmit = allWeightsEntered && scalePhotoUris.length > 0;
+    const canSubmit = allWeightsEntered;
 
     const handleNext = async () => {
-        if (!id || scalePhotoUris.length === 0) {
+        if (!id) {
             return;
         }
 
@@ -317,7 +316,7 @@ export default function WeighingScreen() {
                 <View style={styles.photoSection}>
                     <Text variant="subheading" style={styles.sectionTitle}>
                         Scale Photo{' '}
-                        <Text variant="caption" color={colors.red}>*required</Text>
+                        <Text variant="caption" color={colors.muted}>(Optional)</Text>
                     </Text>
 
                     {/* Permission denied inline banner — never an alert() */}
@@ -381,7 +380,7 @@ export default function WeighingScreen() {
 
             <View style={styles.footer}>
                 <PrimaryButton
-                    label="Upload Scale Photo →"
+                    label="Next →"
                     onPress={handleNext}
                     disabled={!canSubmit}
                     loading={isSubmitting}

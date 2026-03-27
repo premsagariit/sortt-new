@@ -163,8 +163,8 @@ export default function AggregatorEarningsScreen() {
         <BaseCard style={styles.breakdownCard}>
           <Text variant="subheading" style={styles.breakdownTitle}>By material</Text>
           <View style={styles.breakdownList}>
-            {breakdown.map((item) => (
-              <View key={item.material} style={styles.matRow}>
+            {breakdown.map((item, index) => (
+              <View key={item.material || index} style={styles.matRow}>
                 <View style={styles.matIconWrap}>
                   <Package size={20} color={colors.muted} />
                 </View>

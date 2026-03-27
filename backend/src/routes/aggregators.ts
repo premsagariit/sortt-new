@@ -230,9 +230,7 @@ router.get('/earnings', verifyRole('aggregator'), async (req: Request, res: Resp
                  JOIN LATERAL (
                                      SELECT COALESCE(
                                                         NULLIF(o.confirmed_value, 0),
-                                                        NULLIF(o.confirmed_total, 0),
                                                         NULLIF(o.estimated_value, 0),
-                                                        NULLIF(o.estimated_total, 0),
                                                         COALESCE(SUM(COALESCE(oi.amount, oi.confirmed_weight_kg * oi.rate_per_kg, oi.estimated_weight_kg * oi.rate_per_kg, 0)), 0)
                                                     ) AS order_total,
                                                     COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg

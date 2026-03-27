@@ -15,8 +15,15 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+// NOTE: pdf-lib StandardFonts (Helvetica/Times etc) only support Latin-1 / WinAnsi.
+// The rupee sign (U+20B9) is NOT in that range and causes a hard crash at pdf.save().
+// Use 'Rs.' instead of the rupee symbol everywhere in PDF text.
+const fmtAmount = (n: number) => `Rs. ${n.toFixed(2)}`;
+
 export async function generateAndStoreInvoice(orderId: string): Promise<void> {
   try {
+    console.log(`[Invoice] Starting generation for order ${orderId}`);
+
     const orderRes = await query(
       `SELECT o.id,
               o.order_number,
@@ -57,6 +64,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     );
 
     if (orderRes.rows.length === 0) {
+      console.warn(`[Invoice] Order ${orderId} not found — skipping`);
       return;
     }
 
@@ -64,13 +72,9 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     const confirmedTotal = toNumber(order.confirmed_value);
     const sellerGstin = order.seller_gstin ? String(order.seller_gstin).trim().toUpperCase() : null;
 
-    if (!sellerGstin && confirmedTotal <= 50000) {
-      return;
-    }
-
+    // Soft-warn on invalid GSTIN but still generate the invoice
     if (sellerGstin && !GSTIN_REGEX.test(sellerGstin)) {
       Sentry.captureMessage(`Invalid GSTIN for order ${orderId}: ${sellerGstin}`, 'warning');
-      return;
     }
 
     const orderDisplayId = `#${String(order.order_number || '').padStart(6, '0')}`;
@@ -136,56 +140,82 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
 
     const invoiceId = insertRes.rows[0]?.id;
     if (!invoiceId) {
+      console.error(`[Invoice] DB insert returned no id for order ${orderId}`);
       return;
     }
 
+    console.log(`[Invoice] DB record created id=${invoiceId}, generating PDF...`);
+
+    // Build PDF using only Latin-1-safe characters
+    // (pdf-lib Helvetica cannot encode the rupee sign U+20B9 — use 'Rs.' instead)
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595, 842]);
     const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
 
     let y = 800;
-    const draw = (text: string, x: number, size = 11) => {
-      page.drawText(sanitizeText(text), { x, y, size, font });
+    const draw = (text: string, x: number, size = 11, useBold = false) => {
+      page.drawText(sanitizeText(text), { x, y, size, font: useBold ? boldFont : font });
       y -= size + 6;
     };
 
-    draw(`${sanitizeText(process.env.APP_NAME || 'APP')} TAX INVOICE`, 40, 16);
-    draw(`Invoice: ${invoiceNumber}`, 40);
+    draw(`${sanitizeText(process.env.APP_NAME || 'Sortt')} TAX INVOICE`, 40, 16, true);
+    draw(`Invoice No: ${invoiceNumber}`, 40);
     draw(`Date: ${invoiceData.invoice_date}`, 40);
-    y -= 4;
-    draw(`Seller: ${invoiceData.seller.name}`, 40);
-    draw(`Seller GSTIN: ${invoiceData.seller.gstin || 'N/A'}`, 40);
-    draw(`Aggregator: ${invoiceData.aggregator.name}`, 40);
-    draw(`Aggregator Business: ${invoiceData.aggregator.business_name || 'N/A'}`, 40);
+    draw(`Order: ${orderDisplayId}`, 40);
     y -= 8;
-    draw('Line Items', 40, 12);
+
+    draw('SELLER', 40, 10, true);
+    draw(`Name: ${invoiceData.seller.name}`, 40);
+    if (invoiceData.seller.business_name) draw(`Business: ${invoiceData.seller.business_name}`, 40);
+    if (invoiceData.seller.gstin) draw(`GSTIN: ${invoiceData.seller.gstin}`, 40);
+    if (invoiceData.seller.locality) draw(`Location: ${invoiceData.seller.locality}`, 40);
+    y -= 4;
+
+    draw('AGGREGATOR', 40, 10, true);
+    draw(`Name: ${invoiceData.aggregator.name}`, 40);
+    if (invoiceData.aggregator.business_name) draw(`Business: ${invoiceData.aggregator.business_name}`, 40);
+    y -= 8;
+
+    draw('LINE ITEMS', 40, 10, true);
+    page.drawText('Material', { x: 40, y, size: 9, font: boldFont });
+    page.drawText('Weight (kg)', { x: 220, y, size: 9, font: boldFont });
+    page.drawText('Rate/kg', { x: 330, y, size: 9, font: boldFont });
+    page.drawText('Amount', { x: 430, y, size: 9, font: boldFont });
+    y -= 14;
 
     for (const item of lineItems) {
-      draw(
-        `${item.material_label} | ${item.confirmed_weight_kg.toFixed(2)} kg | ₹${item.rate_per_kg.toFixed(2)}/kg | ₹${item.amount.toFixed(2)}`,
-        40,
-        10
-      );
+      page.drawText(sanitizeText(item.material_label), { x: 40, y, size: 9, font });
+      page.drawText(item.confirmed_weight_kg.toFixed(2), { x: 220, y, size: 9, font });
+      page.drawText(fmtAmount(item.rate_per_kg), { x: 330, y, size: 9, font });
+      page.drawText(fmtAmount(item.amount), { x: 430, y, size: 9, font });
+      y -= 14;
     }
 
     y -= 8;
-    draw(`Subtotal: ₹${subtotal.toFixed(2)}`, 40);
-    draw(`CGST 9%: ₹${cgst.toFixed(2)}`, 40);
-    draw(`SGST 9%: ₹${sgst.toFixed(2)}`, 40);
-    draw(`Total: ₹${totalAmount.toFixed(2)}`, 40, 12);
+    draw(`Subtotal: ${fmtAmount(subtotal)}`, 40);
+    draw(`CGST 9%:  ${fmtAmount(cgst)}`, 40);
+    draw(`SGST 9%:  ${fmtAmount(sgst)}`, 40);
+    draw(`Total:    ${fmtAmount(totalAmount)}`, 40, 13, true);
 
     const pdfBytes = await pdf.save();
+    console.log(`[Invoice] PDF generated (${pdfBytes.length} bytes), uploading...`);
 
     const randomHex = crypto.randomBytes(8).toString('hex');
     const fileKey = `invoices/${orderId}/${randomHex}.pdf`;
 
     await storageProvider.uploadWithKey(Buffer.from(pdfBytes), fileKey, process.env.R2_BUCKET_NAME);
+    console.log(`[Invoice] Uploaded to ${fileKey}`);
 
     await query(
       `UPDATE invoices SET storage_path = $1 WHERE id = $2`,
       [fileKey, invoiceId]
     );
+
+    console.log(`[Invoice] Done — order ${orderId} invoice stored at ${fileKey}`);
   } catch (err) {
+    console.error(`[Invoice] GENERATION FAILED for order ${orderId}:`, err);
     Sentry.captureException(err);
+    throw err; // re-throw so callers know it failed
   }
 }

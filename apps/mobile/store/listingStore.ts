@@ -21,9 +21,9 @@ export interface ListingState {
   weights: Record<MaterialCode, string>;
   photoUri: string | null;
   photoUris: string[];
-  aiHintShown: boolean;
-  aiEstimateHint: { material_code: string; estimated_weight_kg: number; confidence: number } | null;
-  isAiEstimate: boolean;
+  isAnalyzing: boolean;
+  
+  // Step 3
   customNames: Record<string, string>;
 
   // Step 3
@@ -40,8 +40,8 @@ export interface ListingState {
   setPhotoUri: (uri: string | null) => void;
   addPhotoUri: (uri: string) => void;
   removePhotoAt: (index: number) => void;
-  setAiHintShown: (v: boolean) => void;
-  setAiEstimate: (hint: { material_code: string; estimated_weight_kg: number; confidence: number } | null) => void;
+  setIsAnalyzing: (val: boolean) => void;
+  processAiItems: (items: Array<{ material_code: string; estimated_weight_kg: number; confidence?: number }>) => void;
   setCustomName: (code: string, name: string) => void;
   setPickupType: (t: 'scheduled' | 'dropoff') => void;
   setScheduledDate: (d: string) => void;
@@ -59,9 +59,7 @@ const initialState = {
   weights: {} as Record<MaterialCode, string>,
   photoUri: null,
   photoUris: [],
-  aiHintShown: false,
-  aiEstimateHint: null,
-  isAiEstimate: false,
+  isAnalyzing: false,
   customNames: {},
   pickupType: null,
   scheduledDate: '',
@@ -109,18 +107,31 @@ export const useListingStore = create<ListingState>((set, get) => ({
     return {
       photoUris: nextPhotoUris,
       photoUri: nextPhotoUris.length > 0 ? nextPhotoUris[nextPhotoUris.length - 1] : null,
-      aiEstimateHint: null,
-      isAiEstimate: false,
-      aiHintShown: false,
     };
   }),
 
-  setAiHintShown: (aiHintShown) => set({ aiHintShown }),
+  setIsAnalyzing: (val) => set({ isAnalyzing: val }),
 
-  setAiEstimate: (hint) => set({
-    aiEstimateHint: hint,
-    isAiEstimate: !!hint,
-    aiHintShown: !!hint,
+  processAiItems: (items) => set((state) => {
+    const newMaterials = new Set(state.selectedMaterials);
+    const newWeights = { ...state.weights };
+
+    items.forEach(item => {
+      const code = item.material_code as MaterialCode;
+      if (!newMaterials.has(code)) {
+        newMaterials.add(code);
+      }
+      const existingWeight = parseFloat(newWeights[code] || '0') || 0;
+      const additionalWeight = Number(item.estimated_weight_kg) || 0;
+      // Truncate to 1 decimal place or similar, but let's just do sum
+      const total = existingWeight + additionalWeight;
+      newWeights[code] = total > 0 ? total.toFixed(1).replace(/\.0$/, '') : '';
+    });
+
+    return {
+      selectedMaterials: Array.from(newMaterials),
+      weights: newWeights
+    };
   }),
 
   setCustomName: (code, name) =>

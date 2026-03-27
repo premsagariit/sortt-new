@@ -21,6 +21,15 @@ import { useListingStore } from '../../../store/listingStore';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
 import { safeBack } from '../../../utils/navigation';
 
+const TIMES = [
+  { label: 'Morning · 8–10 AM', value: 'morning_8_10' },
+  { label: 'Morning · 10–12 PM', value: 'morning_10_12' },
+  { label: 'Afternoon · 12–2 PM', value: 'afternoon_12_2' },
+  { label: 'Afternoon · 2–4 PM', value: 'afternoon_2_4' },
+  { label: 'Afternoon · 4–6 PM', value: 'afternoon_4_6' },
+  { label: 'Evening · 6 PM+', value: 'evening_6_plus' },
+];
+
 const FALLBACK_RATES: Record<MaterialCode, number> = {
   metal: 30,
   plastic: 11.5,
@@ -253,11 +262,16 @@ export default function Step4Screen() {
               <Package size={20} color={colors.navy} style={styles.rowIcon} />
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Materials</Text>
-                <Text variant="caption" color={colors.slate}>
-                  {breakDownItems.length > 0
-                    ? breakDownItems.map(i => `${i.label} ${i.weight} kg`).join(', ')
-                    : 'None'}
-                </Text>
+                {breakDownItems.length > 0 ? (
+                  breakDownItems.map((item) => (
+                    <View key={item.code} style={styles.materialRowInline}>
+                      <Text variant="caption" color={colors.slate} style={{ flex: 1 }}>{item.label}</Text>
+                      <Text variant="caption" color={colors.navy} style={{ fontWeight: '600' }}>{item.weight} kg</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text variant="caption" color={colors.slate}>None</Text>
+                )}
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step2')}>
                 <Text variant="caption" color={colors.red}>Edit</Text>
@@ -294,7 +308,9 @@ export default function Step4Screen() {
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Window</Text>
                 <Text variant="caption" color={colors.slate}>
-                  {pickupType === 'scheduled' ? `${scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''} · ${scheduledTime}` : 'Drop-off any time'}
+                  {pickupType === 'scheduled' 
+                    ? `${scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''} · ${TIMES.find(t => t.value === scheduledTime)?.label || scheduledTime}` 
+                    : 'Drop-off any time'}
                 </Text>
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step3')}>
@@ -418,6 +434,12 @@ const styles = StyleSheet.create({
   },
   rowContent: {
     flex: 1,
+  },
+  materialRowInline: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingRight: spacing.md,
   },
   infoBanner: {
     flexDirection: 'row',

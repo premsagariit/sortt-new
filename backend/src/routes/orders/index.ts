@@ -488,7 +488,7 @@ router.get('/:id/invoice', verifyUserRole(['seller', 'aggregator']), async (req,
     const orderId = req.params.id;
 
     const ownerRes = await query(
-      `SELECT seller_id, aggregator_id FROM orders WHERE id = $1`,
+      `SELECT seller_id, aggregator_id, status FROM orders WHERE id = $1`,
       [orderId]
     );
 
@@ -496,26 +496,63 @@ router.get('/:id/invoice', verifyUserRole(['seller', 'aggregator']), async (req,
       return res.status(404).json({ error: 'Not found' });
     }
 
-    const { seller_id, aggregator_id } = ownerRes.rows[0];
+    const { seller_id, aggregator_id, status: orderStatus } = ownerRes.rows[0];
     const isOrderParticipant = seller_id === userId || aggregator_id === userId;
 
     if (!isOrderParticipant) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const invoiceRes = await query(
-      `SELECT storage_path FROM invoices WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    // Fetch invoice record (need created_at for expiry fallback)
+    let invoiceRes = await query(
+      `SELECT storage_path, created_at FROM invoices WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [orderId]
     );
 
+    console.log(`[Invoice] order=${orderId} status=${orderStatus} invoiceRows=${invoiceRes.rows.length} storagePath=${invoiceRes.rows[0]?.storage_path ?? 'null'}`);
+
+    // If the order is completed but has no invoice, generate it on-demand.
+    // This covers: (a) async generation still in-flight, or (b) previous silent failure.
+    if ((invoiceRes.rows.length === 0 || !invoiceRes.rows[0].storage_path) && orderStatus === 'completed') {
+      console.log(`[Invoice] On-demand generation triggered for completed order ${orderId}`);
+      try {
+        await generateAndStoreInvoice(orderId);
+        invoiceRes = await query(
+          `SELECT storage_path, created_at FROM invoices WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          [orderId]
+        );
+        console.log(`[Invoice] After on-demand gen: storagePath=${invoiceRes.rows[0]?.storage_path ?? 'null'}`);
+      } catch (genErr) {
+        console.error(`[Invoice] On-demand generation failed for order ${orderId}:`, genErr);
+        return res.status(500).json({ error: 'invoice_generation_failed' });
+      }
+    }
+
     if (invoiceRes.rows.length === 0 || !invoiceRes.rows[0].storage_path) {
       return res.status(404).json({ error: 'invoice_not_ready' });
+    }
+
+    // 30-day expiry — use order completion time, falling back to invoice.created_at
+    const completionHistoryRes = await query(
+      `SELECT created_at FROM order_status_history
+       WHERE order_id = $1 AND new_status = 'completed'
+       ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    );
+    const completionTimestamp = completionHistoryRes.rows[0]?.created_at ?? invoiceRes.rows[0].created_at;
+    if (completionTimestamp) {
+      const daysSinceCompletion = (Date.now() - new Date(completionTimestamp).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceCompletion > 30) {
+        console.log(`[Invoice] Order ${orderId} invoice expired (${daysSinceCompletion.toFixed(1)} days old)`);
+        return res.status(410).json({ error: 'invoice_expired' });
+      }
     }
 
     const url = await storageProvider.getSignedUrl(invoiceRes.rows[0].storage_path, 300);
     const expiresAt = new Date(Date.now() + 300_000).toISOString();
     return res.json({ url, expiresAt });
   } catch (error) {
+    console.error('[Invoice] GET error:', error);
     Sentry.captureException(error);
     return res.status(500).json({ error: 'Internal server error' });
   }
