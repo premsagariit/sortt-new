@@ -29,6 +29,8 @@ jobs:
             run: npm install -g pnpm
 
           - name: Install all workspace dependencies
+            env:
+              PUPPETEER_CACHE_DIR: ${{ github.workspace }}/node_modules/.cache/puppeteer
             run: pnpm install
 
           - name: Build shared provider packages
@@ -39,6 +41,18 @@ jobs:
 
           - name: Deploy backend to staging folder
             run: pnpm --filter backend deploy --prod --legacy deploy_folder
+
+          - name: Copy Puppeteer Chromium cache into deploy folder
+            run: |
+              CACHE_SRC="$GITHUB_WORKSPACE/node_modules/.cache/puppeteer"
+              CACHE_DEST="deploy_folder/node_modules/.cache/puppeteer"
+              if [ -d "$CACHE_SRC" ]; then
+                mkdir -p "$CACHE_DEST"
+                cp -r "$CACHE_SRC/" "$CACHE_DEST/"
+                echo "Puppeteer Chromium cache copied ($(du -sh $CACHE_SRC | cut -f1))"
+              else
+                echo "WARNING: Puppeteer cache not found at $CACHE_SRC"
+              fi
 
           - name: Upload artifact for deployment job
             uses: actions/upload-artifact@v4

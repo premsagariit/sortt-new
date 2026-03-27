@@ -21,7 +21,7 @@
     "@sortt/maps": "workspace:*",
     "@sortt/realtime": "workspace:*",
     "@sortt/storage": "workspace:*",
-    "@sparticuz/chromium": "^143.0.4",
+
     "@upstash/ratelimit": "^1.2.1",
     "@upstash/redis": "^1.28.4",
     "ably": "^2.0.0",
@@ -36,7 +36,7 @@
     "node-cron": "^4.2.1",
     "pdf-lib": "^1.17.1",
     "pg": "^8.20.0",
-    "puppeteer-core": "^24.40.0",
+    "puppeteer": "^24.0.0",
     "sanitize-html": "^2.13.0",
     "sharp": "^0.33.4"
   },

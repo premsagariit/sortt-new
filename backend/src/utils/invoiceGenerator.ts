@@ -1,10 +1,22 @@
 import crypto from 'crypto';
 import sanitizeHtml from 'sanitize-html';
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { storageProvider } from '../lib/storage';
+
+/** Resolve the Chromium executable that works on both local and Azure App Service.
+ *  On Azure, PUPPETEER_CACHE_DIR points to the deployed node_modules/.cache/puppeteer dir.
+ *  On local dev, puppeteer finds it automatically via its own cache lookup.
+ */
+async function resolveBrowserExecutable(): Promise<string | undefined> {
+  // If the caller explicitly sets PUPPETEER_EXECUTABLE_PATH, always honour it.
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  // Let puppeteer find its own bundled browser (works for standard deployments).
+  return undefined; // undefined → puppeteer uses its internal default
+}
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -672,11 +684,21 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
       totalAmount,
     });
 
+    const executablePath = await resolveBrowserExecutable();
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
+      ],
       defaultViewport: { width: 1200, height: 1754 }, // A4 @ 144 dpi
-      executablePath: await chromium.executablePath(),
       headless: true,
+      ...(executablePath ? { executablePath } : {}),
     });
 
     const page = await browser.newPage();
