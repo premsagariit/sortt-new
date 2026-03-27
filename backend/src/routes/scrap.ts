@@ -107,7 +107,7 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
       }
 
       return res.json({
-        items: validItems.map(i => ({ ...i, is_ai_estimate: true })),
+        items: validItems.map((i: any) => ({ ...i, is_ai_estimate: true })),
         image_key: imageUrl || null
       });
     } catch (providerError: any) {
