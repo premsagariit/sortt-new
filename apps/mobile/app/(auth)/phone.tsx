@@ -94,6 +94,7 @@ export default function PhoneScreen() {
   const [countdown, setCountdown] = useState(OTP_SECONDS);
   const [canResend, setCanResend] = useState(false);
   const [otpExpired, setOtpExpired] = useState(false);
+  const [devOtp, setDevOtp] = useState<string | null>(null); // only set when Meta is unconfigured
 
   // OTP input boxes refs
   const otpInputRefs = useRef<TextInput[]>([]);
@@ -198,10 +199,23 @@ export default function PhoneScreen() {
   async function handleSendOtp() {
     setError(null);
     setIsLoading(true);
+    setDevOtp(null);
     try {
-      await api.post('/api/auth/request-otp', { phone: '+91' + normalizedPhone, mode });
+      const res = await api.post('/api/auth/request-otp', { phone: '+91' + normalizedPhone, mode });
       setStep('otp');
       startCountdown();
+
+      // Dev mode: backend returns dev_otp when Meta WhatsApp is not configured.
+      // Auto-fill OTP boxes so the dev doesn't need to read Azure logs.
+      const returnedOtp: string | undefined = res.data?.dev_otp;
+      if (returnedOtp && returnedOtp.length === 6) {
+        setOtp(returnedOtp);
+        setDevOtp(returnedOtp);
+        returnedOtp.split('').forEach((digit, i) => {
+          otpInputRefs.current[i]?.setNativeProps({ text: digit });
+        });
+        otpInputRefs.current[5]?.focus();
+      }
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError('No account found with this number. Switch to Sign Up to create one.');
@@ -493,6 +507,16 @@ export default function PhoneScreen() {
                 <Pressable onPress={handleResendOtp} disabled={isLoading}>
                   <Text style={styles.resendLink}>Resend OTP</Text>
                 </Pressable>
+              )}
+
+              {/* DEV MODE: OTP auto-filled banner — never shown in production */}
+              {devOtp && (
+                <View style={styles.devOtpBanner}>
+                  <Text style={styles.devOtpBannerText}>
+                    ⚠️ DEV MODE — OTP auto-filled: {devOtp}
+                    {'\n'}(WhatsApp not configured — set META_WHATSAPP_TOKEN & META_PHONE_NUMBER_ID in Azure)
+                  </Text>
+                </View>
               )}
 
               {/* Verify CTA */}
@@ -798,6 +822,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'DMMono',
     color: colors.muted,
+  },
+
+  // Dev OTP banner (only shown when Meta is not configured)
+  devOtpBanner: {
+    backgroundColor: '#FFF3CD',
+    borderColor: '#FBBF24',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  devOtpBannerText: {
+    fontSize: 11,
+    color: '#92400E',
+    lineHeight: 16,
   },
   resendLink: {
     fontSize: 12,

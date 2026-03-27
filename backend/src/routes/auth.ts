@@ -110,40 +110,49 @@ router.post('/request-otp', async (req: Request, res: Response) => {
             Sentry.captureMessage('Meta WhatsApp quota approaching 1000 free conversations', { level: 'warning' });
         }
 
-        // Send via Meta WhatsApp API (non-fatal — OTP is still stored in Redis)
-        if (META_TOKEN && META_PHONE_ID) {
-            const isHelloWorld = META_TEMPLATE === 'hello_world';
+        // ── Send OTP via Meta WhatsApp Cloud API ──────────────────────────────
+        // The template MUST be an approved "authentication" category template.
+        // Always inject body + url-button components so the OTP appears in the
+        // message. The hello_world template does NOT accept components — if you
+        // are still using it, replace META_OTP_TEMPLATE_NAME in Azure env with
+        // your approved authentication template name.
+        const whatsappConfigured = !!(META_TOKEN && META_PHONE_ID);
+        if (whatsappConfigured) {
             const templatePayload: any = {
                 name: META_TEMPLATE,
-                language: { code: 'en_US' }
-            };
-
-            // Only add components if we are not using the generic test template
-            if (!isHelloWorld) {
-                templatePayload.components = [
+                language: { code: 'en_US' },
+                // Always send the OTP as a body parameter + url-button suffix.
+                // The approved authentication template must have a {{1}} variable
+                // in the body and a url button with a {{1}} path suffix.
+                components: [
                     { type: 'body', parameters: [{ type: 'text', text: otp }] },
                     { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }
-                ];
-            }
+                ]
+            };
 
             try {
-                await axios.post(`https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`, {
-                    messaging_product: 'whatsapp',
-                    to: normalizedPhone.replace('+', ''),
-                    type: 'template',
-                    template: templatePayload
-                }, {
-                    headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' }
-                });
-                console.log(`[OTP] WhatsApp message sent to ${normalizedPhone.slice(-4)} (last 4 digits)`);
+                await axios.post(
+                    `https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`,
+                    {
+                        messaging_product: 'whatsapp',
+                        to: normalizedPhone.replace('+', ''),
+                        type: 'template',
+                        template: templatePayload
+                    },
+                    { headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' } }
+                );
+                console.log(`[OTP] WhatsApp OTP sent to ...${normalizedPhone.slice(-4)}`);
             } catch (metaErr: any) {
-                // Non-fatal: log and continue. OTP is already in Redis.
-                // Dev NOTE: Check if phone is whitelisted in Meta test environment.
-                console.warn(`[OTP] WhatsApp send failed (non-fatal):`, metaErr?.response?.data || metaErr?.message);
+                // Non-fatal: OTP is already stored in Redis.
+                // Common causes:
+                //   - Template not approved yet → change META_OTP_TEMPLATE_NAME
+                //   - Recipient number not whitelisted in Meta test sandbox
+                //   - hello_world template used (doesn't accept components)
+                console.warn('[OTP] WhatsApp send failed (non-fatal):', metaErr?.response?.data || metaErr?.message);
                 Sentry.captureException(metaErr, { level: 'warning' });
             }
         } else {
-            console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp message skipped. OTP is in Redis.');
+            console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp delivery skipped. OTP is held in Redis only.');
         }
 
 
@@ -161,7 +170,12 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         );
 
 
-        res.json({ success: true });
+        // In dev mode (no Meta keys) expose the OTP in the response so the
+        // mobile app can auto-fill it without needing Azure log access.
+        // NEVER include dev_otp when WhatsApp is configured (production).
+        const devOtp = whatsappConfigured ? undefined : otp;
+
+        res.json({ success: true, ...(devOtp !== undefined && { dev_otp: devOtp }) });
     } catch (error: any) {
         console.error('[OTP] Request OTP Error:', error?.message || error);
         if (error?.response?.data) console.error('[OTP] API Error detail:', error.response.data);
