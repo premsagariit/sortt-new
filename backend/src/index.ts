@@ -5,7 +5,7 @@ import './instrument';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { clerkMiddleware } from '@clerk/express'; // ADD THIS
+import { clerkMiddleware } from '@clerk/express';
 import { authMiddleware } from './middleware/auth';
 import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
@@ -24,13 +24,35 @@ import mapsRouter from './routes/maps';
 import scrapRouter from './routes/scrap';
 import { startScheduler } from './scheduler';
 
+// ── Startup environment validation ─────────────────────────────────────────
+// Must happen before any middleware or route registration so that missing env
+// vars produce a single clear error at boot rather than cryptic per-request
+// crashes from @clerk/express or @clerk/backend internals.
+const REQUIRED_ENV_VARS = [
+  'DATABASE_URL',
+  'CLERK_SECRET_KEY',
+  'CLERK_PUBLISHABLE_KEY',
+] as const;
+
+const missingVars = REQUIRED_ENV_VARS.filter((k) => !process.env[k]);
+if (missingVars.length > 0) {
+  console.error(
+    `[FATAL] Missing required environment variables: ${missingVars.join(', ')}.\n` +
+    `Set them as Azure App Service Application Settings (Configuration → Application settings).\n` +
+    `The server will start but ALL authenticated routes will return 503 until this is fixed.`
+  );
+}
+
 const app = express();
 
 console.log('[DIAG] Backend initializing...');
 console.log('[DIAG] env.PORT:', process.env.PORT);
+console.log('[DIAG] env.NODE_ENV:', process.env.NODE_ENV);
 console.log('[DIAG] env.DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('[DIAG] env.CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? `${process.env.CLERK_SECRET_KEY.slice(0, 8)}...` : 'MISSING');
-console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? `${process.env.CLERK_PUBLISHABLE_KEY.slice(0, 8)}...` : 'MISSING');
+console.log('[DIAG] env.CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? `${process.env.CLERK_SECRET_KEY.slice(0, 8)}...` : 'MISSING ⚠️');
+console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? `${process.env.CLERK_PUBLISHABLE_KEY.slice(0, 8)}...` : 'MISSING ⚠️');
+console.log('[DIAG] env.ABLY_API_KEY exists:', !!process.env.ABLY_API_KEY);
+console.log('[DIAG] env.R2_BUCKET_NAME:', process.env.R2_BUCKET_NAME || 'MISSING ⚠️');
 
 app.use(helmet());
 
@@ -55,22 +77,33 @@ app.use(sanitizeBody);
 
 app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 
-// Public auth routes — before any Clerk middleware
+// Public auth routes — before Clerk middleware so OTP endpoints never need a token
 app.use('/api/auth', authRouter);
 
 // clerkMiddleware() populates req.auth so getAuth() works in route handlers.
-// Does NOT enforce auth or redirect — your authMiddleware handles enforcement.
-app.use(clerkMiddleware()); // ADD THIS — must come before authMiddleware
+// Passing secretKey and publishableKey explicitly prevents Clerk from throwing
+// "Publishable key is missing" when the env vars are not yet available at module
+// load time (race condition on Azure cold start).
+// If the keys are still missing here, clerkMiddleware degrades gracefully
+// (req.auth will be empty) and authMiddleware will return 401 as normal.
+app.use(clerkMiddleware({
+  secretKey: process.env.CLERK_SECRET_KEY,
+  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+}));
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Custom authMiddleware: verifies token via createClerkClient().verifyToken(),
+// Custom authMiddleware: verifies JWT via createClerkClient().verifyToken(),
 // returns 401 (never redirects), exempts /api/auth/* and /api/rates
 app.use(authMiddleware);
 
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    clerk: !!process.env.CLERK_SECRET_KEY && !!process.env.CLERK_PUBLISHABLE_KEY ? 'configured' : 'MISSING ⚠️',
+  });
 });
 
 app.use('/api/orders', ordersRouter);

@@ -58,7 +58,6 @@ user_data_delete.sql
 # Agent files
 .agent/
 .claude/
-.github/
 .venv/
 
 implementationPlan.md
