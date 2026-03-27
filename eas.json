@@ -1,11 +1,33 @@
 {
+    "cli": {
+        "version": ">= 18.4.0",
+        "appVersionSource": "remote",
+        "requireCommit": false
+    },
     "build": {
+        "development": {
+            "developmentClient": true,
+            "distribution": "internal",
+            "channel": "development",
+            "projectRoot": "apps/mobile",
+            "env": {
+                "EAS_NO_FROZEN_LOCKFILE": "1",
+                "EXPO_PUBLIC_API_URL": "https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net",
+                "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Y2xlYXItZHJhZ29uLTgwLmNsZXJrLmFjY291bnRzLmRldiQ",
+                "EXPO_PUBLIC_OLA_MAPS_API_KEY": "XnpoaVvRLAXgbJcZvLScbwSOJmKXuhdqzQYtS6Gi",
+                "EXPO_PUBLIC_MAP_PROVIDER": "ola",
+                "EXPO_PUBLIC_REALTIME_PROVIDER": "ably"
+            }
+        },
         "preview": {
+            "distribution": "internal",
+            "channel": "preview",
             "android": {
                 "buildType": "apk",
                 "image": "latest"
             },
             "node": "20.12.0",
+            "projectRoot": "apps/mobile",
             "env": {
                 "EAS_NO_FROZEN_LOCKFILE": "1",
                 "EXPO_PUBLIC_API_URL": "https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net",
@@ -16,11 +38,14 @@
             }
         },
         "production": {
+            "autoIncrement": true,
+            "channel": "production",
             "android": {
                 "buildType": "apk",
                 "image": "latest"
             },
             "node": "20.12.0",
+            "projectRoot": "apps/mobile",
             "env": {
                 "EAS_NO_FROZEN_LOCKFILE": "1",
                 "EXPO_PUBLIC_API_URL": "https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net",
@@ -31,8 +56,7 @@
             }
         }
     },
-    "cli": {
-        "appVersionSource": "remote",
-        "requireCommit": false
+    "submit": {
+        "production": {}
     }
 }
