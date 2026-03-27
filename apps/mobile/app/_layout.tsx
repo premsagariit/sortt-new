@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,
@@ -50,7 +50,7 @@ import { disconnectRealtime } from '../lib/realtime';
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
   const [isTokenReady, setIsTokenReady] = useState(false);
-  
+
   useEffect(() => {
     // Set token getter IMMEDIATELY on first render with auth context available
     setApiTokenGetter(getToken);
@@ -219,6 +219,22 @@ export default function RootLayout() {
     return null;
   }
 
+  // ── CRITICAL GUARD: If Clerk publishable key is missing (e.g., env not injected
+  // during EAS build), render a visible error rather than crashing silently.
+  if (!clerkPublishableKey) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1C2E4A', padding: 24 }}>
+        <Text style={{ color: '#FF6B6B', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 }}>
+          Configuration Error
+        </Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
+          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.{'\n'}
+          This build is misconfigured. Please rebuild with the correct EAS environment variables.
+        </Text>
+      </View>
+    );
+  }
+
   const resolvedRole: 'seller' | 'aggregator' =
     storedUserType === 'aggregator' || storedUserType === 'seller'
       ? storedUserType
@@ -227,7 +243,7 @@ export default function RootLayout() {
   // ── Expo Router root stack.
   // Using Stack instead of Slot to preserve memory/state between root segments.
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey!} tokenCache={tokenCache}>
+    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
       <ApiClientConfigurator>
         <NotificationWatcher />
         <PushTokenRegistrar />
