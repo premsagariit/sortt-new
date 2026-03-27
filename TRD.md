@@ -47,6 +47,20 @@
 >   - Mobile map rendering migrated from `react-native-maps` to MapLibre + Ola vector tiles with `apps/mobile/utils/mapAvailable.ts` gate (`MAP_RENDERING_AVAILABLE=false` default for Expo Go).
 >   - Aggregator route planner now supports store-backed order pins on MapLibre when rendering is enabled.
 
+> ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
+> - Gemini Vision provider implementation is live:
+>   - `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with `GEMINI_MODEL` env support (`gemini-2.5-flash` default).
+>   - `backend/src/routes/scrap.ts` provides authenticated `POST /api/scrap/analyze` with EXIF stripping, Redis image-hash cache, and daily circuit breaker (`GEMINI_DAILY_LIMIT`).
+> - GST invoice generation and download are live:
+>   - `backend/src/utils/invoiceGenerator.ts` generates legal `invoice_data` JSONB + PDF and uploads to Cloudflare R2.
+>   - `backend/src/routes/orders/index.ts` provides `GET /api/orders/:id/invoice` with signed URL response + ownership checks.
+> - Price scraper delivery is live:
+>   - `scraper/main.py` implemented and scheduled by node-cron in `backend/src/scheduler.ts` (`Price Scraper (Python Spawn)` job).
+> - Mobile Day 15 flows are wired:
+>   - Seller listing step2 AI estimate hint UI is connected to `/api/scrap/analyze`.
+>   - Receipt invoice download button is connected to `GET /api/orders/:id/invoice`.
+> - Execution state: implementation is complete through Day 15; Day 16 (Web portal + Admin dashboard + tests) is next.
+
 
 ---
 

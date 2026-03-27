@@ -31,6 +31,8 @@
 > - Workspace gate check: `pnpm type-check` exits 0.
 > - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow supports inline rating with post-submit refresh; notifications now deep-link to order detail via metadata payloads.
 > - ✅ **Maps migration (2026-03-25):** Google-based map integration has been replaced with Ola-backed provider implementation + MapLibre mobile rendering. Existing address pinning, reverse-geocode fallback, live tracking, and route planning behaviors are preserved with Expo Go fallback gating.
+> - ✅ **Day 15 completion (2026-03-27):** Gemini Vision analysis route (`POST /api/scrap/analyze`) is live with EXIF stripping + Redis circuit breaker; GST invoice generator + signed download route (`GET /api/orders/:id/invoice`) are live; daily Python price scraper (`scraper/main.py`) is scheduled through backend node-cron and writes to `price_index` with sanity checks.
+> - ✅ **Execution state:** Project implementation is complete through Day 15 and ready to begin Day 16 (Web portal + Admin dashboard + tests).
 
 ---
 
@@ -157,7 +159,7 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 
 ### 5.4 Pricing & Price Transparency
 
-- **Daily Scrap Price Index:** An AI agent (Python scraper on Render) scrapes market data daily and publishes city-wise material rates (paper, plastic, metals, etc.) to the `price_index` table. Admin has manual override capability (`is_manual_override = true`). **This feature is delivered on Day 15.**
+- **Daily Scrap Price Index:** A Python scraper (`scraper/main.py`) runs daily via backend node-cron (`backend/src/scheduler.ts`) and publishes city-wise material rates (paper, plastic, metals, etc.) to the `price_index` table. Admin has manual override capability (`is_manual_override = true`). **This feature is delivered on Day 15.**
 - Sellers see a city-average price range per material type (e.g. 'Paper: ₹8–12/kg in Hyderabad today') — sufficient to set expectations without enabling price wars.
 - Aggregators set their own per-kg rates per material type from the Price Management screen. These rates are visible to sellers when browsing nearby aggregators.
 - Sellers do not set prices. The market rate display removes unrealistic expectations.
@@ -211,7 +213,7 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 ### 5.9 Bulk Pickup & Route Optimisation
 
 - For mobile aggregators, the Route tab shows a map of pending orders within their operating area.
-- Route map rendering uses the `IMapProvider` abstraction (`packages/maps/`) — **never** a direct Google Maps SDK import. The provider defaults to Google Maps but is swap-ready for Ola Maps via the `MAP_PROVIDER` environment variable.
+- Route map rendering uses the `IMapProvider` abstraction (`packages/maps/`) — **never** a direct maps SDK import in application code. Provider selection is environment-driven via `MAP_PROVIDER`.
 - In v1: Aggregators manually select a cluster of nearby orders to batch into a single trip.
 - The "Plan Route" button is live in the MVP UI but launches directions via `IMapProvider.getDirections()` for a single selected order. Multi-order batch routing is a v2 feature.
 

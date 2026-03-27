@@ -5,7 +5,19 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 13 Realtime + Push Complete (2026-03-20), Post-Day13 Stabilization Active (2026-03-25)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 15 Complete (2026-03-27), Ready for Day 16 (Web + Admin + Tests)
+
+> ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
+
+> ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
+> - `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with env-driven model selection (`GEMINI_MODEL`, default `gemini-2.5-flash`).
+> - `backend/src/routes/scrap.ts` now serves `POST /api/scrap/analyze` with EXIF stripping, Redis image-hash cache, and daily circuit breaker (`GEMINI_DAILY_LIMIT`).
+> - `backend/src/utils/invoiceGenerator.ts` implemented for GST invoice JSONB legal record + PDF generation + R2 upload.
+>   - **PDF engine migrated (2026-03-27):** `pdf-lib` replaced with **`puppeteer-core` + `@sparticuz/chromium`**. Invoice now renders the canonical `sortt_invoice.html` design pixel-perfect (Navy/Teal brand, DM Sans + DM Mono, native ₹ rupee symbol via HTML). `pdf-lib` is no longer used.
+>   - New backend deps: `puppeteer-core`, `@sparticuz/chromium` in `backend/package.json`.
+> - `backend/src/routes/orders/index.ts` includes `GET /api/orders/:id/invoice` signed URL download route with access checks.
+> - `backend/src/scheduler.ts` runs the daily Python scraper by spawning `scraper/main.py` via node-cron (`Price Scraper (Python Spawn)` job).
+> - Mobile Day 15 UX is wired: listing Step 2 AI estimate hint flow + receipt invoice download flow.
 
 > ✅ **Implementation Sync Note (2026-03-25)**
 > - Seller addresses refactor completed: two-page map-first flow (`address-map` → `address-form`) with shared draft handoff in `addressStore` and listing step3 integration.
@@ -43,6 +55,13 @@
 > ✅ **Learned Lesson (Realtime Cleanup Discipline)**
 > - For focus-scoped subscriptions, removing listeners is usually sufficient during screen cleanup.
 > - Force-removing channels during routine unmounts can trigger detached-state runtime noise and brittle reconnect behavior.
+
+> ✅ **Learned Lesson (PDF Generation — use Puppeteer, not pdf-lib)**
+> - `pdf-lib` cannot handle Google Fonts, native Unicode (₹), or complex multi-column branded layouts reliably. Do not use it for anything beyond trivial single-font documents.
+> - For branded invoices use **`puppeteer-core` + `@sparticuz/chromium`** (Azure App Service / AWS Lambda-compatible Chromium): build an inline HTML string → `page.pdf({ format: 'A4', printBackground: true })`.
+> - Pass `{ headless: true, args: chromium.args, executablePath: await chromium.executablePath() }` to `puppeteer.launch()`. **Do NOT pass `defaultViewport: chromium.defaultViewport`** — that property does not exist on `@sparticuz/chromium`'s TypeScript types; pass an explicit `{ width, height }` object or omit the key entirely.
+> - The JSONB `invoices.invoice_data` column remains the legal GST record; the PDF is a rendering artifact and may be regenerated from the JSONB at any time.
+> - Always sanitise every user-supplied string with `sanitize-html` before embedding in the HTML template (I3 rule, also prevents XSS in the PDF rendering context).
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 
@@ -85,10 +104,11 @@ Day 8     → Mobile auth wiring + Clerk           [GATE PASSED 2026-03-10]
 Day 9     → Core order routes                    [GATE PASSED 2026-03-13]
 Days 10–12 → Supporting routes + mobile API wiring + atomic ops [GATE PASSED]
 Day 13    → Ably realtime + push notifications   [GATE PASSED 2026-03-20]
+Day 14    → Provider abstractions                [GATE PASSED 2026-03-24]
+Day 15    → Gemini + invoice + scraper           [GATE PASSED 2026-03-27]
 UI Polish + refinements                          [COMPLETE — 2026-03-20]
 
 ⏳ NEXT:
-Days 14–15 → Provider abstractions + AI + invoice + scraper
 Days 16–17 → Web portal + admin + security audit
 ```
 
@@ -116,9 +136,9 @@ Days 16–17 → Web portal + admin + security audit
 | Push Notifications | Expo Push Service (server SDK) | NOT raw FCM/APNs — but dual-token storage required |
 | Rate Limiting | Upstash Redis via `@upstash/ratelimit` + `express-rate-limit` | Required from day 1 for horizontal scale |
 | AI — Image Analysis | Gemini Flash Vision (via `IAnalysisProvider`) | 1,500 req/day free cap — enforce circuit breaker |
-| AI — Price Scraper | Gemini Pro (Python agent on Render cron) | Writes to `price_index` table with sanity checks |
+| AI — Price Scraper | Python scraper (`scraper/main.py`) scheduled via node-cron in backend | Writes to `price_index` table with sanity checks |
 | Maps / Geocoding | Ola Maps API via `IMapProvider` + MapLibre tiles on mobile | Keep `MAP_PROVIDER`/`EXPO_PUBLIC_MAP_PROVIDER` env-driven |
-| PDF Generation | `pdf-lib` (Node.js) | GST invoices only |
+| PDF Generation | `puppeteer-core` + `@sparticuz/chromium` | GST invoices — HTML→PDF via headless Chromium; `pdf-lib` removed (2026-03-27) |
 | Icons | Phosphor Icons (MIT) — outline, 1.5px stroke | Filled variant for active nav states only |
 | State Management | Zustand | No Redux, no Context API for global state |
 | Monorepo | pnpm workspaces | packages: `maps`, `realtime`, `auth`, `storage`, `analysis` |
@@ -236,9 +256,9 @@ All vendor calls MUST go through these interfaces in `packages/`:
 ```
 packages/
   maps/        → IMapProvider     (Google Maps / Ola Maps)
-  realtime/    → IRealtimeProvider (Supabase Realtime / Ably / Soketi)
-  auth/        → IAuthProvider    (Supabase Auth)
-  storage/     → IStorageProvider (Supabase Storage / S3 / R2)
+  realtime/    → IRealtimeProvider (Ably / Soketi)
+  auth/        → IAuthProvider    (Clerk Auth)
+  storage/     → IStorageProvider (Cloudflare R2 / S3)
   analysis/    → IAnalysisProvider (Gemini Vision / OpenAI Vision)
 ```
 
@@ -250,11 +270,11 @@ packages/
 
 Switch providers via environment variables: `MAP_PROVIDER`, `REALTIME_PROVIDER`, etc.
 
-### 3.2 Geospatial (PostGIS)
-- ALL aggregator proximity queries use `ST_DWithin` with PostGIS.
-- Use partial GIST index: `WHERE status = 'created' AND deleted_at IS NULL` — keeps index small.
-- `aggregator_nearby_orders` RLS policy uses indexed JOINs, NOT helper functions (removed in v3.1 — they caused per-row function calls).
-- Never accept `radius` parameter from client — always derive from `aggregator_profiles.operating_radius_km` or server-side city bounding box. Hard cap: `MAX_SEARCH_RADIUS_KM = 50`.
+### 3.2 Geospatial / Matching (No PostGIS in MVP)
+- Aggregator matching is city-code + material-rate based (single-city MVP baseline).
+- No PostGIS dependency in MVP schema or runtime matching queries.
+- Pre-accept order surfaces expose locality only; full pickup address is revealed only after accept (V25).
+- Never accept client-controlled radius for matching in the current MVP architecture.
 
 ### 3.3 Realtime — WebSocket Connection Culling
 - Subscribe to channels on focused screens only (`useFocusEffect`/focus-gated `useEffect`).
@@ -264,7 +284,7 @@ Switch providers via environment variables: `MAP_PROVIDER`, `REALTIME_PROVIDER`,
 - Mobile must consume backend-provided channel tokens (`orderChannelToken`, `chatChannelToken`) and never reconstruct private channel names client-side (V32).
 
 ### 3.4 Race Condition Prevention (First-Accept-Wins)
-- `accept-order` Edge Function MUST use `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction.
+- `POST /api/orders/:id/accept` MUST use `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction.
 - If no row returned (race lost): return HTTP 409 "Order already taken."
 - This is the ONLY correct implementation — no optimistic concurrency workaround.
 
@@ -278,11 +298,9 @@ Switch providers via environment variables: `MAP_PROVIDER`, `REALTIME_PROVIDER`,
 #### OTP Delivery — Meta WhatsApp Cloud API (FREE tier)
 - **Zero cost** for the first 1,000 authentication conversations/month (Meta's official free quota for businesses).
 - Beyond 1,000/month: ~₹0.35–0.60/conversation (Meta pricing for India) — plan paid tier when DAU scales.
-- **Architecture:** Supabase Auth generates the OTP internally → fires the **Send SMS Hook** → POSTs `{ user, sms: { otp } }` to `POST /api/auth/whatsapp-otp` on the custom backend → backend calls Meta Graph API → OTP delivered as a WhatsApp authentication template message.
-- **NEVER** use Supabase's built-in SMS provider (Twilio/Vonage) — route through the custom backend hook exclusively.
-- OTP length: **6 digits minimum** — enforced by Supabase Auth settings (not MSG91) (V6).
+- **Architecture:** Express backend generates OTP (`crypto.randomInt`), stores OTP HMAC in Redis with TTL, and delivers OTP through Meta WhatsApp Cloud API.
+- OTP length: **6 digits minimum** — enforced in backend generation/validation (V6).
 - Meta requirements: WhatsApp Business Account (WABA) + approved `authentication` category template. The authentication template automatically qualifies for the free 1,000/month quota.
-- The Supabase Send SMS Hook endpoint (`/api/auth/whatsapp-otp`) is **exempt** from standard JWT middleware (Supabase calls it server-to-server with its own HMAC secret) — validate using `SUPABASE_HOOK_SECRET` env var instead.
 - WhatsApp OTP template format: `"Your {{APP_NAME}} verification code is {{1}}. Valid for 10 minutes."` — `{{APP_NAME}}` must be replaced with the final approved app name before submitting to Meta for template approval. The template name itself is set via `META_OTP_TEMPLATE_NAME` env var (see §5). Do NOT hardcode the app name in this string in code — import `APP_NAME` from `constants/app.ts`.
 - **Fallback plan at scale:** If WhatsApp OTP fails delivery (user has no WhatsApp), surface a "Resend via SMS" option in the app UI that calls a separate rate-limited SMS fallback endpoint. Fallback SMS provider TBD (e.g., MSG91) — implement only when free quota is regularly exceeded.
 
@@ -291,7 +309,7 @@ Allowed transitions only:
 `created → accepted → en_route → arrived → weighing_in_progress → [OTP] → completed`
 `any → cancelled`
 
-- `completed` status: ONLY settable by `/verify-pickup-otp` Edge Function — never by PATCH /api/orders/:id/status.
+- `completed` status: ONLY settable by `/api/orders/:id/verify-otp` route — never by PATCH /api/orders/:id/status.
 - `disputed` status: ONLY settable by `/api/disputes` route.
 - Hard-coded `IMMUTABLE_STATUSES = ['completed', 'disputed']` in backend — reject direct client updates (V13).
 - All timestamps in `order_status_history` set by DB (`DEFAULT NOW()`) — never by client (V30).
@@ -312,7 +330,7 @@ Allowed transitions only:
   - `token_type TEXT CHECK (IN ('expo','fcm','apns'))` + `raw_token TEXT` columns.
 
 ### 3.9 Storage Security
-- ALL Supabase Storage buckets: **private** (never public).
+- ALL Cloudflare R2 buckets: **private** (never public).
 - Never serve storage URLs directly — always generate short-lived **signed URLs (5-minute expiry)** from the custom backend after verifying user has rights to that `order_media` record (D1).
 - Buckets: `scrap-photos/` (order parties), `scale-photos/` (order parties + admin), `kyc-docs/` (admin only), `invoices/` (order parties).
 - Invoice paths: randomised suffix → `invoices/{order_uuid}/{random_hex_16}.pdf` (V27).
@@ -330,8 +348,8 @@ Allowed transitions only:
 > All items below are mandatory for MVP launch unless explicitly marked `v2`.
 
 ### Authentication
-- **A1:** JWT verification middleware on ALL Express routes except `/api/webhooks/supabase` (HMAC-validated) and `GET /api/rates` (public).
-- **A2:** Webhook HMAC-SHA256 verification via `SUPABASE_WEBHOOK_SECRET` env var + `crypto.timingSafeEqual`.
+- **A1:** JWT verification middleware on all protected Express routes. Public exemptions are explicitly route-scoped (for example `GET /api/rates`).
+- **A2:** If webhooks are used, enforce HMAC-SHA256 signature verification via server-side secret + `crypto.timingSafeEqual`.
 - **A3:** JWT expiry 1hr, refresh 7 days. Expose "logout all devices" in Settings screen.
 
 ### Role Enforcement
@@ -341,7 +359,7 @@ Allowed transitions only:
 
 ### Rate Limiting (all via Upstash Redis)
 - **RA1:** `/api/scrap/analyze` — max 10 req/user/hour. Global circuit breaker at 1,200 Gemini calls/day → return `manual_entry_required` flag (V15b supplement).
-- **RA2:** WhatsApp OTP flooding — `/api/auth/whatsapp-otp` (Supabase Send SMS Hook endpoint): max 3 OTP deliveries/phone-hash/10 min, max 10/phone-hash/day. Tracked via `otp_log`. Secured by `SUPABASE_HOOK_SECRET` (Supabase-to-backend only). Monitor Meta daily conversation count — alert admin at 900/month (90% of 1,000 free quota).
+- **RA2:** WhatsApp OTP flooding — enforce per-phone limits on backend OTP request flow (3 OTPs/phone/10min, 10/day) with Redis + `otp_log`. Monitor Meta daily conversation count and alert near 900/month (90% of free quota).
 - **RA3:** `/api/orders` POST — max 3 creations/seller/hour. 2 consecutive cancellations in 30 min → 2-hour suspension.
 
 ### Injection Prevention
@@ -356,7 +374,7 @@ Allowed transitions only:
 
 ### Client Trust
 - **C1:** OTP confirms WEIGHT AND AMOUNT — not just physical presence. Seller must review full transaction summary before OTP entry. `/verify-pickup-otp` receives HMAC-bound snapshot of order items.
-- **C2:** Aggregator heartbeat: ping every 2 min while in foreground. `pg_cron` job every 5 min sets `is_online=false` for `last_ping_at` older than 5 min.
+- **C2:** Aggregator heartbeat: ping every 2 min while in foreground. node-cron job every 5 min sets `is_online=false` for `last_ping_at` older than 5 min.
 - **C3:** Offline draft orders: photo uploaded to Storage immediately (or queued first on reconnect). `storage_path` generated server-side. Backend validates path exists, belongs to submitting user, created within 24hrs.
 
 ### Infrastructure
@@ -366,15 +384,15 @@ Allowed transitions only:
 - **X4:** Admin panel: IP allowlisting via Vercel Edge Middleware + 10-attempt lockout + 15-min inactivity timeout + `admin_audit_log` table.
 
 ### Supplementary (V-series)
-- **V6:** OTP length enforced to 6 digits minimum via Supabase Auth settings (Dashboard → Auth → OTP expiry & length).
+- **V6:** OTP length enforced to 6 digits minimum in backend OTP generation/validation flow.
 - **V7:** Privileged routes re-fetch `user_type` + `is_active` from DB, never trust JWT claim.
 - **V8:** `/verify-pickup-otp` checks `orders.aggregator_id = auth.uid()` inside the same FOR UPDATE transaction.
-- **V9:** WhatsApp OTP delivery is system-initiated only (triggered by scale photo upload via Supabase Auth's Send SMS Hook flow) — the `/api/auth/whatsapp-otp` hook endpoint is not directly callable by app clients; it is called exclusively by Supabase Auth, validated via `SUPABASE_HOOK_SECRET`.
-- **V12:** `SUPABASE_SERVICE_KEY` only on server — never in `NEXT_PUBLIC_*` env vars or client bundles.
+- **V9:** WhatsApp OTP delivery is system-initiated only and server-controlled from backend auth/order flows. No client-callable endpoint may directly trigger unrestricted OTP delivery.
+- **V12:** `CLERK_SECRET_KEY` and other server secrets are server-only and must never appear in mobile/web public env vars or client bundles.
 - **V13:** `IMMUTABLE_STATUSES = ['completed', 'disputed']` in backend status update route (see §3.6).
 - **V15b:** Image hash deduplication (SHA-256 → Redis cache, 24hr TTL) before Gemini call + global circuit breaker.
 - **V17:** `Cache-Control: public, max-age=300, stale-while-revalidate=600` + ETag on `GET /api/rates`.
-- **V18:** Strip ALL EXIF metadata (via `sharp`) from uploaded images before Supabase Storage or Gemini. Never include filename or user metadata in Gemini prompt.
+- **V18:** Strip ALL EXIF metadata (via `sharp`) from uploaded images before Cloudflare R2 upload or Gemini analysis. Never include filename or user metadata in Gemini prompt.
 - **V19:** SSRF prevention — price scraper uses hard-coded URL allowlist; never re-fetches from DB-stored URLs.
 - **V21:** Never accept `radius` from client. Server-side cap `MAX_SEARCH_RADIUS_KM = 50`.
 - **V24:** `users_public` view — `phone_hash` is on never-return list. Unit test asserts no response fixture contains `phone_hash`.

@@ -1,5 +1,17 @@
-﻿Sortt
-├── Recent implementation updates (2026-03-25)
+Sortt
+├── Recent implementation updates (2026-03-27)
+│   ├── Day 15 completion delivered:
+│   │   ├── Gemini Vision provider implemented in `packages/analysis/src/providers/GeminiVisionProvider.ts`
+│   │   ├── Scrap analysis route live in `backend/src/routes/scrap.ts` (`POST /api/scrap/analyze`) with EXIF stripping + Redis circuit breaker/cache
+│   │   ├── GST invoice generator implemented in `backend/src/utils/invoiceGenerator.ts`
+│   │   ├── Invoice download route live in `backend/src/routes/orders/index.ts` (`GET /api/orders/:id/invoice`)
+│   │   ├── Daily price scraper integrated via `backend/src/scheduler.ts` spawning `scraper/main.py`
+│   │   ├── Seller listing AI hint flow wired in `apps/mobile/app/(seller)/listing/step2.tsx`
+│   │   └── Receipt invoice download flow wired in `apps/mobile/app/(seller)/order/receipt/[id].tsx` and `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
+│   ├── Invoice PDF engine migrated (2026-03-27): `pdf-lib` → `puppeteer-core` + `@sparticuz/chromium`
+│   │   ├── Pixel-perfect A4 invoice matching canonical `sortt_invoice.html` (Navy/Teal brand, DM Sans + DM Mono fonts)
+│   │   └── New deps: `puppeteer-core`, `@sparticuz/chromium` in `backend/package.json`
+│   ├── Project execution state: implementation complete through Day 15; Day 16 is next (Web portal + admin dashboard + tests)
 │   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
 │   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff
 │   ├── Listing wizard step3 + seller addresses list integrated with map-first address flow
@@ -275,16 +287,19 @@
 │   │   │   ├── aggregators.ts # Aggregator profile/rates/availability endpoints
 │   │   │   ├── auth.ts # OTP request/verify and auth flow endpoints
 │   │   │   ├── disputes.ts # Dispute creation and status handling endpoints
+│   │   │   ├── maps.ts # Geocode/reverse/autocomplete endpoints via @sortt/maps
 │   │   │   ├── messages.ts # Chat/message endpoints
 │   │   │   ├── notifications.ts # Notification fetch/update endpoints
 │   │   │   ├── rates.ts # Public and role-based rates endpoints
 │   │   │   ├── ratings.ts # Rating/review create and summary endpoints
 │   │   │   ├── realtime.ts # Realtime token/channel endpoints
+│   │   │   ├── scrap.ts # POST /api/scrap/analyze — Gemini Vision scrap analysis with EXIF strip + circuit breaker
 │   │   │   ├── users.ts # User profile and account endpoints
 │   │   │   └── orders
-│   │   │       └── index.ts # Order lifecycle routes (create, accept, finalize, detail)
+│   │   │       └── index.ts # Order lifecycle routes (create, accept, finalize, invoice download)
 │   │   └── utils
 │   │       ├── channelHelper.ts # Channel naming/access helper utilities
+│   │       ├── invoiceGenerator.ts # Puppeteer-based A4 GST invoice PDF builder (matches sortt_invoice.html)
 │   │       ├── orderDto.ts # Order response normalization/sanitization helpers
 │   │       ├── orderStateMachine.ts # Allowed order state transition rules
 │   │       ├── pushHelper.ts # Legacy push helper (superseded by pushNotifications.ts)
@@ -300,7 +315,7 @@
 │   │       ├── index.ts # IAnalysisProvider exports + factory
 │   │       ├── types.ts # AnalysisResult + IAnalysisProvider contracts
 │   │       └── providers
-│   │           └── GeminiVisionProvider.ts # Day-14 stub (throws NotImplementedError)
+│   │           └── GeminiVisionProvider.ts # Full Gemini Vision adapter (env-driven model, EXIF stripped upstream)
 │   ├── auth
 │   │   ├── package.json # Auth package manifest
 │   │   ├── tsconfig.json # Auth package TypeScript config

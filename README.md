@@ -1,6 +1,6 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** MVP Build (In Progress — Day 13 complete, post-Day 13 stabilization updates applied)  
+> **Status:** MVP Build (In Progress — Day 15 complete, ready to begin Day 16)  
 > **Architecture:** pnpm Monorepo  
 > **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Azure PostgreSQL, Gemini AI.
 
@@ -94,10 +94,24 @@ pnpm dev:backend
 
 ---
 
-### 🗓 Current Status (2026-03-25)
+### 🗓 Current Status (2026-03-27)
 ✅ Core API and mobile wiring completed through Day 11 gates.
 
 ✅ Day 13 realtime + push baseline remains complete (2026-03-20) and validated.
+
+✅ Day 14 provider abstraction layer completed (2026-03-24):
+- All 5 provider packages are implemented and build cleanly: `@sortt/maps`, `@sortt/realtime`, `@sortt/auth`, `@sortt/storage`, `@sortt/analysis`.
+- Backend and mobile consume provider abstractions; application code avoids direct vendor SDK imports.
+
+✅ Day 15 feature set completed (2026-03-27):
+- Gemini Vision integration is live via `POST /api/scrap/analyze` with EXIF stripping, Redis daily circuit breaker, and image-hash cache.
+- `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with `GEMINI_MODEL` support (`gemini-2.5-flash` default).
+- GST invoice generation is live via `backend/src/utils/invoiceGenerator.ts` and `GET /api/orders/:id/invoice` signed download route.
+- Invoice generation is non-blocking from order completion path and persists legal `invoice_data` JSONB.
+- Daily Python price scraper is wired through `backend/src/scheduler.ts` (node-cron spawn of `scraper/main.py`) and feeds `price_index`.
+- Mobile listing step 2 uses AI estimate hints, and receipt flows support invoice download.
+
+✅ Execution status: Days 1–15 are complete. Day 16 (Web portal + Admin dashboard + tests) is the active next phase.
 
 ✅ Seller address management and listing wizard integration updates applied:
 - Two-step seller address flow split into map-first + details form (`address-map` → `address-form`).

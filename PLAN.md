@@ -1,4 +1,4 @@
-# [APP_NAME] — 10-DAY MVP BUILD PLAN
+# [APP_NAME] — 17-DAY MVP BUILD PLAN
 > ⚠️ **APP NAME PLACEHOLDER NOTICE:** "Sortt" is a placeholder. See MEMORY.md §1 for rebrand instructions.
 
 **Reference:** PRD + TRD v4.0 | **Pilot City:** Hyderabad, India
@@ -1053,7 +1053,7 @@
 > **Rule:** Gemini output is NEVER written to DB as confirmed order data (I1). EXIF stripped before Gemini call (V18). Invoice JSONB is the legal record — PDF is rendering artifact only.
 
 ### 15.1 Gemini Vision Integration (~60 min)
-- [ ] `POST /api/scrap/analyze` — Clerk JWT required:
+- [x] `POST /api/scrap/analyze` — Clerk JWT required:
   1. `analyzeRateLimiter` — applied first (10 req/user/hour).
   2. Check `globalGeminiCounter` in Redis: if ≥ 1,200/day → return `{ status: 'degraded', manual_entry_required: true }` without calling Gemini (RA1 circuit breaker).
   3. Compute SHA-256 hash of image buffer → check Redis cache (TTL: 24h). If cache hit → return cached result, skip Gemini call.
@@ -1063,38 +1063,39 @@
   7. Cache valid result. Increment `globalGeminiCounter`.
   8. Return with `is_ai_estimate: true` flag.
   > **Hard rule**: never write the returned `estimated_weight_kg` directly to `order_items.confirmed_weight_kg`. AI result is a UI hint only.
-- [ ] Wire Listing Wizard Step 2: after photo capture → call `/api/scrap/analyze`. Show AI estimate badge with "AI estimate — verify before submitting" label. On `manual_entry_required: true` → show "Couldn't analyse — please enter manually" banner, weight input enabled directly.
+- [x] Wire Listing Wizard Step 2: after photo capture → call `/api/scrap/analyze`. Show AI estimate badge with "AI estimate — verify before submitting" label. On `manual_entry_required: true` → show "Couldn't analyse — please enter manually" banner, weight input enabled directly.
 
 ### 15.2 GST Invoice Generation (~50 min)
-- [ ] `backend/src/utils/invoiceGenerator.ts`:
+- [x] `backend/src/utils/invoiceGenerator.ts`:
   - Triggered by `verify-otp` route on `status='completed'` when order has `seller_gstin` OR `total_amount > 50000`.
   - Validate GSTIN format: `/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/` (I3). Reject invalid → skip invoice, log Sentry warning.
-  - Sanitise ALL user-supplied strings (business name, address, material labels) before any `pdf-lib` draw calls (I3).
-  - Generate PDF with `pdf-lib`. File key includes `crypto.randomBytes(8).toString('hex')` segment (V27).
+  - Sanitise ALL user-supplied strings (business name, address, material labels) with `sanitize-html` before embedding in HTML template (I3).
+  - ~~Generate PDF with `pdf-lib`~~ → **Migrated (2026-03-27):** PDF is now rendered via **`puppeteer-core` + `@sparticuz/chromium`** — inline HTML template renders the canonical `sortt_invoice.html` design (Navy/Teal brand, DM Sans + DM Mono fonts, ₹ rupee symbol). `pdf-lib` removed.
+  - File key includes `crypto.randomBytes(8).toString('hex')` segment (V27).
   - Upload via `IStorageProvider.upload()`. Store file key in `invoices.pdf_storage_path`.
   - INSERT `invoices` row: `invoice_data JSONB NOT NULL` with full structured data — invoice number, seller details, material breakdown, totals, GST rate, GSTIN. This JSONB is the legal GST record.
-- [ ] `GET /api/orders/:id/invoice` — Clerk JWT, order seller only:
+- [x] `GET /api/orders/:id/invoice` — Clerk JWT, order seller only:
   - Verify `order.seller_id = req.user.id`.
   - `IStorageProvider.getSignedUrl(pdf_storage_path, 300)` → return signed URL.
-- [ ] Wire receipt screen: "Download Invoice" button → `GET /api/orders/:id/invoice` → opens PDF URL in browser.
+- [x] Wire receipt screen: "Download Invoice" button → `GET /api/orders/:id/invoice` → opens PDF URL in browser.
 
 ### 15.3 Price Scraper (~30 min)
-- [ ] Python 3.12 scraper in `scraper/main.py`:
+- [x] Python 3.12 scraper in `scraper/main.py`:
   - Hard-coded URL allowlist (3–5 Indian scrap price sources). Never fetches from DB-stored URLs (V19 SSRF prevention).
   - Per-material sanity bounds: if scraped rate deviates > 30% from last known rate → `is_manual_override=true` + Sentry alert (X2). Does not write to DB.
   - `INSERT INTO price_index` with `scraped_at=NOW()`, `is_manual_override=false` for clean results.
   - Block private IP ranges in all outbound requests (V19).
-- [ ] Deploy as Azure Function timer trigger (daily 05:30 IST) OR as a node-cron job in the Express scheduler — document which is used.
+- [x] Deploy as Azure Function timer trigger (daily 05:30 IST) OR as a node-cron job in the Express scheduler — document which is used.
 
-### 🚦 DAY 15 VERIFICATION GATE
-- [ ] **G15.1** — Gemini: upload real scrap photo → AI estimate returned with `is_ai_estimate: true`. Weight input pre-filled as hint on mobile.
-- [ ] **G15.2** — Circuit breaker: manually set `globalGeminiCounter` to 1201 in Redis → next `/api/scrap/analyze` returns `{ manual_entry_required: true }` without calling Gemini.
-- [ ] **G15.3** — EXIF strip: upload image with GPS EXIF → Gemini receives buffer with no GPS data (verify via `sharp(buffer).metadata()` in test).
-- [ ] **G15.4** — Gemini output: grep `backend/src/` for any code path that writes `analyzeScrapImage` result directly to `order_items.confirmed_weight_kg` → 0 results (I1).
-- [ ] **G15.5** — GST invoice: complete an order with `seller_gstin` set → PDF generated → `invoices.invoice_data` JSONB populated → download link works from receipt screen.
-- [ ] **G15.6** — Invoice file key: two completed orders → two different file key suffixes (V27 — no predictable path).
-- [ ] **G15.7** — GSTIN with invalid format → 400, no invoice generated, Sentry event captured.
-- [ ] **G15.8** — Price scraper: runs without error. `price_index` table has new rows with `scraped_at` of today.
+### 🚦 DAY 15 VERIFICATION GATE — [GATE PASSED — 2026-03-27]
+- [x] **G15.1** — Gemini: upload real scrap photo → AI estimate returned with `is_ai_estimate: true`. Weight input pre-filled as hint on mobile.
+- [x] **G15.2** — Circuit breaker: manually set `globalGeminiCounter` to 1201 in Redis → next `/api/scrap/analyze` returns `{ manual_entry_required: true }` without calling Gemini.
+- [x] **G15.3** — EXIF strip: upload image with GPS EXIF → Gemini receives buffer with no GPS data (verify via `sharp(buffer).metadata()` in test).
+- [x] **G15.4** — Gemini output: grep `backend/src/` for any code path that writes `analyzeScrapImage` result directly to `order_items.confirmed_weight_kg` → 0 results (I1).
+- [x] **G15.5** — GST invoice: complete an order with `seller_gstin` set → PDF generated → `invoices.invoice_data` JSONB populated → download link works from receipt screen.
+- [x] **G15.6** — Invoice file key: two completed orders → two different file key suffixes (V27 — no predictable path).
+- [x] **G15.7** — GSTIN with invalid format → 400, no invoice generated, Sentry event captured.
+- [x] **G15.8** — Price scraper: runs without error. `price_index` table has new rows with `scraped_at` of today.
 
 ---
 
@@ -1361,7 +1362,7 @@
 
 ## 📊 STATUS TRACKER
 
-> Last updated: 2026-03-20
+> Last updated: 2026-03-27 (invoice PDF engine migrated from pdf-lib → puppeteer-core + @sparticuz/chromium)
 
 ### ✅ Order Data Integrity Overhaul (2026-03-18)
 - Backend accept route now snapshots aggregator rates into `order_items.rate_per_kg` + `amount` within the same accept transaction.
@@ -1388,8 +1389,8 @@
 - [x] Day 11 — Wire Mobile to Live API *(completed)*
 - [x] Day 12 — Atomic Ops (Accept + OTP Verify) *(completed)*
 - [x] Day 13 — Ably Realtime + Push Notifications *(2026-03-20)*
-- [ ] Day 14 — Provider Abstractions (All 5 Packages)
-- [ ] Day 15 — Gemini Vision + GST Invoice + Price Scraper
+- [x] Day 14 — Provider Abstractions (All 5 Packages) *(2026-03-24)*
+- [x] Day 15 — Gemini Vision + GST Invoice + Price Scraper *(2026-03-27)*
 - [ ] Day 16 — Web Portal + Admin Dashboard + Tests
 - [ ] Day 17 — Security Audit + Monitoring + Launch
 
