@@ -103,8 +103,8 @@ function buildInvoiceHtml(data: {
 <head>
 <meta charset="UTF-8">
 <title>Sortt — Order Invoice ${invoiceNumber}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
   :root {
     --navy:       #1C2E4A;
@@ -351,8 +351,8 @@ function buildInvoiceHtml(data: {
         <div class="meta-val">${sanitizeText(orderDisplayId)}</div>
       </div>
       <div class="meta-cell">
-        <div class="meta-lbl">Pickup Completed</div>
-        <div class="meta-val">${sanitizeText(formatDate(orderCompletedAt))}</div>
+        <div class="meta-lbl">Pickup Date &amp; Time</div>
+        <div class="meta-val">${sanitizeText(formatDateTime(orderCompletedAt))}</div>
       </div>
       <div class="meta-cell">
         <div class="meta-lbl">Payment Mode</div>
