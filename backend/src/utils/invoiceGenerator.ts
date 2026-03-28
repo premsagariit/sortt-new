@@ -1,9 +1,6 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import sanitizeHtml from 'sanitize-html';
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, LineCapStyle } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { storageProvider } from '../lib/storage';
@@ -18,7 +15,7 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
-const fmtAmount = (n: number) => `₹${n.toFixed(2)}`;
+const fmtAmount = (n: number) => `Rs. ${n.toFixed(2)}`;
 
 const formatDate = (date: Date | string | null | undefined): string => {
   if (!date) return 'N/A';
@@ -283,28 +280,13 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
 
     console.log(`[Invoice] DB record created id=${invoiceId}, generating PDF via pdf-lib...`);
 
-    // PDF Generation
+    // PDF Generation — use standard embedded fonts (WinAnsi-safe, no external files needed)
     const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
 
-    let fontSans: PDFFont;
-    let fontSansBold: PDFFont;
-    let fontMono: PDFFont;
-
-    try {
-      const dmSansBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMSans-Regular.ttf'));
-      const dmSansBoldBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMSans-Bold.ttf'));
-      const dmMonoBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMMono-Regular.ttf'));
-      fontSans = await pdfDoc.embedFont(dmSansBytes);
-      fontSansBold = await pdfDoc.embedFont(dmSansBoldBytes);
-      fontMono = await pdfDoc.embedFont(dmMonoBytes);
-      console.log('[Invoice] Successfully loaded DM custom fonts');
-    } catch (e) {
-      console.warn('[Invoice] Custom fonts not found, falling back to standard Helvetica/Courier in pdf-lib');
-      fontSans = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      fontSansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      fontMono = await pdfDoc.embedFont(StandardFonts.Courier);
-    }
+    const fontSans     = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontMono     = await pdfDoc.embedFont(StandardFonts.Courier);
+    console.log('[Invoice] Using standard Helvetica/Courier fonts (WinAnsi-safe)');
 
     // Dynamic height measurement
     const MARGIN_SIDE = 44;
