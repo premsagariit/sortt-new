@@ -406,10 +406,10 @@ export const useOrderStore = create<OrderStoreState>()(
       getOrderById: (id: string) => get().orders.find((o) => o.orderId === id),
 
       // ── Async: cancel an order (V35 — no status='completed' ever set from client) ──
-      cancelOrder: async (id: string) => {
+      cancelOrder: async (id: string, note?: string) => {
         set({ error: null, isNetworkError: false });
         try {
-          await api.delete(`/api/orders/${id}`);
+          await api.delete(`/api/orders/${id}`, { data: note ? { note } : undefined });
           set((state) => ({
             orders: state.orders.map(o =>
               o.orderId === id ? { ...o, status: 'cancelled', updatedAt: new Date().toISOString() } : o

@@ -230,6 +230,16 @@ export default function AggregatorOrderByIdScreen() {
               {orderDistance} away
             </Text>
           </View>
+          {totalEst > 0 && (
+            <>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text variant="label" style={[styles.summaryText, { color: colors.amber }]}>
+                  ~₹{totalEst.toLocaleString('en-IN')}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.content}>
@@ -256,14 +266,28 @@ export default function AggregatorOrderByIdScreen() {
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
               <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
-              <Text variant="caption" style={[styles.col, styles.colWeight]}>WEIGHT</Text>
+              <Text variant="caption" style={[styles.col, styles.colWeight]}>~WT</Text>
+              <Text variant="caption" style={[styles.col, styles.colRate]}>YOUR RATE</Text>
             </View>
             {items.map((item, idx) => (
               <View key={`${item.material}-${idx}`} style={[styles.tableRow, idx === items.length - 1 && { borderBottomWidth: 0 }]}>
                 <Text variant="label" color={colors.navy} style={[styles.col, styles.colMaterial]}>{item.material}</Text>
-                <Numeric size={14} style={[styles.col, styles.colWeight, { color: colors.teal }]}>{item.weight} kg</Numeric>
+                <Numeric size={13} style={[styles.col, styles.colWeight, { color: item.weight > 0 ? colors.slate : colors.muted }]}>
+                  {item.weight > 0 ? `${item.weight} kg` : '—'}
+                </Numeric>
+                <Numeric size={13} style={[styles.col, styles.colRate, { color: item.yourRate ? colors.teal : colors.muted }]}>
+                  {item.yourRate ? `₹${item.yourRate}/kg` : '—'}
+                </Numeric>
               </View>
             ))}
+            {totalEst > 0 && (
+              <View style={styles.tableTotalRow}>
+                <Text variant="label" style={styles.tableTotalLabel}>Est. Value</Text>
+                <Numeric size={15} style={styles.tableTotalValue}>
+                  ₹{totalEst.toLocaleString('en-IN')}
+                </Numeric>
+              </View>
+            )}
           </View>
 
           <View style={styles.sectionHeader}>
@@ -446,6 +470,30 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: 'right',
   },
+  colRate: {
+    flex: 2,
+    textAlign: 'right',
+  },
+  tableTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  tableTotalLabel: {
+    color: colors.slate,
+    fontFamily: 'DMSans-SemiBold',
+    fontSize: 13,
+  },
+  tableTotalValue: {
+    color: colors.amber,
+    fontFamily: 'DMMono-Medium',
+    fontSize: 15,
+  },
   locationCard: {
     padding: spacing.md,
     gap: spacing.md,
@@ -524,13 +572,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surface,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     flexDirection: 'row',
     gap: 12,
-    borderTopWidth: 0,
-    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 28,
   },
   rejectBtn: {
     flex: 1,

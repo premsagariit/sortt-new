@@ -164,7 +164,11 @@ export const useListingStore = create<ListingState>((set, get) => ({
       estimated_weights[code] = parseFloat(state.weights[code] ?? '0') || 0;
     }
 
-    const pickup_preference = SLOT_TO_SESSION[state.scheduledTime] || 'anytime';
+    const pickup_preference = {
+      type: SLOT_TO_SESSION[state.scheduledTime] || 'anytime',
+      scheduledDate: state.scheduledDate || null,
+      scheduledTime: state.scheduledTime || null,
+    };
 
     try {
       const res = await api.post('/api/orders', {

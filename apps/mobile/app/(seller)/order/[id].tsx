@@ -550,6 +550,12 @@ export default function SellerOrderDetailScreen() {
         <CancelOrderModal
           orderId={order.orderId}
           onClose={() => setShowCancelSheet(false)}
+          onConfirm={() => {
+            // CancelOrderModal already handled the API call successfully.
+            // Navigate seller back to the orders list.
+            setShowCancelSheet(false);
+            safeBack('/(seller)/orders');
+          }}
         />
       )}
     </View>

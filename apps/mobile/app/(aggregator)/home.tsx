@@ -245,12 +245,13 @@ export default function AggregatorHomeScreen() {
             </View>
           </View>
         )}
-        {/* Top row */}
+
+        {/* Top row: locality + distance badge */}
         <View style={styles.feedTop}>
           <View style={styles.feedTopLeft}>
             <Text variant="body" style={styles.feedLocality}>{item.locality}</Text>
             <Text variant="caption" color={colors.muted}>
-              Posted {item.postedMinutesAgo} min ago · ~{item.estimatedKg} kg
+              {item.sellerType ? `${item.sellerType} · ` : ''}~{item.estimatedKg} kg
             </Text>
           </View>
           <View style={styles.distanceBadge}>
@@ -259,19 +260,22 @@ export default function AggregatorHomeScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Meta row: window + est. value */}
         <View style={styles.headerInfo}>
-          <View style={styles.headerInfoItem}>
-            <MapPin size={12} color={colors.muted} />
-            <Numeric size={12} color={colors.muted}>
-              {typeof item.distanceKm === 'number' ? `${item.distanceKm.toFixed(1)} km` : '0.0 km'}
-            </Numeric>
-          </View>
           <View style={styles.headerInfoItem}>
             <Calendar size={12} color={colors.muted} />
             <Text variant="caption" color={colors.muted}>
-              {typeof item.window === 'string' ? item.window : 'Flexible'}
+              {typeof item.window === 'string' && item.window ? item.window : 'Flexible pickup'}
             </Text>
           </View>
+          {item.estimatedPrice > 0 && (
+            <View style={[styles.headerInfoItem, { marginLeft: 'auto' }]}>
+              <Text variant="caption" style={styles.estValueText}>
+                ~₹{item.estimatedPrice.toLocaleString('en-IN')}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Material tags */}
@@ -288,21 +292,21 @@ export default function AggregatorHomeScreen() {
           ))}
         </View>
 
-        {/* Action buttons */}
+        {/* Action buttons — exactly half-width each */}
         <View style={styles.feedActions}>
           {isLocked ? (
             <Pressable
-              style={styles.feedBtnUpdate}
+              style={[styles.feedBtn, styles.feedBtnUpdate]}
               onPress={() => router.push('/(aggregator)/price-index')}
             >
               <Text variant="button" style={styles.feedBtnUpdateText}>Update rates to bid</Text>
             </Pressable>
           ) : (
             <Pressable
-              style={styles.feedBtnAccept}
+              style={[styles.feedBtn, styles.feedBtnAccept]}
               onPress={() => router.push({ pathname: '/(aggregator)/order/[id]', params: { id: item.id } } as any)}
             >
-              <Text variant="button" style={styles.feedBtnAcceptText}>View</Text>
+              <Text variant="button" style={styles.feedBtnAcceptText}>View Order</Text>
             </Pressable>
           )}
           <View style={styles.feedBtnDivider} />
@@ -901,6 +905,7 @@ const styles = StyleSheet.create({
   feedBtnAcceptText: {
     color: colors.teal,
     fontFamily: 'DMSans-Bold',
+    fontSize: 13,
   },
   feedBtnChat: {
     backgroundColor: colors.surface,
@@ -914,6 +919,12 @@ const styles = StyleSheet.create({
   },
   feedBtnRejectText: {
     color: colors.muted,
+    fontSize: 13,
+  },
+  estValueText: {
+    color: colors.amber,
+    fontFamily: 'DMSans-SemiBold',
+    fontSize: 12,
   },
 
   // ── Rates List (Row Layout) ──

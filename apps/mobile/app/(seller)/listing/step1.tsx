@@ -78,12 +78,17 @@ export default function Step1Screen() {
     }
   };
 
+  // Ref tracks the last URI we already sent to analyze — prevents
+  // duplicate calls from StrictMode double-invocations or remounts.
+  const lastAnalyzedUri = React.useRef<string | null>(null);
+
   useEffect(() => {
-    if (photoUri) {
+    if (photoUri && photoUri !== lastAnalyzedUri.current) {
+      lastAnalyzedUri.current = photoUri;
       addPhotoUri(photoUri);
       analyzePhoto(photoUri);
     }
-  }, [photoUri, addPhotoUri]);
+  }, [photoUri]);
 
   const handleAddPhoto = async () => {
     await capturePhoto();

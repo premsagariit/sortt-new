@@ -136,6 +136,13 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     const order = await withUser<DbOrder>(userId, async (client) => {
       await client.query('BEGIN');
       try {
+        // pickup_preference can be a string (legacy) or structured object { type, scheduledDate, scheduledTime }
+        const rawPref = preferred_pickup_window;
+        const prefObj = typeof rawPref === 'object' && rawPref !== null
+          ? rawPref
+          : { type: typeof rawPref === 'string' ? rawPref : 'anytime', scheduledDate: null, scheduledTime: null };
+        const windowJson = JSON.stringify(prefObj);
+
         const orderRes = await client.query(`
               INSERT INTO orders (
                 seller_id, city_code, pickup_address, pickup_locality, pickup_lat, pickup_lng, preferred_pickup_window, seller_note, status
@@ -148,7 +155,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
           selectedAddress.pickup_locality,
           selectedAddress.latitude,
           selectedAddress.longitude,
-          JSON.stringify({ type: preferred_pickup_window }),
+          windowJson,
           cleanNote,
         ]);
 
@@ -426,9 +433,42 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
       });
     }
 
+    // Parse aggregator location from query params (sent by mobile fetchFeed)
+    const aggLat = req.query.lat ? Number(req.query.lat) : null;
+    const aggLng = req.query.lng ? Number(req.query.lng) : null;
+    const hasAggLoc = aggLat !== null && Number.isFinite(aggLat) && aggLng !== null && Number.isFinite(aggLng);
+
+    const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+      const R = 6371;
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
     // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
     return res.json({
-      orders: rows.map((o: DbOrder) => buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))),
+      orders: rows.map((o: DbOrder) => {
+        const dto = buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type));
+        // Compute total estimated weight from estimated_weights jsonb map
+        const weightMap: Record<string, any> = typeof o.estimated_weights === 'object' && o.estimated_weights !== null
+          ? o.estimated_weights as Record<string, any>
+          : {};
+        const totalWeight = Object.values(weightMap).reduce((s: number, v: any) => s + Number(v ?? 0), 0);
+        // Compute distance from aggregator's current location (if provided)
+        const oLat = typeof o.pickup_lat === 'number' ? o.pickup_lat : null;
+        const oLng = typeof o.pickup_lng === 'number' ? o.pickup_lng : null;
+        const distanceKm = (hasAggLoc && oLat !== null && oLng !== null)
+          ? parseFloat(haversineKm(aggLat!, aggLng!, oLat, oLng).toFixed(1))
+          : null;
+        return {
+          ...dto,
+          estimated_weight_kg: totalWeight > 0 ? parseFloat(totalWeight.toFixed(1)) : null,
+          distance_km: distanceKm,
+        };
+      }),
       nextCursor: rows.length > 0 ? rows[rows.length - 1].created_at : null,
       hasMore
     });
@@ -1059,6 +1099,12 @@ router.patch('/:id/status', async (req, res) => {
               } else if (newStatus === 'completed') {
                 title = 'Order Completed';
                 body = 'Pickup successful. Check your balance.';
+              } else if (newStatus === 'cancelled') {
+                title = 'Order Cancelled';
+                body = `Order #${formattedOrderNumber} has been cancelled.`;
+              } else if (newStatus === 'disputed') {
+                title = 'Order Disputed';
+                body = `A dispute was raised for order #${formattedOrderNumber}.`;
               }
 
               await createNotification(otherPartyId, title, body, 'order', {
@@ -1152,11 +1198,15 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
+    const { note } = req.body; // optional cancellation reason from UI
+
+    let cancelledFromStatus = 'created';
+    let assignedAggregatorId: string | null = null;
 
     await withUser(userId, async (client) => {
       await client.query('BEGIN');
       try {
-        const orderRes = await client.query('SELECT seller_id, status FROM orders WHERE id = $1 FOR UPDATE', [id]);
+        const orderRes = await client.query('SELECT seller_id, status, aggregator_id FROM orders WHERE id = $1 FOR UPDATE', [id]);
 
         if (orderRes.rows.length === 0) {
           await client.query('ROLLBACK');
@@ -1175,12 +1225,17 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
           return res.status(400).json({ error: 'cannot cancel order in this status' });
         }
 
+        cancelledFromStatus = order.status;
+        assignedAggregatorId = order.aggregator_id ?? null;
+
+        const cancelNote = stripHtml(note) || 'Order cancelled by seller';
+
         await client.query('UPDATE orders SET status = $1, deleted_at = NOW(), updated_at = NOW() WHERE id = $2', ['cancelled', id]);
 
         await client.query(`
           INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
-          VALUES ($1, $2, 'cancelled', $3, 'Order cancelled by seller')
-             `, [id, order.status, userId]);
+          VALUES ($1, $2, 'cancelled', $3, $4)
+             `, [id, cancelledFromStatus, userId, cancelNote]);
 
         await client.query('COMMIT');
         return res.json({ success: true });
@@ -1189,8 +1244,60 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
         throw e;
       }
     });
+
+    // Fire Ably real-time event + notification to aggregator (if order was accepted)
+    setImmediate(async () => {
+      try {
+        const orderRes = await query('SELECT order_number FROM orders WHERE id = $1', [id]);
+        const order = orderRes.rows[0];
+        const formattedOrderNumber = order?.order_number
+          ? String(order.order_number).padStart(6, '0')
+          : id.slice(0, 8).toUpperCase();
+        const orderDisplayId = `#${formattedOrderNumber}`;
+
+        const statusPayload = {
+          orderId: id,
+          status: 'cancelled',
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Notify seller's own channel
+        const sellerChannel = channelName(userId, 'order', id);
+        await publishEvent(sellerChannel, 'status_updated', statusPayload);
+
+        // Notify aggregator if order was already accepted/en_route
+        if (assignedAggregatorId) {
+          const aggChannel = channelName(assignedAggregatorId, 'order', id);
+          await publishEvent(aggChannel, 'status_updated', statusPayload);
+
+          await createNotification(
+            assignedAggregatorId,
+            'Order Cancelled',
+            `Order ${orderDisplayId} has been cancelled by the seller.`,
+            'order',
+            {
+              order_id: id,
+              order_display_id: orderDisplayId,
+              kind: 'order_cancelled',
+            }
+          );
+
+          await sendPushToUsers(
+            [assignedAggregatorId],
+            'Order Cancelled',
+            `Order ${orderDisplayId} was cancelled by the seller.`,
+            { order_id: id, kind: 'order_cancelled' }
+          );
+        }
+      } catch (err) {
+        console.error('[Cancel] Post-cancel notification error (non-fatal):', err);
+        Sentry.captureException(err, { tags: { operation: 'cancel_notify' } });
+      }
+    });
+
   } catch (e) {
     console.error('DELETE /api/orders/:id error:', e);
+    Sentry.captureException(e);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

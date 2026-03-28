@@ -20,7 +20,7 @@ type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
-  const { newOrders, aggOrders, dismissNewOrder, acceptOrderApi, cancelOrder, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
+  const { newOrders, aggOrders, dismissNewOrder, acceptOrderApi, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
   const materials = useAggregatorStore((s) => s.materials);
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
@@ -472,10 +472,13 @@ export default function AggregatorOrdersScreen() {
         <CancelOrderModal
           orderId={cancelOrderId}
           onClose={() => setCancelOrderId(null)}
-          onConfirm={(reason: string) => {
-            cancelOrder(cancelOrderId);
+          onConfirm={() => {
+            // CancelOrderModal already called DELETE /api/orders/:id successfully.
+            // Just update UI state: dismiss modal, switch to Cancelled tab, refresh orders.
             setCancelOrderId(null);
             setActiveTab('cancelled');
+            // Trigger background re-fetch so aggOrders updates with cancelled status
+            void fetchAggregatorOrders(true);
           }}
         />
       )}
@@ -539,7 +542,7 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   materialsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   actionRow: { flexDirection: 'row', marginTop: spacing.md, gap: spacing.sm },
-  acceptBtn: { flex: 2, height: 40, backgroundColor: colors.teal },
+  acceptBtn: { flex: 1, height: 40, backgroundColor: colors.teal },
   actionBtn: { flex: 1, height: 40, backgroundColor: colors.navy },
   chatBtn: { flex: 1, height: 40 },
   carouselContainer: { height: 46 },

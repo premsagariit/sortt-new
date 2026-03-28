@@ -231,20 +231,66 @@ const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
   { day: 'Sunday', isOpen: false, start: '10:00 AM', end: '02:00 PM' },
 ];
 
+// Maps time slot codes to human-readable labels
+const SLOT_LABELS: Record<string, string> = {
+  morning_8_10: '8–10 AM',
+  morning_10_12: '10 AM–12 PM',
+  afternoon_12_2: '12–2 PM',
+  afternoon_2_4: '2–4 PM',
+  afternoon_4_6: '4–6 PM',
+  evening_6_plus: '6 PM+',
+  morning: 'Morning',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+  anytime: 'Flexible',
+};
+
 // Maps feed API order → NewOrderRequest (V25: never includes pickup_address)
 function mapFeedOrder(o: any): NewOrderRequest {
   const parsedDistance = Number(o.distance_km ?? o.distanceKm ?? 0);
-  const distanceKm = Number.isFinite(parsedDistance) ? parsedDistance : 0;
+  const distanceKm = Number.isFinite(parsedDistance) && parsedDistance > 0 ? parsedDistance : 0;
   const createdAt = o.created_at ? new Date(o.created_at) : new Date();
   const postedMinutesAgo = Math.floor((Date.now() - createdAt.getTime()) / 60000);
-  
-  // V10 Fix: preferred_pickup_window might be an object { type: '...' }
-  let windowLabel = 'Flexible';
-  if (o.preferred_pickup_window) {
-    if (typeof o.preferred_pickup_window === 'object') {
-      windowLabel = o.preferred_pickup_window.type || 'Flexible';
-    } else {
-      windowLabel = String(o.preferred_pickup_window);
+
+  // Compute total estimated weight: prefer explicit field, fall back to summing map
+  let estimatedKg: number;
+  if (typeof o.estimated_weight_kg === 'number' && o.estimated_weight_kg > 0) {
+    estimatedKg = o.estimated_weight_kg;
+  } else {
+    const weightsMap: Record<string, any> =
+      typeof o.estimated_weights === 'object' && o.estimated_weights !== null
+        ? o.estimated_weights as Record<string, any>
+        : {};
+    estimatedKg = Object.values(weightsMap).reduce((s: number, v: any) => s + Number(v ?? 0), 0);
+  }
+
+  // Parse preferred_pickup_window — can be:
+  //   - old: "morning" (string)
+  //   - new: { type: "morning", scheduledDate: "2026-04-04T00:00:00Z", scheduledTime: "morning_8_10" }
+  let windowLabel = 'Flexible pickup';
+  const ppw = o.preferred_pickup_window;
+  if (ppw) {
+    let parsed: any = ppw;
+    // If stored as JSON string, parse it
+    if (typeof ppw === 'string') {
+      try { parsed = JSON.parse(ppw); } catch { parsed = { type: ppw }; }
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const dateStr = parsed.scheduledDate ?? parsed.date ?? null;
+      const slotStr = parsed.scheduledTime ?? parsed.time ?? parsed.type ?? null;
+      const dateLabel = dateStr
+        ? new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+        : null;
+      const slotLabel = slotStr ? (SLOT_LABELS[slotStr] ?? slotStr) : null;
+      if (dateLabel && slotLabel) {
+        windowLabel = `${dateLabel} · ${slotLabel}`;
+      } else if (dateLabel) {
+        windowLabel = dateLabel;
+      } else if (slotLabel) {
+        windowLabel = slotLabel;
+      }
+    } else if (typeof parsed === 'string') {
+      windowLabel = SLOT_LABELS[parsed] ?? parsed;
     }
   }
 
@@ -257,7 +303,7 @@ function mapFeedOrder(o: any): NewOrderRequest {
     locality: o.pickup_locality ?? 'Unknown area',    // V25: only locality, never full address
     distanceKm,
     materials: (o.material_codes ?? []) as MaterialCode[],
-    estimatedKg: typeof o.estimated_weight_kg === 'number' ? o.estimated_weight_kg : 0,
+    estimatedKg: parseFloat(estimatedKg.toFixed(1)),
     postedMinutesAgo,
     estimatedPrice: typeof o.estimated_value === 'number' ? o.estimated_value : 0,
     estimatedWeights: (o.estimated_weights && typeof o.estimated_weights === 'object') ? o.estimated_weights : {},
@@ -509,7 +555,28 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     else if (!silent) set({ isLoading: true, isNetworkError: false });
 
     try {
-      const res = await api.get('/api/orders/feed');
+      // Try to get device location to enable server-side distance computation
+      let lat: number | null = null;
+      let lng: number | null = null;
+      try {
+        const Location = require('expo-location');
+        const hasPerm = await Location.getForegroundPermissionsAsync();
+        if (hasPerm.status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, timeout: 5000 });
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+        }
+      } catch {
+        // Location unavailable — distance will show as 0 on cards
+      }
+
+      const params: Record<string, any> = {};
+      if (lat !== null && lng !== null) {
+        params.lat = lat.toFixed(6);
+        params.lng = lng.toFixed(6);
+      }
+
+      const res = await api.get('/api/orders/feed', { params });
       const orders = (res.data.orders ?? []).map(mapFeedOrder);
       set({ newOrders: orders, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: new Date().toISOString(), isNetworkError: false });
     } catch (e: any) {
