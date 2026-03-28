@@ -59,6 +59,16 @@ export default function SellerLayout() {
               />
             ),
           }}
+          listeners={
+            tab.name === 'listing'
+              ? {
+                  tabPress: () => {
+                    const { useListingStore } = require('../../store/listingStore');
+                    useListingStore.getState().resetListing();
+                  },
+                }
+              : undefined
+          }
         />
       ))}
       <Tabs.Screen name="prices" options={{ href: null }} />

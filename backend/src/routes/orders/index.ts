@@ -458,8 +458,8 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
           : {};
         const totalWeight = Object.values(weightMap).reduce((s: number, v: any) => s + Number(v ?? 0), 0);
         // Compute distance from aggregator's current location (if provided)
-        const oLat = typeof o.pickup_lat === 'number' ? o.pickup_lat : null;
-        const oLng = typeof o.pickup_lng === 'number' ? o.pickup_lng : null;
+        const oLat = parseNumberOrNull(o.pickup_lat);
+        const oLng = parseNumberOrNull(o.pickup_lng);
         const distanceKm = (hasAggLoc && oLat !== null && oLng !== null)
           ? parseFloat(haversineKm(aggLat!, aggLng!, oLat, oLng).toFixed(1))
           : null;
