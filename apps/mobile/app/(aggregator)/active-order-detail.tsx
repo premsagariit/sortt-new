@@ -319,7 +319,7 @@ export default function ActiveOrderDetailScreen() {
                     orderId={internalOrderId}
                     onClose={() => setShowCancelModal(false)}
                     onConfirm={() => {
-                        setShowCancelModal(false);
+                        // onConfirm is only called after successful API cancel
                         safeBack('/(aggregator)/orders');
                     }}
                 />

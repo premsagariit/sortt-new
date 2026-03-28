@@ -27,6 +27,7 @@ import { usePhotoCapture } from '../../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../../utils/navigation';
 import { api } from '../../../../lib/api';
 import { ImageCarouselViewer } from '../../../../components/ui/ImageCarouselViewer';
+import { CancelOrderModal } from '../../../../components/domain/CancelOrderModal';
 
 const MATERIAL_MAP: Record<MaterialCode, { label: string }> = {
     metal: { label: 'Metal / Iron' },
@@ -45,6 +46,7 @@ export default function WeighingScreen() {
     const order = orders.find(o => o.orderId === id);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
 
     const [weights, setWeights] = useState<Record<string, string>>({});
     const [liveRates, setLiveRates] = useState<any[]>([]);
@@ -379,13 +381,33 @@ export default function WeighingScreen() {
             </ScrollView>
 
             <View style={styles.footer}>
-                <PrimaryButton
-                    label="Next →"
-                    onPress={handleNext}
-                    disabled={!canSubmit}
-                    loading={isSubmitting}
-                />
+                <View style={styles.footerRow}>
+                    <SecondaryButton
+                        label="Cancel Order"
+                        style={styles.cancelBtn}
+                        textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
+                        onPress={() => setShowCancelModal(true)}
+                    />
+                    <PrimaryButton
+                        label="Next →"
+                        onPress={handleNext}
+                        disabled={!canSubmit}
+                        loading={isSubmitting}
+                        style={styles.nextBtn}
+                    />
+                </View>
             </View>
+
+            {showCancelModal && (
+                <CancelOrderModal
+                    orderId={id ?? ''}
+                    onClose={() => setShowCancelModal(false)}
+                    onConfirm={() => {
+                        setShowCancelModal(false);
+                        safeBack('/(aggregator)/orders');
+                    }}
+                />
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -535,5 +557,18 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         borderTopWidth: 1,
         borderTopColor: colors.border,
+    },
+    footerRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    cancelBtn: {
+        flex: 1,
+        height: 48,
+        borderColor: colors.red,
+    },
+    nextBtn: {
+        flex: 2,
+        height: 48,
     },
 });

@@ -1,21 +1,22 @@
 import crypto from 'crypto';
 import sanitizeHtml from 'sanitize-html';
-import puppeteer from 'puppeteer';
+import puppeteerCore from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { storageProvider } from '../lib/storage';
 
-/** Resolve the Chromium executable that works on both local and Azure App Service.
- *  On Azure, PUPPETEER_CACHE_DIR points to the deployed node_modules/.cache/puppeteer dir.
- *  On local dev, puppeteer finds it automatically via its own cache lookup.
+/** Resolve the Chromium executable.
+ *  Priority order:
+ *  1. PUPPETEER_EXECUTABLE_PATH env var (manual override for any env)
+ *  2. @sparticuz/chromium bundled binary (works on Azure App Service, Lambda, etc.)
  */
-async function resolveBrowserExecutable(): Promise<string | undefined> {
-  // If the caller explicitly sets PUPPETEER_EXECUTABLE_PATH, always honour it.
+async function resolveBrowserExecutable(): Promise<string> {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
   }
-  // Let puppeteer find its own bundled browser (works for standard deployments).
-  return undefined; // undefined → puppeteer uses its internal default
+  // @sparticuz/chromium ships a pre-extracted Chromium binary — no post-install download needed.
+  return chromium.executablePath();
 }
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -522,7 +523,7 @@ function buildInvoiceHtml(data: {
 // Main export — fetch order data, build HTML, render to PDF, upload to R2
 // --------------------------------------------------------------------------
 export async function generateAndStoreInvoice(orderId: string): Promise<void> {
-  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+  let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | null = null;
 
   try {
     console.log(`[Invoice] Starting professional generation for order ${orderId}`);
@@ -685,8 +686,9 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     });
 
     const executablePath = await resolveBrowserExecutable();
-    browser = await puppeteer.launch({
+    browser = await puppeteerCore.launch({
       args: [
+        ...chromium.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
@@ -698,7 +700,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
       ],
       defaultViewport: { width: 1200, height: 1754 }, // A4 @ 144 dpi
       headless: true,
-      ...(executablePath ? { executablePath } : {}),
+      executablePath,
     });
 
     const page = await browser.newPage();
@@ -706,7 +708,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     // Block external network requests (Google Fonts, analytics, etc.) to prevent hangs.
     // All assets are now inlined or use system fonts.
     await page.setRequestInterception(true);
-    page.on('request', (req) => {
+    page.on('request', (req: import('puppeteer-core').HTTPRequest) => {
       const url = req.url();
       // Abort requests to external domains — only allow data URIs and about:blank
       if (url.startsWith('http://') || url.startsWith('https://')) {

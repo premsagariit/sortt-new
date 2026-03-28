@@ -1191,22 +1191,27 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-// 5. DELETE /api/orders/:id
-router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
+// 5. DELETE /api/orders/:id — seller or aggregator can cancel at any non-terminal status
+router.delete('/:id', verifyUserRole(['seller', 'aggregator']), async (req, res) => {
   try {
     const userId = req.user?.id;
+    const userType = req.user?.user_type; // 'seller' | 'aggregator'
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
     const { note } = req.body; // optional cancellation reason from UI
 
     let cancelledFromStatus = 'created';
+    let sellerId: string | null = null;
     let assignedAggregatorId: string | null = null;
 
     await withUser(userId, async (client) => {
       await client.query('BEGIN');
       try {
-        const orderRes = await client.query('SELECT seller_id, status, aggregator_id FROM orders WHERE id = $1 FOR UPDATE', [id]);
+        const orderRes = await client.query(
+          'SELECT seller_id, aggregator_id, status FROM orders WHERE id = $1 FOR UPDATE',
+          [id]
+        );
 
         if (orderRes.rows.length === 0) {
           await client.query('ROLLBACK');
@@ -1214,8 +1219,13 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
         }
 
         const order = orderRes.rows[0];
+        sellerId = order.seller_id;
+        assignedAggregatorId = order.aggregator_id ?? null;
 
-        if (order.seller_id !== userId) {
+        // Authorization: seller owns the order; aggregator must be assigned to it
+        const isSeller = userType === 'seller' && order.seller_id === userId;
+        const isAggregator = userType === 'aggregator' && order.aggregator_id === userId;
+        if (!isSeller && !isAggregator) {
           await client.query('ROLLBACK');
           return res.status(403).json({ error: 'forbidden' });
         }
@@ -1226,16 +1236,17 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
         }
 
         cancelledFromStatus = order.status;
-        assignedAggregatorId = order.aggregator_id ?? null;
+        const cancelNote = stripHtml(note) || (isSeller ? 'Order cancelled by seller' : 'Order cancelled by aggregator');
 
-        const cancelNote = stripHtml(note) || 'Order cancelled by seller';
-
-        await client.query('UPDATE orders SET status = $1, deleted_at = NOW(), updated_at = NOW() WHERE id = $2', ['cancelled', id]);
+        await client.query(
+          'UPDATE orders SET status = $1, deleted_at = NOW(), updated_at = NOW() WHERE id = $2',
+          ['cancelled', id]
+        );
 
         await client.query(`
           INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
           VALUES ($1, $2, 'cancelled', $3, $4)
-             `, [id, cancelledFromStatus, userId, cancelNote]);
+        `, [id, cancelledFromStatus, userId, cancelNote]);
 
         await client.query('COMMIT');
         return res.json({ success: true });
@@ -1245,47 +1256,41 @@ router.delete('/:id', verifyUserRole('seller'), async (req, res) => {
       }
     });
 
-    // Fire Ably real-time event + notification to aggregator (if order was accepted)
+    // Fire Ably real-time events + notifications to BOTH parties (non-fatal)
     setImmediate(async () => {
       try {
         const orderRes = await query('SELECT order_number FROM orders WHERE id = $1', [id]);
-        const order = orderRes.rows[0];
-        const formattedOrderNumber = order?.order_number
-          ? String(order.order_number).padStart(6, '0')
+        const orderRow = orderRes.rows[0];
+        const formattedOrderNumber = orderRow?.order_number
+          ? String(orderRow.order_number).padStart(6, '0')
           : id.slice(0, 8).toUpperCase();
         const orderDisplayId = `#${formattedOrderNumber}`;
 
-        const statusPayload = {
-          orderId: id,
-          status: 'cancelled',
-          updatedAt: new Date().toISOString(),
-        };
+        const statusPayload = { orderId: id, status: 'cancelled', updatedAt: new Date().toISOString() };
+        const cancelledByLabel = userType === 'aggregator' ? 'the aggregator' : 'the seller';
 
-        // Notify seller's own channel
-        const sellerChannel = channelName(userId, 'order', id);
-        await publishEvent(sellerChannel, 'status_updated', statusPayload);
+        // Notify the canceller's own channel
+        const cancellerChannel = channelName(userId, 'order', id);
+        await publishEvent(cancellerChannel, 'status_updated', statusPayload);
 
-        // Notify aggregator if order was already accepted/en_route
-        if (assignedAggregatorId) {
-          const aggChannel = channelName(assignedAggregatorId, 'order', id);
-          await publishEvent(aggChannel, 'status_updated', statusPayload);
+        // Notify the OTHER party
+        const otherPartyId = userType === 'aggregator' ? sellerId : assignedAggregatorId;
+        if (otherPartyId) {
+          const otherChannel = channelName(otherPartyId, 'order', id);
+          await publishEvent(otherChannel, 'status_updated', statusPayload);
 
           await createNotification(
-            assignedAggregatorId,
+            otherPartyId,
             'Order Cancelled',
-            `Order ${orderDisplayId} has been cancelled by the seller.`,
+            `Order ${orderDisplayId} has been cancelled by ${cancelledByLabel}.`,
             'order',
-            {
-              order_id: id,
-              order_display_id: orderDisplayId,
-              kind: 'order_cancelled',
-            }
+            { order_id: id, order_display_id: orderDisplayId, kind: 'order_cancelled' }
           );
 
           await sendPushToUsers(
-            [assignedAggregatorId],
+            [otherPartyId],
             'Order Cancelled',
-            `Order ${orderDisplayId} was cancelled by the seller.`,
+            `Order ${orderDisplayId} was cancelled by ${cancelledByLabel}.`,
             { order_id: id, kind: 'order_cancelled' }
           );
         }

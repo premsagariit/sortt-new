@@ -44,7 +44,15 @@
           "cameraPermission": "Sortt uses the camera to photograph your scrap pile and weighing scale."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "@maplibre/maplibre-react-native",
+        {
+          "android": {
+            "nativeVersion": "11.8.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

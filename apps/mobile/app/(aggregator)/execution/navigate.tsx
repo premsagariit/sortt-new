@@ -6,7 +6,7 @@ import * as Location from 'expo-location';
 import { Globe, Phone, ChatCenteredText, MapPin } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
-import { PrimaryButton } from '../../../components/ui/Button';
+import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
 import { safeBack } from '../../../utils/navigation';
@@ -15,6 +15,7 @@ import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore } from '../../../store/chatStore';
 import { EmptyState } from '../../../components/ui/EmptyState';
+import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
 import { api } from '../../../lib/api';
 import { MAP_RENDERING_AVAILABLE } from '../../../utils/mapAvailable';
 import { getMapLibreModule } from '../../../lib/maplibre';
@@ -24,6 +25,7 @@ import { openExternalDirections } from '../../../utils/mapNavigation';
 export default function NavigateScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [showCancelModal, setShowCancelModal] = useState(false);
     const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [resolvedPickupCoords, setResolvedPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
     const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
@@ -373,13 +375,32 @@ export default function NavigateScreen() {
                     </Text>
                 )}
 
-                <PrimaryButton
-                    label={isEnRoute ? "✓ I've Arrived" : "Mark On The Way!"}
-                    onPress={handleNextState}
-                    style={isEnRoute ? [styles.arrivedButton, { backgroundColor: colors.teal }] : styles.arrivedButton}
-                    loading={isSubmitting}
-                />
+                <View style={styles.bottomActionRow}>
+                    <SecondaryButton
+                        label="Cancel"
+                        style={styles.cancelBtn}
+                        textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
+                        onPress={() => setShowCancelModal(true)}
+                    />
+                    <PrimaryButton
+                        label={isEnRoute ? "✓ I've Arrived" : "Mark On The Way!"}
+                        onPress={handleNextState}
+                        style={[styles.arrivedButton, isEnRoute ? { backgroundColor: colors.teal } : {}]}
+                        loading={isSubmitting}
+                    />
+                </View>
             </View>
+
+            {showCancelModal && (
+                <CancelOrderModal
+                    orderId={internalOrderId}
+                    onClose={() => setShowCancelModal(false)}
+                    onConfirm={() => {
+                        setShowCancelModal(false);
+                        safeBack('/(aggregator)/orders');
+                    }}
+                />
+            )}
 
             {/* SafeAreaView edges={['bottom']} implicitly handled by bottomBar padding */}
             <SafeAreaView edges={['bottom']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} pointerEvents="none" />
@@ -480,9 +501,18 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: colors.border,
     },
-    errorText: {
-        marginBottom: spacing.sm,
-        textAlign: 'center',
+    bottomActionRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    cancelBtn: {
+        flex: 1,
+        height: 48,
+        borderColor: colors.red,
+    },
+    arrivedButton: {
+        flex: 2,
+        height: 48,
     },
     cardActions: {
         flexDirection: 'row',
