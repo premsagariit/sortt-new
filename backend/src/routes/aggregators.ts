@@ -116,7 +116,7 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 
         if (operating_area !== undefined) {
             updateFields.push(`operating_area = $${placeholderIdx++}`);
-            values.push(operating_area);
+            values.push(Array.isArray(operating_area) ? JSON.stringify(operating_area) : operating_area);
         }
 
         if (operating_hours !== undefined) {
@@ -180,11 +180,22 @@ router.get('/me', verifyRole('aggregator'), async (req: Request, res: Response) 
             [userId]
         );
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Aggregator profile not found' });
+        const profile = result.rows[0];
+        if (profile.operating_area && typeof profile.operating_area === 'string') {
+            if (profile.operating_area.startsWith('[') && profile.operating_area.endsWith(']')) {
+                try {
+                    profile.operating_area = JSON.parse(profile.operating_area);
+                } catch {
+                    profile.operating_area = profile.operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+            } else {
+                profile.operating_area = profile.operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
+            }
+        } else if (!profile.operating_area) {
+            profile.operating_area = [];
         }
 
-        return res.json(result.rows[0]);
+        return res.json(profile);
     } catch (e: any) {
         console.error('GET /api/aggregators/me error:', e);
         Sentry.captureException(e);

@@ -44,7 +44,7 @@ export default function OperatingAreasScreen() {
         if (selectedZones.length === 0) return;
         setIsSaving(true);
         try {
-            await updateProfile({ operating_area: selectedZones.join(', ') });
+            await updateProfile({ operating_area: selectedZones });
             setIsSaving(false);
             router.back();
         } catch (err: any) {

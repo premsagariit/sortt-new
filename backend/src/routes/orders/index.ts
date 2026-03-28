@@ -209,8 +209,24 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
               FROM device_tokens d
               JOIN aggregator_availability a ON d.user_id = a.user_id AND a.is_online = true
               JOIN aggregator_profiles p ON a.user_id = p.user_id AND p.city_code = $1
-              JOIN aggregator_material_rates m ON p.user_id = m.aggregator_id AND m.material_code = ANY($2)
-            `, [selectedAddress.city_code, material_codes]);
+              WHERE 
+                -- Locality filtering: must be in one of the aggregator's operating areas
+                -- Handles both old "Area1, Area2" string and new '["Area1", "Area2"]' JSON string formats
+                (
+                  CASE 
+                    WHEN p.operating_area LIKE '[%' THEN (p.operating_area::jsonb @> jsonb_build_array($3::text))
+                    ELSE ($3 = ANY(string_to_array(REPLACE(p.operating_area, ' ', ''), ',')))
+                  END
+                )
+                AND
+                -- Material filtering: aggregator must accept ALL materials in this order
+                (
+                  SELECT COUNT(DISTINCT material_code) 
+                  FROM aggregator_material_rates m 
+                  WHERE m.aggregator_id = p.user_id 
+                    AND m.material_code = ANY($2)
+                ) = array_length($2, 1)
+            `, [selectedAddress.city_code, material_codes, selectedAddress.pickup_locality]);
 
         const tokens = aggRes.rows.map(r => r.expo_token).filter(t => t.startsWith('ExponentPushToken'));
 
@@ -455,24 +471,36 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     }
     params.push(limit + 1);
 
-    // Filter by operating area if set (comma-separated string in DB)
+    // Filter by operating area if set
     let areaClause = '';
-    if (operating_area && operating_area.trim().length > 0) {
-      // Split by comma and trim to get clean array of localities
-      const areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
-      if (areas.length > 0) {
-        areaClause = `AND o.pickup_locality = ANY($${params.length + 1})`;
-        params.push(areas);
+    let areas: string[] = [];
+    
+    if (operating_area) {
+      if (typeof operating_area === 'string' && operating_area.startsWith('[') && operating_area.endsWith(']')) {
+        try {
+          areas = JSON.parse(operating_area);
+        } catch {
+          areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      } else if (typeof operating_area === 'string') {
+        areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
+      } else if (Array.isArray(operating_area)) {
+        areas = operating_area;
       }
+    }
+
+    if (areas.length > 0) {
+      areaClause = `AND o.pickup_locality = ANY($${params.length + 1})`;
+      params.push(areas);
     }
 
     const result = await query(`
             SELECT o.*,
-                   COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-                   COALESCE(jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights
+                   json_agg(DISTINCT oi.material_code) as material_codes,
+                   jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
             FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
-            JOIN aggregator_material_rates r
+            LEFT JOIN aggregator_material_rates r
                 ON r.aggregator_id = $1
                AND r.material_code = oi.material_code
             WHERE o.status = 'created'
@@ -481,6 +509,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
               ${cursorClause}
               ${areaClause}
             GROUP BY o.id
+            HAVING COUNT(oi.material_code) = COUNT(r.material_code)
             ORDER BY o.created_at DESC
             LIMIT $${params.length === 3 && areaClause ? 3 : params.length}
         `, params);

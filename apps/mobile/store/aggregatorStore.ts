@@ -650,9 +650,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       }
 
       const parsedSchedule = incomingDays;
-      const areasArray = operatingArea
-        ? String(operatingArea).split(',').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const areasArray = Array.isArray(operatingArea)
+        ? operatingArea
+        : (operatingArea
+          ? String(operatingArea).split(',').map((s: string) => s.trim()).filter(Boolean)
+          : []);
 
       // Logic: Forced Online if within working hours, otherwise reflect DB status
       const scheduledOnline = isWithinWorkingHours(parsedSchedule);
