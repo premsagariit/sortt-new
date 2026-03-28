@@ -469,8 +469,6 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
       cursorClause = `AND o.created_at < $${params.length + 1}`;
       params.push(cursor);
     }
-    params.push(limit + 1);
-
     // Filter by operating area if set
     let areaClause = '';
     let areas: string[] = [];
@@ -494,6 +492,9 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
       params.push(areas);
     }
 
+    const limitParamIndex = params.length + 1;
+    params.push(limit + 1);
+
     const result = await query(`
             SELECT o.*,
                    json_agg(DISTINCT oi.material_code) as material_codes,
@@ -511,7 +512,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
             GROUP BY o.id
             HAVING COUNT(oi.material_code) = COUNT(r.material_code)
             ORDER BY o.created_at DESC
-            LIMIT $${params.length === 3 && areaClause ? 3 : params.length}
+            LIMIT $${limitParamIndex}
         `, params);
 
     const rows = result.rows;

@@ -70,6 +70,17 @@ const MIN_ACCEPTABLE_RATES: Record<string, number> = {
   paper: 8,
 };
 
+function normalizeArea(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+  return '';
+}
+
 // ── Main Screen ────────────────────────────────────────────────────
 
 export default function AggregatorHomeScreen() {
@@ -87,8 +98,10 @@ export default function AggregatorHomeScreen() {
 
   // Read from store with mock fallbacks (Day 4: store populated from backend)
   const displayName = aggregatorName || profile?.name || MOCK_AGG_NAME;
-  const displayArea = primaryArea || MOCK_AGG_AREA;
-  const displayAreaShort = primaryArea ? primaryArea.split(',')[0]?.trim() || primaryArea : MOCK_AGG_AREA_SHORT;
+  const normalizedStoreArea = normalizeArea(primaryArea);
+  const normalizedProfileArea = normalizeArea(profile?.operatingArea);
+  const displayArea = normalizedStoreArea || normalizedProfileArea || MOCK_AGG_AREA;
+  const displayAreaShort = displayArea.split(',')[0]?.trim() || MOCK_AGG_AREA_SHORT;
 
   useFocusEffect(
     useCallback(() => {

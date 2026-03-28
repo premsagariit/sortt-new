@@ -189,7 +189,7 @@ interface AggregatorStoreState {
   /** GET /api/aggregators/earnings?period=... */
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates name, business_name, operating_area */
-  updateProfile: (payload: { name?: string; business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
+  updateProfile: (payload: { name?: string; business_name?: string; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
   updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -651,10 +651,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
       const parsedSchedule = incomingDays;
       const areasArray = Array.isArray(operatingArea)
-        ? operatingArea
+        ? operatingArea.map((s: unknown) => String(s ?? '').trim()).filter(Boolean)
         : (operatingArea
           ? String(operatingArea).split(',').map((s: string) => s.trim()).filter(Boolean)
           : []);
+      const primaryAreaText = areasArray.join(', ');
 
       // Logic: Forced Online if within working hours, otherwise reflect DB status
       const scheduledOnline = isWithinWorkingHours(parsedSchedule);
@@ -664,14 +665,14 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         profile: {
           name,
           businessName,
-          operatingArea,
+          operatingArea: primaryAreaText,
           operatingHours: { ...operatingHours, days: parsedSchedule },
           kycStatus,
           cityCode,
         },
         fullName: name ?? '',
         businessName: businessName ?? '',
-        primaryArea: operatingArea ?? '',
+        primaryArea: primaryAreaText,
         operatingAreas: areasArray,
         weeklySchedule: parsedSchedule,
         isOnline,
@@ -765,10 +766,12 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         set({ businessName: payload.business_name });
       }
       if (payload.operating_area !== undefined) {
-        const areasArray = payload.operating_area
-          ? String(payload.operating_area).split(',').map((s: string) => s.trim()).filter(Boolean)
-          : [];
-        set({ primaryArea: payload.operating_area, operatingAreas: areasArray });
+        const areasArray = Array.isArray(payload.operating_area)
+          ? payload.operating_area.map((s: unknown) => String(s ?? '').trim()).filter(Boolean)
+          : (payload.operating_area
+            ? String(payload.operating_area).split(',').map((s: string) => s.trim()).filter(Boolean)
+            : []);
+        set({ primaryArea: areasArray.join(', '), operatingAreas: areasArray });
       }
       await get().fetchAggregatorProfile();
       set({ isLoading: false });
