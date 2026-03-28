@@ -293,7 +293,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     const PAGE_WIDTH = 595.28;
     const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN_SIDE * 2);
 
-    const headerHeight = 155;
+    const headerHeight = 182;
     const partyHeight = 78;
     const tableHeaderHeight = 28;
     const rowHeight = 42;
@@ -312,16 +312,27 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     // SECTION 1 — HEADER
     drawRect(page, 0, fromTop(0), PAGE_WIDTH, headerHeight, COLORS.navy);
 
-    // 1.2 Brand Name
+    // 1.2 Logo — drawn "S" logomark inside a circle + wordmark
     const brandX = MARGIN_SIDE;
-    const sWidth = fontSansBold.widthOfTextAtSize('S', 28);
-    page.drawText('S', { x: brandX, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.red });
-    const dotWidth = fontSansBold.widthOfTextAtSize('.', 28);
-    page.drawText('.', { x: brandX + sWidth, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.red });
-    page.drawText('ortt', { x: brandX + sWidth + dotWidth, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.white });
+    const logoR = 16;   // radius of the circle badge
+    const logoCX = brandX + logoR;
+    const logoCY = fromTop(36);
+    // Outer teal ring
+    page.drawCircle({ x: logoCX, y: logoCY, size: logoR, color: COLORS.teal });
+    // Inner "S" letter centred in the circle
+    const sChar = 'S';
+    const sCharSize = 18;
+    const sCharW = fontSansBold.widthOfTextAtSize(sChar, sCharSize);
+    page.drawText(sChar, { x: logoCX - sCharW / 2, y: logoCY - sCharSize * 0.36, font: fontSansBold, size: sCharSize, color: COLORS.white });
+    // Wordmark beside the badge
+    const wordmarkX = brandX + logoR * 2 + 8;
+    page.drawText('sortt', { x: wordmarkX, y: fromTop(36 + 10), font: fontSansBold, size: 22, color: COLORS.white });
+    const dotAccentW = fontSansBold.widthOfTextAtSize('s', 22);
+    // Red dot accent under first letter
+    page.drawCircle({ x: wordmarkX + dotAccentW / 2, y: fromTop(36 + 10) - 6, size: 2.5, color: COLORS.red });
 
     // 1.3 Tagline
-    page.drawText(`India's Scrap Marketplace  ·  ${city}`, { x: brandX, y: fromTop(36 + 28), font: fontSans, size: 8, color: COLORS.navyFaint1 });
+    page.drawText(`India's Scrap Marketplace  ·  ${city}`, { x: brandX, y: fromTop(36 + 42), font: fontSans, size: 8, color: COLORS.navyFaint1 });
 
     // 1.4 Invoice Badge
     const rightEdge = PAGE_WIDTH - MARGIN_SIDE;
@@ -331,45 +342,45 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     page.drawText(badgeText, { x: rightEdge - badgeW + 12, y: fromTop(22 + 9), font: fontSansBold, size: 7, color: COLORS.white });
 
     // 1.5 Invoice Number
-    drawTextRight(page, invoiceNumber, rightEdge, fromTop(56), fontMono, 18, COLORS.white);
+    drawTextRight(page, invoiceNumber, rightEdge, fromTop(60), fontMono, 18, COLORS.white);
     
     // 1.6 Invoice Date
-    drawTextRight(page, invoiceDate, rightEdge, fromTop(56 + 14), fontMono, 9, COLORS.navyFaint1);
+    drawTextRight(page, invoiceDate, rightEdge, fromTop(60 + 14), fontMono, 9, COLORS.navyFaint1);
 
     // 1.7 Horizontal Rule
-    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(92) }, end: { x: rightEdge, y: fromTop(92) }, color: COLORS.navyLine, thickness: 0.5 });
+    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(100) }, end: { x: rightEdge, y: fromTop(100) }, color: COLORS.navyLine, thickness: 0.5 });
 
     // 1.8 4-column Meta Strip
     const colWidth = CONTENT_WIDTH / 4;
-    const metaYlbl = fromTop(106);
-    const metaYval = fromTop(122);
+    const metaYlbl = fromTop(114);
+    const metaYval = fromTop(130);
     
     [[`ORDER REFERENCE`, orderDisplayId],
-     [`PICKUP DATE & TIME`, `${formatDate(order.order_updated_at)} · ${formatTime(order.order_updated_at)}`],
+     [`PICKUP DATE`, `${formatDate(order.order_updated_at)}`],
      [`PAYMENT MODE`, `Cash on Pickup`],
      [`CITY & STATE`, `${city}, Telangana`]].forEach((cell, i) => {
        const x = MARGIN_SIDE + (i * colWidth) + (i === 0 ? 0 : 20);
        if (i > 0) {
-         page.drawLine({ start: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(96) }, end: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(130) }, color: COLORS.navyLine, thickness: 0.5 });
+         page.drawLine({ start: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(104) }, end: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(140) }, color: COLORS.navyLine, thickness: 0.5 });
        }
        page.drawText(cell[0], { x, y: metaYlbl, font: fontSansBold, size: 7, color: COLORS.navyFaint1 });
        page.drawText(cell[1], { x, y: metaYval, font: fontMono, size: 10, color: COLORS.navyFaint2 });
     });
 
     // 1.9 Rule 2
-    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(134) }, end: { x: rightEdge, y: fromTop(134) }, color: COLORS.navyLine, thickness: 0.5 });
+    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(146) }, end: { x: rightEdge, y: fromTop(146) }, color: COLORS.navyLine, thickness: 0.5 });
 
     // 1.10 Address
-    page.drawText("PICKUP ADDRESS", { x: MARGIN_SIDE, y: fromTop(145), font: fontSansBold, size: 7, color: COLORS.navyFaint1 });
+    page.drawText("PICKUP ADDRESS", { x: MARGIN_SIDE, y: fromTop(157), font: fontSansBold, size: 7, color: COLORS.navyFaint1 });
     const addressStr = order.seller_locality ? `${sanitizeText(order.seller_locality)}, ${city}` : city;
-    page.drawText(addressStr, { x: MARGIN_SIDE, y: fromTop(157), font: fontSans, size: 10, color: COLORS.white76 });
+    page.drawText(addressStr, { x: MARGIN_SIDE, y: fromTop(170), font: fontSans, size: 10, color: COLORS.white76 });
 
     // 1.11 Completed Pill
     const pillTw = fontSansBold.widthOfTextAtSize("COMPLETED", 8);
     const pillW = pillTw + 36;
-    drawRoundedRect(page, rightEdge - pillW, fromTop(142), pillW, 18, 9, COLORS.teal);
-    page.drawCircle({ x: rightEdge - pillW + 12, y: fromTop(142 + 9), size: 3, color: COLORS.white, borderColor: COLORS.white });
-    page.drawText("COMPLETED", { x: rightEdge - pillW + 20, y: fromTop(142 + 12), font: fontSansBold, size: 8, color: COLORS.white });
+    drawRoundedRect(page, rightEdge - pillW, fromTop(155), pillW, 18, 9, COLORS.teal);
+    page.drawCircle({ x: rightEdge - pillW + 12, y: fromTop(155 + 9), size: 3, color: COLORS.white, borderColor: COLORS.white });
+    page.drawText("COMPLETED", { x: rightEdge - pillW + 20, y: fromTop(155 + 12), font: fontSansBold, size: 8, color: COLORS.white });
 
     // SECTION 2 — BODY
     let curY = headerHeight + 32;
@@ -466,8 +477,8 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     const dLeftData = [
        ["Order Reference", orderDisplayId],
        ["Invoice Number", invoiceNumber],
-       ["Order Placed", `${formatDate(order.order_created_at)}, ${formatTime(order.order_created_at)}`],
-       ["Pickup Completed", `${formatDate(order.order_updated_at)}, ${formatTime(order.order_updated_at)}`],
+       ["Order Placed", `${formatDate(order.order_created_at)}`],
+       ["Pickup Completed", `${formatDate(order.order_updated_at)}`],
        ["Total Weight", `${totalWeight.toFixed(2)} kg`],
        ["Materials Collected", `${lineItems.length} type(s)`],
        ["Payment Mode", "Cash on Pickup"]
@@ -506,12 +517,17 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     page.drawText(`Cash paid by ${sanitizeText(order.aggregator_name)} ${order.aggregator_business_name ? `— ${sanitizeText(order.aggregator_business_name)}` : ''}`, { x: MARGIN_SIDE + 24, y: fromTop(curY + 35), font: fontSans, size: 9.5, color: COLORS.slate });
     page.drawText(`${formatDate(order.order_updated_at)} at ${formatTime(order.order_updated_at)}  ·  Order ${orderDisplayId}`, { x: MARGIN_SIDE + 24, y: fromTop(curY + 47), font: fontSans, size: 9.5, color: COLORS.slate });
 
-    const checkRootX = rightEdge - 120;
-    page.drawCircle({ x: checkRootX, y: fromTop(curY + bannerHeight/2), size: 10, color: COLORS.teal, borderColor: COLORS.teal });
-    page.drawLine({ start:{x:checkRootX-3, y:fromTop(curY+bannerHeight/2)}, end:{x:checkRootX-1, y:fromTop(curY+bannerHeight/2-2)}, color:COLORS.white, thickness:1.5, lineCap:LineCapStyle.Round });
-    page.drawLine({ start:{x:checkRootX-1, y:fromTop(curY+bannerHeight/2-2)}, end:{x:checkRootX+3, y:fromTop(curY+bannerHeight/2+3)}, color:COLORS.white, thickness:1.5, lineCap:LineCapStyle.Round });
-
-    drawTextRight(page, fmtAmount(totalAmount), rightEdge - 24, fromTop(curY + 36), fontMono, 26, COLORS.teal);
+    // Banner right side: amount on the left, tick circle on the far right — no overlap
+    const amountText = fmtAmount(totalAmount);
+    const amountW = fontMono.widthOfTextAtSize(amountText, 24);
+    const tickCX = rightEdge - 18;
+    const tickCY = fromTop(curY + bannerHeight / 2);
+    // Amount placed to the left of the tick circle with 14pt gap
+    page.drawText(amountText, { x: tickCX - amountW - 22, y: fromTop(curY + bannerHeight / 2 + 9), font: fontMono, size: 24, color: COLORS.teal });
+    // Tick circle
+    page.drawCircle({ x: tickCX, y: tickCY, size: 12, color: COLORS.teal });
+    page.drawLine({ start:{x: tickCX - 4, y: tickCY - 1 }, end:{x: tickCX - 1, y: tickCY - 4 }, color: COLORS.white, thickness: 1.8, lineCap: LineCapStyle.Round });
+    page.drawLine({ start:{x: tickCX - 1, y: tickCY - 4 }, end:{x: tickCX + 5, y: tickCY + 4 }, color: COLORS.white, thickness: 1.8, lineCap: LineCapStyle.Round });
 
     // SECTION 3 — FOOTER
     drawRect(page, 0, fromTop(pageHeight - footerHeight), PAGE_WIDTH, footerHeight, COLORS.navy);
@@ -538,7 +554,8 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     console.log(`[Invoice] PDF generated (${pdfBuffer.length} bytes), uploading...`);
 
     const randomHex = crypto.randomBytes(8).toString('hex');
-    const fileKey   = `invoices/${orderId}/${randomHex}.pdf`;
+    const safeOrderNum = String(order.order_number || randomHex).replace(/[^a-zA-Z0-9_-]/g, '');
+    const fileKey   = `invoices/${orderId}/${safeOrderNum}.pdf`;
 
     await storageProvider.uploadWithKey(Buffer.from(pdfBuffer), fileKey, process.env.R2_BUCKET_NAME);
     console.log(`[Invoice] Uploaded to ${fileKey}`);
