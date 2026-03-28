@@ -297,11 +297,37 @@ router.get('/', async (req, res) => {
                agg.name as aggregator_name,
                agg.display_phone as aggregator_display_phone,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights,
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
+               COALESCE(
+                 json_agg(
+                   DISTINCT jsonb_build_object(
+                     'id', oi.id,
+                     'material_code', oi.material_code,
+                     'material_label', mt.label_en,
+                     'estimated_weight_kg', oi.estimated_weight_kg,
+                     'confirmed_weight_kg', oi.confirmed_weight_kg,
+                     'rate_per_kg', oi.rate_per_kg,
+                     'amount', oi.amount
+                   )
+                 ) FILTER (WHERE oi.id IS NOT NULL),
+                 '[]'
+               ) as order_items,
+               COALESCE(
+                 json_agg(
+                   DISTINCT jsonb_build_object(
+                     'material_code', oi.material_code,
+                     'weight_kg', COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg),
+                     'rate_per_kg', oi.rate_per_kg,
+                     'amount', COALESCE(oi.amount, 0)
+                   )
+                 ) FILTER (WHERE oi.material_code IS NOT NULL),
+                 '[]'
+               ) as line_items,
                COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
                COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN material_types mt ON oi.material_code = mt.code
         LEFT JOIN users agg ON agg.id = o.aggregator_id
         WHERE o.aggregator_id = $1
       `;
@@ -327,11 +353,37 @@ router.get('/', async (req, res) => {
                agg.name as aggregator_name,
                agg.display_phone as aggregator_display_phone,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
-               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}') as estimated_weights,
+               COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
+               COALESCE(
+                 json_agg(
+                   DISTINCT jsonb_build_object(
+                     'id', oi.id,
+                     'material_code', oi.material_code,
+                     'material_label', mt.label_en,
+                     'estimated_weight_kg', oi.estimated_weight_kg,
+                     'confirmed_weight_kg', oi.confirmed_weight_kg,
+                     'rate_per_kg', oi.rate_per_kg,
+                     'amount', oi.amount
+                   )
+                 ) FILTER (WHERE oi.id IS NOT NULL),
+                 '[]'
+               ) as order_items,
+               COALESCE(
+                 json_agg(
+                   DISTINCT jsonb_build_object(
+                     'material_code', oi.material_code,
+                     'weight_kg', COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg),
+                     'rate_per_kg', oi.rate_per_kg,
+                     'amount', COALESCE(oi.amount, 0)
+                   )
+                 ) FILTER (WHERE oi.material_code IS NOT NULL),
+                 '[]'
+               ) as line_items,
                COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
                COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN material_types mt ON oi.material_code = mt.code
         LEFT JOIN users agg ON agg.id = o.aggregator_id
         WHERE o.seller_id = $1
       `;

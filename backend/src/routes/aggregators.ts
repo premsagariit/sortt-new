@@ -96,9 +96,10 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         return res.status(400).json({ error: 'invalid_fields', fields: blockedPresent });
     }
 
-    const { operating_area, operating_hours, business_name } = req.body;
+    const { name, operating_area, operating_hours, business_name } = req.body;
 
     const diagPayload: Record<string, any> = { userId };
+    if (name !== undefined) diagPayload.name = name;
     if (operating_area !== undefined) diagPayload.operating_area = operating_area;
     if (business_name !== undefined) diagPayload.business_name = business_name;
     if (operating_hours !== undefined) diagPayload.operating_hours = JSON.stringify(operating_hours);
@@ -108,6 +109,10 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         const updateFields: string[] = [];
         const values: any[] = [];
         let placeholderIdx = 1;
+
+        if (name !== undefined) {
+            await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+        }
 
         if (operating_area !== undefined) {
             updateFields.push(`operating_area = $${placeholderIdx++}`);

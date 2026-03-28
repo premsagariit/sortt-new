@@ -32,12 +32,20 @@ export default function OrderSummary() {
     );
 
     const completedOrders = (aggOrders || []).filter((order: any) => order.status === 'completed');
-    const getAmount = (order: any) => Number(order.display_amount ?? order.displayAmount ?? order.confirmed_value ?? order.confirmedAmount ?? order.estimated_value ?? order.estimatedAmount ?? 0);
-    const totalPayout = completedOrders.reduce((sum: number, order: any) => sum + getAmount(order), 0);
-    const totalVolume = completedOrders.reduce((sum: number, order: any) => {
+    
+    const getAmount = (order: any) => {
+        const val = order.display_amount ?? order.displayAmount ?? order.confirmed_value ?? order.confirmedAmount ?? 0;
+        return Number(val || 0);
+    };
+
+    const getVolume = (order: any) => {
         const weights = order.estimated_weights ?? order.estimatedWeights ?? {};
-        return sum + Object.values(weights).reduce((itemSum: number, value: any) => itemSum + Number(value || 0), 0);
-    }, 0);
+        const sumWeights = Object.values(weights).reduce((sum: number, val: any) => sum + Number(val || 0), 0);
+        return sumWeights > 0 ? sumWeights : Number(order.total_weight_kg ?? order.totalWeightKg ?? order.estimated_weight_kg ?? 0);
+    };
+
+    const totalPayout = completedOrders.reduce((sum: number, order: any) => sum + getAmount(order), 0);
+    const totalVolume = completedOrders.reduce((sum: number, order: any) => sum + getVolume(order), 0);
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>

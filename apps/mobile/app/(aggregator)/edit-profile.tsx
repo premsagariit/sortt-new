@@ -28,7 +28,8 @@ export default function AggregatorEditProfileScreen() {
     const { name, locality, city, setName, setLocality } = useAuthStore();
     const { profile, fetchAggregatorProfile } = useAggregatorStore();
 
-    const [newName, setNewName] = useState(profile?.businessName || name);
+    const [newFullName, setNewFullName] = useState(profile?.name || name);
+    const [newBusinessName, setNewBusinessName] = useState(profile?.businessName || '');
     const [newLocality, setNewLocality] = useState(profile?.operatingArea || locality);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -38,12 +39,13 @@ export default function AggregatorEditProfileScreen() {
     }, [fetchAggregatorProfile]);
 
     React.useEffect(() => {
-        setNewName(profile?.businessName || name);
+        setNewFullName(profile?.name || name);
+        setNewBusinessName(profile?.businessName || '');
         setNewLocality(profile?.operatingArea || locality);
     }, [profile, name, locality]);
 
     const handleSave = async () => {
-        const trimmedName = newName.trim();
+        const trimmedName = newFullName.trim();
         const trimmedLocality = newLocality.trim();
 
         if (trimmedName.length === 0) {
@@ -66,10 +68,11 @@ export default function AggregatorEditProfileScreen() {
 
         try {
             await useAggregatorStore.getState().updateProfile({
-                business_name: trimmedName,
+                name: newFullName.trim(),
+                business_name: newBusinessName.trim(),
                 operating_area: trimmedLocality,
             });
-            setName(trimmedName);
+            setName(newFullName.trim());
             setLocality(trimmedLocality);
             setIsSaving(false);
             router.back();
@@ -119,9 +122,24 @@ export default function AggregatorEditProfileScreen() {
                             <User size={20} color={colors.muted} />
                             <TextInput
                                 style={styles.input}
-                                value={newName}
-                                onChangeText={setNewName}
-                                placeholder="Enter your name"
+                                value={newFullName}
+                                onChangeText={setNewFullName}
+                                placeholder="Enter your full name"
+                                placeholderTextColor={colors.muted}
+                                maxLength={60}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text variant="label" color={colors.muted} style={styles.inputLabel}>BUSINESS NAME</Text>
+                        <View style={styles.inputWrap}>
+                            <User size={20} color={colors.muted} />
+                            <TextInput
+                                style={styles.input}
+                                value={newBusinessName}
+                                onChangeText={setNewBusinessName}
+                                placeholder="e.g. Hyderabad Scrap Store"
                                 placeholderTextColor={colors.muted}
                                 maxLength={60}
                             />

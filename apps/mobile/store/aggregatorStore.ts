@@ -188,8 +188,8 @@ interface AggregatorStoreState {
   fetchAggregatorRates: () => Promise<void>;
   /** GET /api/aggregators/earnings?period=... */
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
-  /** PATCH /api/aggregators/profile — updates business_name, operating_area */
-  updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
+  /** PATCH /api/aggregators/profile — updates name, business_name, operating_area */
+  updateProfile: (payload: { name?: string; business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
   updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -652,7 +652,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         businessName: businessName ?? '',
         primaryArea: operatingArea ?? '',
         weeklySchedule: parsedSchedule,
-        isOnline: isWithinWorkingHours(parsedSchedule),
+        isOnline: payload.is_online !== undefined ? Boolean(payload.is_online) : isWithinWorkingHours(parsedSchedule),
         isProfileLoading: false,
         profileError: null,
       });
@@ -730,7 +730,10 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await api.patch('/api/aggregators/profile', payload);
-      // Reflect business_name in local state if provided
+      // Reflect name and business_name in local state if provided
+      if (payload.name !== undefined) {
+        set({ fullName: payload.name });
+      }
       if (payload.business_name !== undefined) {
         set({ businessName: payload.business_name });
       }

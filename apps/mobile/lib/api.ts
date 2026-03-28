@@ -57,7 +57,7 @@ export const getBaseUrl = (): string => {
 
 export const api = axios.create({
   baseURL: getBaseUrl(),
-  timeout: 10000,
+  timeout: 30000,
 });
 
 let getToken: (() => Promise<string | null>) | null = null;

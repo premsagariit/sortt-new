@@ -40,9 +40,14 @@ export default function HoursAvailabilityScreen() {
     const storeSchedule = useAggregatorStore((s) => s.weeklySchedule);
     const updateProfile = useAggregatorStore((s) => s.updateProfile);
 
-    const [isOpenNow, setIsOpenNow] = useState(true);
+    const isOnline = useAggregatorStore((s) => s.isOnline);
+    const updateOnlineStatus = useAggregatorStore((s) => s.updateOnlineStatus);
     const [schedule, setSchedule] = useState<DaySchedule[]>(storeSchedule);
     const [isSaving, setIsSaving] = useState(false);
+
+    React.useEffect(() => {
+        setSchedule(storeSchedule);
+    }, [storeSchedule]);
 
     // Modal state
     const [pickerVisible, setPickerVisible] = useState(false);
@@ -120,8 +125,10 @@ export default function HoursAvailabilityScreen() {
                         <Text variant="caption" color={colors.muted}>Receive and accept orders from sellers</Text>
                     </View>
                     <Switch
-                        value={isOpenNow}
-                        onValueChange={setIsOpenNow}
+                        value={isOnline}
+                        onValueChange={(v) => {
+                            void updateOnlineStatus(v);
+                        }}
                         trackColor={{ false: colors.border, true: colors.teal }}
                         thumbColor={colors.surface}
                     />
