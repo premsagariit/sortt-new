@@ -46,6 +46,12 @@ const parseNumberOrNull = (value: unknown): number | null => {
   return null;
 };
 
+const normalizeAreaValue = (value: unknown): string =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const haversineDistanceKm = (
   sourceLat: number,
   sourceLng: number,
@@ -206,32 +212,67 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
       try {
         const aggRes = await query(`
               SELECT DISTINCT d.expo_token, d.user_id
+                     p.operating_area,
+                     p.city_code
               FROM device_tokens d
-              JOIN aggregator_availability a ON d.user_id = a.user_id AND a.is_online = true
-              JOIN aggregator_profiles p ON a.user_id = p.user_id AND p.city_code = $1
-              WHERE 
-                -- Locality filtering: must be in one of the aggregator's operating areas
-                -- Handles both old "Area1, Area2" string and new '["Area1", "Area2"]' JSON string formats
-                (
-                  CASE 
-                    WHEN p.operating_area LIKE '[%' THEN (p.operating_area::jsonb @> jsonb_build_array($3::text))
-                    ELSE ($3 = ANY(string_to_array(REPLACE(p.operating_area, ' ', ''), ',')))
-                  END
+              JOIN aggregator_availability a
+                ON d.user_id = a.user_id
+               AND a.is_online = true
+              JOIN aggregator_profiles p
+                ON a.user_id = p.user_id
+              WHERE LOWER(TRIM(COALESCE(p.city_code, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+                AND (
+                  SELECT COUNT(DISTINCT m.material_code)
+                  FROM aggregator_material_rates m
+                  WHERE m.aggregator_id = p.user_id
+                    AND m.material_code = ANY($2::text[])
+                ) = (
+                  SELECT COUNT(DISTINCT code)
+                  FROM unnest($2::text[]) AS code
                 )
-                AND
-                -- Material filtering: aggregator must accept ALL materials in this order
-                (
-                  SELECT COUNT(DISTINCT material_code) 
-                  FROM aggregator_material_rates m 
-                  WHERE m.aggregator_id = p.user_id 
-                    AND m.material_code = ANY($2)
-                ) = array_length($2, 1)
-            `, [selectedAddress.city_code, material_codes, selectedAddress.pickup_locality]);
+            `, [selectedAddress.city_code, material_codes]);
 
-        const tokens = aggRes.rows.map(r => r.expo_token).filter(t => t.startsWith('ExponentPushToken'));
+        const pickupLocalityNorm = normalizeAreaValue(selectedAddress.pickup_locality);
+        const pickupAddressNorm = normalizeAreaValue(fullPickupAddress);
+
+        const parseOperatingAreas = (value: unknown): string[] => {
+          if (Array.isArray(value)) {
+            return value.map((v) => String(v ?? '').trim()).filter(Boolean);
+          }
+          if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) return [];
+            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                  return parsed.map((v) => String(v ?? '').trim()).filter(Boolean);
+                }
+              } catch {
+              }
+            }
+            return trimmed.split(',').map((v) => v.trim()).filter(Boolean);
+          }
+          return [];
+        };
+
+        const matchedRows = aggRes.rows.filter((row: any) => {
+          const areas = parseOperatingAreas(row.operating_area)
+            .map(normalizeAreaValue)
+            .filter(Boolean);
+          if (areas.length === 0) return false;
+
+          return areas.some((area) => {
+            return pickupLocalityNorm === area ||
+              pickupLocalityNorm.includes(area) ||
+              pickupAddressNorm.includes(area);
+          });
+        });
+
+        const tokens = matchedRows.map((r: any) => r.expo_token).filter((t: string) => t.startsWith('ExponentPushToken'));
 
         // Get user IDs for push notification
-        const userIds = aggRes.rows.map(r => r.user_id);
+        const userIds = matchedRows.map((r: any) => r.user_id);
 
         // Send push notifications using chunked expo-server-sdk (D2: generic copy, zero PII)
         if (userIds.length > 0) {
@@ -497,10 +538,27 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
       }
     }
 
-    if (areas.length > 0) {
-      areaClause = `AND COALESCE(o.pickup_locality, '') = ANY($${params.length + 1}::text[])`;
-      params.push(areas);
+    const normalizedAreas = Array.from(
+      new Set(
+        areas
+          .map((v) => normalizeAreaValue(v))
+          .filter(Boolean)
+      )
+    );
+
+    if (normalizedAreas.length === 0) {
+      return res.json({ orders: [], nextCursor: null, hasMore: false });
     }
+
+    areaClause = `
+              AND EXISTS (
+                SELECT 1
+                FROM unnest($${params.length + 1}::text[]) AS area_name
+                WHERE lower(COALESCE(o.pickup_locality, '')) = area_name
+                   OR lower(COALESCE(o.pickup_locality, '')) LIKE '%' || area_name || '%'
+                   OR lower(COALESCE(o.pickup_address, '')) LIKE '%' || area_name || '%'
+              )`;
+    params.push(normalizedAreas);
 
     const limitParamIndex = params.length + 1;
     params.push(limit + 1);
@@ -519,11 +577,12 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
                AND r.material_code = oi.material_code
             WHERE o.status = 'created'
               AND o.deleted_at IS NULL
-              AND o.city_code = $2
+              AND LOWER(TRIM(COALESCE(o.city_code, ''))) = LOWER(TRIM(COALESCE($2::text, '')))
               ${cursorClause}
               ${areaClause}
             GROUP BY o.id
-            HAVING COUNT(oi.material_code) = COUNT(r.material_code)
+            HAVING COUNT(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL)
+                 = COUNT(DISTINCT r.material_code) FILTER (WHERE r.material_code IS NOT NULL)
             ORDER BY o.created_at DESC
             LIMIT $${limitParamIndex}
         `, params);
