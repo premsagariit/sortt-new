@@ -17,6 +17,14 @@ import { channelName } from '../../utils/channelHelper';
 import { sendPushToUsers } from '../../utils/pushNotifications';
 import { publishEvent } from '../../lib/realtime';
 import { generateAndStoreInvoice } from '../../utils/invoiceGenerator';
+import {
+  isAddressInOperatingAreas,
+  isPickupWindowWithinSchedule,
+  isWithinWorkingHoursNow,
+  normalizeAreaValue,
+  parseOperatingAreas,
+  parseOperatingHoursSchedule,
+} from '../../utils/availability';
 
 // Multer for media uploads (5MB, images only)
 const upload = multer({
@@ -45,12 +53,6 @@ const parseNumberOrNull = (value: unknown): number | null => {
   }
   return null;
 };
-
-const normalizeAreaValue = (value: unknown): string =>
-  String(value ?? '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
 
 const haversineDistanceKm = (
   sourceLat: number,
@@ -211,9 +213,10 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     setImmediate(async () => {
       try {
         const aggRes = await query(`
-              SELECT DISTINCT d.expo_token, d.user_id
-                     p.operating_area,
-                     p.city_code
+              SELECT DISTINCT d.expo_token, d.user_id,
+                p.operating_area,
+                p.operating_hours,
+                p.city_code
               FROM device_tokens d
               JOIN aggregator_availability a
                 ON d.user_id = a.user_id
@@ -232,44 +235,20 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
                 )
             `, [selectedAddress.city_code, material_codes]);
 
-        const pickupLocalityNorm = normalizeAreaValue(selectedAddress.pickup_locality);
-        const pickupAddressNorm = normalizeAreaValue(fullPickupAddress);
-
-        const parseOperatingAreas = (value: unknown): string[] => {
-          if (Array.isArray(value)) {
-            return value.map((v) => String(v ?? '').trim()).filter(Boolean);
-          }
-          if (typeof value === 'string') {
-            const trimmed = value.trim();
-            if (!trimmed) return [];
-            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-              try {
-                const parsed = JSON.parse(trimmed);
-                if (Array.isArray(parsed)) {
-                  return parsed.map((v) => String(v ?? '').trim()).filter(Boolean);
-                }
-              } catch {
-              }
-            }
-            return trimmed.split(',').map((v) => v.trim()).filter(Boolean);
-          }
-          return [];
-        };
-
         const matchedRows = aggRes.rows.filter((row: any) => {
-          const areas = parseOperatingAreas(row.operating_area)
-            .map(normalizeAreaValue)
-            .filter(Boolean);
-          if (areas.length === 0) return false;
+          const areas = parseOperatingAreas(row.operating_area);
+          const schedule = parseOperatingHoursSchedule(row.operating_hours);
 
-          return areas.some((area) => {
-            return pickupLocalityNorm === area ||
-              pickupLocalityNorm.includes(area) ||
-              pickupAddressNorm.includes(area);
-          });
+          const inArea = isAddressInOperatingAreas(
+            selectedAddress.pickup_locality,
+            fullPickupAddress,
+            areas
+          );
+          const isNowWithinHours = isWithinWorkingHoursNow(schedule);
+          const isPickupWindowValid = isPickupWindowWithinSchedule(schedule, preferred_pickup_window);
+
+          return inArea && isNowWithinHours && isPickupWindowValid;
         });
-
-        const tokens = matchedRows.map((r: any) => r.expo_token).filter((t: string) => t.startsWith('ExponentPushToken'));
 
         // Get user IDs for push notification
         const userIds = matchedRows.map((r: any) => r.user_id);
@@ -491,13 +470,13 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
 
     // Fetch city_code and operating_area from DB (V21 — never trust client-supplied)
     const profRes = await query(
-      'SELECT city_code, operating_area FROM aggregator_profiles WHERE user_id = $1',
+      'SELECT city_code, operating_area, operating_hours FROM aggregator_profiles WHERE user_id = $1',
       [userId]
     );
     if (!profRes.rows[0]) {
       return res.status(403).json({ error: 'Aggregator profile not found' });
     }
-    const { city_code, operating_area } = profRes.rows[0];
+    const { city_code, operating_area, operating_hours } = profRes.rows[0];
 
     const rawCursor = Array.isArray(req.query.cursor) ? req.query.cursor[0] : req.query.cursor;
     const cursor = typeof rawCursor === 'string' && Number.isFinite(Date.parse(rawCursor))
@@ -507,6 +486,11 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
 
     if (!city_code) {
       return res.status(400).json({ error: 'Aggregator city not configured' });
+    }
+
+    const schedule = parseOperatingHoursSchedule(operating_hours);
+    if (!isWithinWorkingHoursNow(schedule)) {
+      return res.json({ orders: [], nextCursor: null, hasMore: false });
     }
 
     // Feed: 'created' orders in aggregator's city where aggregator has ≥1 matching rate
@@ -519,24 +503,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     }
     // Filter by operating area if set
     let areaClause = '';
-    let areas: string[] = [];
-    
-    if (operating_area) {
-      if (typeof operating_area === 'string' && operating_area.startsWith('[') && operating_area.endsWith(']')) {
-        try {
-          const parsed = JSON.parse(operating_area);
-          areas = Array.isArray(parsed)
-            ? parsed.map((v: unknown) => String(v ?? '').trim()).filter(Boolean)
-            : [];
-        } catch {
-          areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
-        }
-      } else if (typeof operating_area === 'string') {
-        areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
-      } else if (Array.isArray(operating_area)) {
-        areas = operating_area.map((v: unknown) => String(v ?? '').trim()).filter(Boolean);
-      }
-    }
+    const areas = parseOperatingAreas(operating_area);
 
     const normalizedAreas = Array.from(
       new Set(
@@ -587,9 +554,13 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
             LIMIT $${limitParamIndex}
         `, params);
 
-    const rows = result.rows;
+    let rows = result.rows.filter((o: any) => {
+      return isPickupWindowWithinSchedule(schedule, o.preferred_pickup_window) &&
+        isAddressInOperatingAreas(o.pickup_locality, o.pickup_address, normalizedAreas);
+    });
+
     const hasMore = rows.length > limit;
-    if (hasMore) rows.pop();
+    if (hasMore) rows = rows.slice(0, limit);
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('[FEED DIAG] GET /api/orders/feed', {

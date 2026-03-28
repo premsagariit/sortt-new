@@ -7,6 +7,15 @@ import { verifyRole } from '../middleware/auth';
 import { storageProvider } from '../lib/storage';
 import { publishEvent } from '../lib/realtime';
 import { channelName } from '../utils/channelHelper';
+import { createNotification } from '../lib/notifications';
+import { sendPushToUsers } from '../utils/pushNotifications';
+import {
+    isAddressInOperatingAreas,
+    isPickupWindowWithinSchedule,
+    isWithinWorkingHoursNow,
+    parseOperatingAreas,
+    parseOperatingHoursSchedule,
+} from '../utils/availability';
 
 const router = Router();
 
@@ -324,6 +333,124 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
             ON CONFLICT (user_id) DO UPDATE
                 SET is_online = $2, last_ping_at = NOW()
         `, [userId, isOnline]);
+
+        if (isOnline) {
+            const profileRes = await query(
+                `SELECT city_code, operating_area, operating_hours
+                   FROM aggregator_profiles
+                  WHERE user_id = $1`,
+                [userId]
+            );
+
+            if (profileRes.rows.length > 0) {
+                const profile = profileRes.rows[0];
+                const cityCode = String(profile.city_code || '').trim();
+                const operatingAreas = parseOperatingAreas(profile.operating_area);
+                const schedule = parseOperatingHoursSchedule(profile.operating_hours);
+
+                if (cityCode && operatingAreas.length > 0 && isWithinWorkingHoursNow(schedule)) {
+                    const candidatesRes = await query(
+                        `SELECT o.id,
+                                o.order_number,
+                                o.pickup_locality,
+                                o.pickup_address,
+                                o.preferred_pickup_window,
+                                o.created_at,
+                                COALESCE(
+                                    json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL),
+                                    '[]'::json
+                                ) AS material_codes
+                           FROM orders o
+                           JOIN order_items oi ON oi.order_id = o.id
+                           LEFT JOIN aggregator_material_rates r
+                             ON r.aggregator_id = $1
+                            AND r.material_code = oi.material_code
+                          WHERE o.status = 'created'
+                            AND o.deleted_at IS NULL
+                            AND LOWER(TRIM(COALESCE(o.city_code, ''))) = LOWER(TRIM(COALESCE($2::text, '')))
+                          GROUP BY o.id
+                          HAVING COUNT(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL)
+                               = COUNT(DISTINCT r.material_code) FILTER (WHERE r.material_code IS NOT NULL)
+                          ORDER BY o.created_at DESC
+                          LIMIT 25`,
+                        [userId, cityCode]
+                    );
+
+                    const eligibleOrders = candidatesRes.rows.filter((order: any) => {
+                        const matchesArea = isAddressInOperatingAreas(
+                            order.pickup_locality,
+                            order.pickup_address,
+                            operatingAreas
+                        );
+                        const matchesPickupWindow = isPickupWindowWithinSchedule(
+                            schedule,
+                            order.preferred_pickup_window
+                        );
+                        return matchesArea && matchesPickupWindow;
+                    });
+
+                    if (eligibleOrders.length > 0) {
+                        const eligibleOrderIds = eligibleOrders.map((o: any) => String(o.id));
+                        const alreadyNotifiedRes = await query(
+                            `SELECT DISTINCT data->>'order_id' AS order_id
+                               FROM notifications
+                              WHERE user_id = $1
+                                AND type = 'order'
+                                AND COALESCE(data->>'kind', '') = 'new_pickup_listing'
+                                AND data->>'order_id' = ANY($2::text[])`,
+                            [userId, eligibleOrderIds]
+                        );
+
+                        const alreadyNotifiedIds = new Set(
+                            alreadyNotifiedRes.rows
+                                .map((r: any) => String(r.order_id || '').trim())
+                                .filter(Boolean)
+                        );
+
+                        const pendingToNotify = eligibleOrders.filter(
+                            (o: any) => !alreadyNotifiedIds.has(String(o.id))
+                        );
+
+                        if (pendingToNotify.length > 0) {
+                            const latest = pendingToNotify[0];
+                            const singleTitle = 'New order near you!';
+                            const singleBody = 'A pending scrap listing in your area is now available.';
+                            const multiTitle = `${pendingToNotify.length} orders near you`;
+                            const multiBody = 'Pending scrap listings in your area are now available.';
+
+                            await sendPushToUsers(
+                                [userId],
+                                pendingToNotify.length === 1 ? singleTitle : multiTitle,
+                                pendingToNotify.length === 1 ? singleBody : multiBody,
+                                {
+                                    order_id: latest.id,
+                                    city_code: cityCode,
+                                    kind: 'new_order_listing',
+                                }
+                            );
+
+                            for (const order of pendingToNotify) {
+                                const orderDisplayId = typeof order.order_number === 'number' && Number.isFinite(order.order_number)
+                                    ? `#${String(order.order_number).padStart(6, '0')}`
+                                    : `#${String(order.id).slice(0, 8).toUpperCase()}`;
+
+                                await createNotification(
+                                    userId,
+                                    'New order near you!',
+                                    'A pending scrap listing in your area is now available.',
+                                    'order',
+                                    {
+                                        order_id: order.id,
+                                        order_display_id: orderDisplayId,
+                                        kind: 'new_pickup_listing',
+                                    }
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if (orderId && latitude != null && longitude != null) {
             const orderRes = await query(

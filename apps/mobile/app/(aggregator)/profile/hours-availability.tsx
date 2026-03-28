@@ -39,9 +39,6 @@ export default function HoursAvailabilityScreen() {
     const router = useRouter();
     const storeSchedule = useAggregatorStore((s) => s.weeklySchedule);
     const updateProfile = useAggregatorStore((s) => s.updateProfile);
-
-    const isOnline = useAggregatorStore((s) => s.isOnline);
-    const updateOnlineStatus = useAggregatorStore((s) => s.updateOnlineStatus);
     const [schedule, setSchedule] = useState<DaySchedule[]>(
         storeSchedule && storeSchedule.length === 7 ? storeSchedule : WEEKLY_SCHEDULE_DEFAULT
     );
@@ -52,6 +49,36 @@ export default function HoursAvailabilityScreen() {
             setSchedule(storeSchedule);
         }
     }, [storeSchedule]);
+
+    const isCurrentlyWithinSchedule = React.useMemo(() => {
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const now = new Date();
+        const today = dayNames[now.getDay()];
+        const todayConfig = schedule.find((s) => s.day === today);
+        if (!todayConfig || !todayConfig.isOpen) return false;
+
+        const parseTime = (t: string): number | null => {
+            const m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+            if (!m) return null;
+            let h = Number(m[1]);
+            const min = Number(m[2]);
+            const marker = m[3].toUpperCase();
+            if (marker === 'PM' && h < 12) h += 12;
+            if (marker === 'AM' && h === 12) h = 0;
+            return h * 60 + min;
+        };
+
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const start = parseTime(todayConfig.start);
+        const end = parseTime(todayConfig.end);
+        if (start == null || end == null) return false;
+
+        if (end < start) {
+            return nowMinutes >= start || nowMinutes <= end;
+        }
+
+        return nowMinutes >= start && nowMinutes <= end;
+    }, [schedule]);
 
     // Modal state
     const [pickerVisible, setPickerVisible] = useState(false);
@@ -129,10 +156,8 @@ export default function HoursAvailabilityScreen() {
                         <Text variant="caption" color={colors.muted}>Receive and accept orders from sellers</Text>
                     </View>
                     <Switch
-                        value={isOnline}
-                        onValueChange={(v) => {
-                            void updateOnlineStatus(v);
-                        }}
+                        value={isCurrentlyWithinSchedule}
+                        disabled
                         trackColor={{ false: colors.border, true: colors.teal }}
                         thumbColor={colors.surface}
                     />
