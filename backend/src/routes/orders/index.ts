@@ -458,8 +458,15 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     }
     const { city_code, operating_area } = profRes.rows[0];
 
-    const { cursor } = req.query;
+    const rawCursor = Array.isArray(req.query.cursor) ? req.query.cursor[0] : req.query.cursor;
+    const cursor = typeof rawCursor === 'string' && Number.isFinite(Date.parse(rawCursor))
+      ? rawCursor
+      : null;
     const limit = 20;
+
+    if (!city_code) {
+      return res.status(400).json({ error: 'Aggregator city not configured' });
+    }
 
     // Feed: 'created' orders in aggregator's city where aggregator has ≥1 matching rate
     // G10.7: orders with NO matching rate for this aggregator are excluded
@@ -476,19 +483,22 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     if (operating_area) {
       if (typeof operating_area === 'string' && operating_area.startsWith('[') && operating_area.endsWith(']')) {
         try {
-          areas = JSON.parse(operating_area);
+          const parsed = JSON.parse(operating_area);
+          areas = Array.isArray(parsed)
+            ? parsed.map((v: unknown) => String(v ?? '').trim()).filter(Boolean)
+            : [];
         } catch {
           areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
         }
       } else if (typeof operating_area === 'string') {
         areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
       } else if (Array.isArray(operating_area)) {
-        areas = operating_area;
+        areas = operating_area.map((v: unknown) => String(v ?? '').trim()).filter(Boolean);
       }
     }
 
     if (areas.length > 0) {
-      areaClause = `AND o.pickup_locality = ANY($${params.length + 1})`;
+      areaClause = `AND COALESCE(o.pickup_locality, '') = ANY($${params.length + 1}::text[])`;
       params.push(areas);
     }
 
@@ -496,9 +506,12 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     params.push(limit + 1);
 
     const result = await query(`
-            SELECT o.*,
-                   json_agg(DISTINCT oi.material_code) as material_codes,
-                   jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) as estimated_weights
+                 SELECT o.*,
+                   json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL) as material_codes,
+                   COALESCE(
+                jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL),
+                '{}'::jsonb
+                   ) as estimated_weights
             FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
             LEFT JOIN aggregator_material_rates r
