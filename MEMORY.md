@@ -12,12 +12,10 @@
 > ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
 > - `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with env-driven model selection (`GEMINI_MODEL`, default `gemini-2.5-flash`).
 > - `backend/src/routes/scrap.ts` now serves `POST /api/scrap/analyze` with EXIF stripping, Redis image-hash cache, and daily circuit breaker (`GEMINI_DAILY_LIMIT`).
-> - `backend/src/utils/invoiceGenerator.ts` implemented for GST invoice JSONB legal record + PDF generation + R2 upload.
->   - **PDF engine migrated (2026-03-27):** `pdf-lib` replaced with **`puppeteer-core` + `@sparticuz/chromium`**. Invoice now renders the canonical `sortt_invoice.html` design pixel-perfect (Navy/Teal brand, DM Sans + DM Mono, native ₹ rupee symbol via HTML). `pdf-lib` is no longer used.
->   - New backend deps: `puppeteer-core`, `@sparticuz/chromium` in `backend/package.json`.
-> - `backend/src/routes/orders/index.ts` includes `GET /api/orders/:id/invoice` signed URL download route with access checks.
-> - `backend/src/scheduler.ts` runs the daily Python scraper by spawning `scraper/main.py` via node-cron (`Price Scraper (Python Spawn)` job).
-> - Mobile Day 15 UX is wired: listing Step 2 AI estimate hint flow + receipt invoice download flow.
+> ✅ **Implementation Sync Note (2026-03-28) — Invoice Engine Overhauled**
+> - `backend/src/utils/invoiceGenerator.ts` completely refactored to use **`pdf-lib`**. 
+> - **Puppeteer/Chromium Removed:** `puppeteer-core` and `@sparticuz/chromium` were purged due to memory limits and binary incompatibilities on Azure App Service Free Tier.
+> - **Design Integrity Checked:** Native vector rendering replaces HTML+CSS layout. Layout dimensions, canonical colours (`constants/tokens`), and coordinate-based dynamic stretching map directly to `sortt_invoice.html` spec. Fontkit is used for custom typography (DM Sans / DM Mono).
 
 > ✅ **Implementation Sync Note (2026-03-25)**
 > - Seller addresses refactor completed: two-page map-first flow (`address-map` → `address-form`) with shared draft handoff in `addressStore` and listing step3 integration.
@@ -56,12 +54,11 @@
 > - For focus-scoped subscriptions, removing listeners is usually sufficient during screen cleanup.
 > - Force-removing channels during routine unmounts can trigger detached-state runtime noise and brittle reconnect behavior.
 
-> ✅ **Learned Lesson (PDF Generation — use Puppeteer, not pdf-lib)**
-> - `pdf-lib` cannot handle Google Fonts, native Unicode (₹), or complex multi-column branded layouts reliably. Do not use it for anything beyond trivial single-font documents.
-> - For branded invoices use **`puppeteer-core` + `@sparticuz/chromium`** (Azure App Service / AWS Lambda-compatible Chromium): build an inline HTML string → `page.pdf({ format: 'A4', printBackground: true })`.
-> - Pass `{ headless: true, args: chromium.args, executablePath: await chromium.executablePath() }` to `puppeteer.launch()`. **Do NOT pass `defaultViewport: chromium.defaultViewport`** — that property does not exist on `@sparticuz/chromium`'s TypeScript types; pass an explicit `{ width, height }` object or omit the key entirely.
+> ✅ **Learned Lesson (PDF Generation — Migration back to pdf-lib 2026-03-28)**
+> - Earlier recommendation to use `puppeteer-core` is VOIDated. Azure App Service / B1ms free tier does not support Chromium reliably (crashes due to libnss/memory constraints).
+> - `pdf-lib` has been re-implemented. To resolve previous typography limitations, `@pdf-lib/fontkit` is strictly required for embedding DM Sans/Mono.
 > - The JSONB `invoices.invoice_data` column remains the legal GST record; the PDF is a rendering artifact and may be regenerated from the JSONB at any time.
-> - Always sanitise every user-supplied string with `sanitize-html` before embedding in the HTML template (I3 rule, also prevents XSS in the PDF rendering context).
+> - Always sanitise every user-supplied string with `sanitize-html` before embedding in the PDF (I3 rule, also prevents malformed draw buffers).
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 
@@ -138,7 +135,7 @@ Days 16–17 → Web portal + admin + security audit
 | AI — Image Analysis | Gemini Flash Vision (via `IAnalysisProvider`) | 1,500 req/day free cap — enforce circuit breaker |
 | AI — Price Scraper | Python scraper (`scraper/main.py`) scheduled via node-cron in backend | Writes to `price_index` table with sanity checks |
 | Maps / Geocoding | Ola Maps API via `IMapProvider` + MapLibre tiles on mobile | Keep `MAP_PROVIDER`/`EXPO_PUBLIC_MAP_PROVIDER` env-driven |
-| PDF Generation | `puppeteer-core` + `@sparticuz/chromium` | GST invoices — HTML→PDF via headless Chromium; `pdf-lib` removed (2026-03-27) |
+| PDF Generation | `pdf-lib` + `@pdf-lib/fontkit` | GST invoices — Native canvas instructions; `puppeteer` removed due to Azure limits |
 | Icons | Phosphor Icons (MIT) — outline, 1.5px stroke | Filled variant for active nav states only |
 | State Management | Zustand | No Redux, no Context API for global state |
 | Monorepo | pnpm workspaces | packages: `maps`, `realtime`, `auth`, `storage`, `analysis` |

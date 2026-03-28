@@ -1,23 +1,12 @@
+import fs from 'fs';
+import path from 'path';
 import crypto from 'crypto';
 import sanitizeHtml from 'sanitize-html';
-import puppeteerCore from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, LineCapStyle } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { storageProvider } from '../lib/storage';
-
-/** Resolve the Chromium executable.
- *  Priority order:
- *  1. PUPPETEER_EXECUTABLE_PATH env var (manual override for any env)
- *  2. @sparticuz/chromium bundled binary (works on Azure App Service, Lambda, etc.)
- */
-async function resolveBrowserExecutable(): Promise<string> {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  // @sparticuz/chromium ships a pre-extracted Chromium binary — no post-install download needed.
-  return chromium.executablePath();
-}
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -29,7 +18,7 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
-const fmtRs = (n: number) => `&#8377;${n.toFixed(2)}`;
+const fmtAmount = (n: number) => `₹${n.toFixed(2)}`;
 
 const formatDate = (date: Date | string | null | undefined): string => {
   if (!date) return 'N/A';
@@ -38,495 +27,134 @@ const formatDate = (date: Date | string | null | undefined): string => {
   });
 };
 
-const formatDateTime = (date: Date | string | null | undefined): string => {
+const formatTime = (date: Date | string | null | undefined): string => {
   if (!date) return 'N/A';
   const d = new Date(date);
-  const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
-  return `${dateStr}, ${timeStr}`;
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+};
+
+const drawRoundedRect = (
+  page: PDFPage,
+  x: number, y: number,
+  w: number, h: number,
+  r: number,
+  fillColor?: RGB,
+  strokeColor?: RGB,
+  lineWidth = 0.5,
+  corners = { tl: true, tr: true, br: true, bl: true }
+) => {
+  // SVG path generation for rectangles with selectively rounded corners
+  // pdf-lib's drawSvgPath receives y bottom-up, but our system expects y top-down.
+  // We use `page.drawSvgPath(path)` where all coordinates are in pdf-lib's bottom-up orientation.
+  const kappa = 0.552284749831;
+  const c = r * kappa;
+
+  let p = `M ${corners.bl ? x + r : x} ${y - h}`;
+
+  // left edge + top left corner
+  p += ` L ${x} ${corners.tl ? y - r : y}`;
+  if (corners.tl) {
+    p += ` C ${x} ${y - r + c}, ${x + r - c} ${y}, ${x + r} ${y}`;
+  }
+
+  // top edge + top right corner
+  p += ` L ${corners.tr ? x + w - r : x + w} ${y}`;
+  if (corners.tr) {
+    p += ` C ${x + w - r + c} ${y}, ${x + w} ${y - r + c}, ${x + w} ${y - r}`;
+  }
+
+  // right edge + bottom right corner
+  p += ` L ${x + w} ${corners.br ? y - h + r : y - h}`;
+  if (corners.br) {
+    p += ` C ${x + w} ${y - h + r - c}, ${x + w - r + c} ${y - h}, ${x + w - r} ${y - h}`;
+  }
+
+  // bottom edge + bottom left corner
+  p += ` L ${corners.bl ? x + r : x} ${y - h}`;
+  if (corners.bl) {
+    p += ` C ${x + r - c} ${y - h}, ${x} ${y - h + r - c}, ${x} ${y - h + r}`; // close path manually or use Z
+  }
+  p += ' Z';
+
+  const options: any = {};
+  if (fillColor) options.color = fillColor;
+  if (strokeColor) {
+    options.borderColor = strokeColor;
+    options.borderWidth = lineWidth;
+  }
+  page.drawSvgPath(p, options);
+};
+
+const drawRect = (
+  page: PDFPage,
+  x: number, y: number,
+  w: number, h: number,
+  color?: RGB,
+  strokeColor?: RGB,
+  lineWidth = 0.5
+) => {
+  page.drawRectangle({
+    x, y: y - h, width: w, height: h,
+    color, borderColor: strokeColor, borderWidth: lineWidth
+  });
+};
+
+const drawTextRight = (
+  page: PDFPage,
+  text: string,
+  rightEdgeX: number,
+  y: number,
+  font: PDFFont,
+  size: number,
+  color: RGB
+) => {
+  // Provide defensive font check, avoid crashing on empty fonts
+  if (!font) return;
+  const textWidth = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: rightEdgeX - textWidth, y, font, size, color });
+};
+
+const fitText = (text: string, font: PDFFont, size: number, maxWidth: number): string => {
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+  let truncated = text;
+  while (truncated.length > 0 && font.widthOfTextAtSize(truncated + '…', size) > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + '…';
+};
+
+const COLORS = {
+  navy: rgb(0.110, 0.180, 0.290), // #1C2E4A
+  red: rgb(0.753, 0.224, 0.169), // #C0392B
+  amber: rgb(0.718, 0.475, 0.122), // #B7791F
+  teal: rgb(0.102, 0.420, 0.388), // #1A6B63
+  tealLight: rgb(0.918, 0.961, 0.957), // #EAF5F4
+  slate: rgb(0.361, 0.420, 0.478), // #5C6B7A
+  muted: rgb(0.557, 0.608, 0.667), // #8E9BAA
+  border: rgb(0.867, 0.890, 0.918), // #DDE3EA
+  bg: rgb(0.957, 0.965, 0.976), // #F4F6F9
+  white: rgb(1, 1, 1),
+  
+  // Opacity approximations specified for navy background (#1C2E4A = 28,46,74)
+  navyFaint1: rgb(0.490, 0.550, 0.630), // 38% white
+  navyLine: rgb(0.290, 0.350, 0.430), // 8% white 
+  navyFaint2: rgb(0.860, 0.860, 0.860), // 84% approx white
+  white76: rgb(0.760, 0.760, 0.760), // 76%
+  white75: rgb(0.750, 0.750, 0.750),
+  white65: rgb(0.650, 0.650, 0.650),
+  white36: rgb(0.360, 0.360, 0.360),
+  white34: rgb(0.340, 0.340, 0.340),
+  white30: rgb(0.300, 0.300, 0.300),
+  white60: rgb(0.600, 0.600, 0.600),
+  white10: rgb(0.300, 0.340, 0.410),
 };
 
 // --------------------------------------------------------------------------
-// HTML template builder — produces the full A4 invoice page
-// --------------------------------------------------------------------------
-function buildInvoiceHtml(data: {
-  invoiceNumber: string;
-  invoiceDate: string;
-  orderDisplayId: string;        // e.g. #000011
-  orderCreatedAt: string | null;
-  orderCompletedAt: string | null;
-  city: string;
-  seller: { name: string; businessName: string; profileType: string; gstin: string | null; locality: string };
-  aggregator: { name: string; businessName: string; operatingArea: string };
-  lineItems: { materialLabel: string; materialCode: string; confirmedWeightKg: number; ratePerKg: number; amount: number }[];
-  subtotal: number;
-  platformFee: number;
-  totalAmount: number;
-}): string {
-  const {
-    invoiceNumber, invoiceDate, orderDisplayId, orderCreatedAt, orderCompletedAt,
-    city, seller, aggregator, lineItems, subtotal, platformFee, totalAmount,
-  } = data;
-
-  const totalWeight = lineItems.reduce((s, i) => s + i.confirmedWeightKg, 0);
-  const itemsHtml = lineItems.map(item => `
-    <tr>
-      <td>
-        <div class="mat-name">${sanitizeText(item.materialLabel)}</div>
-        <div class="mat-sub">${sanitizeText(item.materialCode)}</div>
-      </td>
-      <td><span class="w-val">${item.confirmedWeightKg.toFixed(2)} kg</span></td>
-      <td><span class="r-val">${fmtRs(item.ratePerKg)}</span></td>
-      <td><span class="a-val">${fmtRs(item.amount)}</span></td>
-    </tr>
-  `).join('');
-
-  const sellerType = seller.profileType
-    ? `Scrap Seller &nbsp;&middot;&nbsp; ${sanitizeText(seller.profileType)}`
-    : 'Scrap Seller';
-  const sellerDetail = [
-    seller.locality ? sanitizeText(seller.locality) : '',
-    'Sortt Verified Member',
-  ].filter(Boolean).join('<br>');
-  const sellerGstinRow = seller.gstin
-    ? `<br><span style="font-size:10px;color:#8E9BAA;">GSTIN: ${sanitizeText(seller.gstin)}</span>`
-    : '';
-
-  const aggName = sanitizeText(aggregator.name);
-  const aggBiz = aggregator.businessName ? ` <span style="font-size:11px;font-weight:400;color:#5C6B7A;">&nbsp;(${sanitizeText(aggregator.businessName)})</span>` : '';
-  const aggDetail = [
-    'KYC Verified &nbsp;&middot;&nbsp; Sortt Certified Partner',
-    aggregator.operatingArea ? sanitizeText(aggregator.operatingArea) + ' Operating Area' : '',
-  ].filter(Boolean).join('<br>');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Sortt — Order Invoice ${invoiceNumber}</title>
-<style>/* Google Fonts omitted for server-side rendering — system fonts used */</style>
-<style>
-
-  :root {
-    --navy:       #1C2E4A;
-    --red:        #C0392B;
-    --amber:      #B7791F;
-    --amber-light:#FEF9EC;
-    --teal:       #1A6B63;
-    --teal-light: #EAF5F4;
-    --slate:      #5C6B7A;
-    --muted:      #8E9BAA;
-    --border:     #DDE3EA;
-    --bg:         #F4F6F9;
-    --surface:    #FFFFFF;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: #FFFFFF;
-    color: var(--navy);
-  }
-  .invoice-shell {
-    width: 210mm;
-    min-height: 297mm;
-    background: var(--surface);
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* ── HEADER ── */
-  .invoice-header {
-    background: var(--navy);
-    padding: 28px 36px 0;
-    position: relative;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-  .invoice-header::before {
-    content:''; position:absolute; top:-70px; right:-70px;
-    width:240px; height:240px; border-radius:50%;
-    background:rgba(255,255,255,0.03);
-  }
-  .invoice-header::after {
-    content:''; position:absolute; bottom:-50px; right:110px;
-    width:150px; height:150px; border-radius:50%;
-    background:rgba(255,255,255,0.02);
-  }
-  .header-brand-row {
-    display:flex; align-items:flex-start; justify-content:space-between;
-    position:relative; z-index:1; padding-bottom:22px;
-  }
-  .brand-name {
-    font-size:34px; font-weight:700; color:#fff;
-    letter-spacing:-1px; line-height:1;
-  }
-  .brand-name span { color:var(--red); }
-  .brand-tagline {
-    font-size:10px; color:rgba(255,255,255,0.40);
-    letter-spacing:0.12em; text-transform:uppercase;
-    margin-top:5px; font-weight:400;
-  }
-  .invoice-id-block { text-align:right; }
-  .invoice-badge {
-    display:inline-block; background:var(--red); color:#fff;
-    font-size:9px; font-weight:700; letter-spacing:0.15em;
-    text-transform:uppercase; padding:3px 12px; border-radius:20px; margin-bottom:7px;
-  }
-  .invoice-number {
-    font-family:'Courier New',Courier,monospace; font-size:21px; font-weight:500;
-    color:#fff; display:block; letter-spacing:0.02em;
-  }
-  .invoice-date-str {
-    font-family:'Courier New',Courier,monospace; font-size:11px;
-    color:rgba(255,255,255,0.48); display:block; margin-top:3px;
-  }
-  .header-meta-strip {
-    display:grid; grid-template-columns:repeat(4,1fr);
-    border-top:1px solid rgba(255,255,255,0.09);
-    position:relative; z-index:1;
-  }
-  .meta-cell {
-    padding:14px 20px 14px 0; border-right:1px solid rgba(255,255,255,0.07);
-  }
-  .meta-cell:not(:first-child) { padding-left:20px; }
-  .meta-cell:last-child { border-right:none; }
-  .meta-lbl {
-    font-size:9px; color:rgba(255,255,255,0.36); letter-spacing:0.12em;
-    text-transform:uppercase; font-weight:600; margin-bottom:4px;
-  }
-  .meta-val {
-    font-family:'Courier New',Courier,monospace; font-size:11.5px;
-    color:rgba(255,255,255,0.86); font-weight:400; line-height:1.4;
-  }
-  .header-address-row {
-    display:flex; align-items:flex-start; justify-content:space-between;
-    gap:24px; border-top:1px solid rgba(255,255,255,0.08);
-    padding:14px 0 18px; position:relative; z-index:1;
-  }
-  .addr-lbl {
-    font-size:9px; color:rgba(255,255,255,0.36); letter-spacing:0.12em;
-    text-transform:uppercase; font-weight:600; margin-bottom:4px;
-  }
-  .addr-val { font-size:11.5px; color:rgba(255,255,255,0.78); line-height:1.5; }
-  .status-pill {
-    flex-shrink:0; background:var(--teal); color:#fff; font-size:10px;
-    font-weight:700; letter-spacing:0.10em; text-transform:uppercase;
-    padding:6px 16px; border-radius:20px; display:flex; align-items:center;
-    gap:7px; margin-top:3px;
-  }
-  .status-pill::before {
-    content:''; width:6px; height:6px; border-radius:50%;
-    background:#5EFAD4; flex-shrink:0;
-  }
-
-  /* ── BODY ── */
-  .invoice-body { padding:28px 36px 36px; flex:1; }
-  .sec-head {
-    font-size:9px; font-weight:700; letter-spacing:0.16em;
-    text-transform:uppercase; color:var(--muted); margin-bottom:11px;
-    display:flex; align-items:center; gap:10px;
-  }
-  .sec-head::after { content:''; flex:1; height:1px; background:var(--border); }
-  .party-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px; }
-  .party-card {
-    background:var(--bg); border:1px solid var(--border);
-    border-radius:10px; padding:16px 18px; display:flex; gap:13px; align-items:flex-start;
-  }
-  .party-card.seller { border-left:3px solid var(--navy); }
-  .party-card.buyer  { border-left:3px solid var(--teal); }
-  .p-icon {
-    width:36px; height:36px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;
-  }
-  .party-card.seller .p-icon { background:rgba(28,46,74,0.08); }
-  .party-card.buyer  .p-icon { background:var(--teal-light); }
-  .p-role { font-size:9px; font-weight:700; letter-spacing:0.13em; text-transform:uppercase; margin-bottom:1px; }
-  .party-card.seller .p-role { color:var(--navy); }
-  .party-card.buyer  .p-role { color:var(--teal); }
-  .p-type { font-size:10px; color:var(--muted); font-weight:400; margin-bottom:7px; }
-  .p-name { font-size:15px; font-weight:700; color:var(--navy); line-height:1.2; margin-bottom:4px; }
-  .p-detail { font-size:11px; color:var(--slate); line-height:1.55; }
-
-  /* ── Items table ── */
-  .table-wrap { border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:22px; }
-  .items-table { width:100%; table-layout:fixed; border-collapse:collapse; }
-  .items-table th {
-    background:var(--navy); padding:10px 16px; font-size:9px; font-weight:600;
-    letter-spacing:0.11em; text-transform:uppercase; color:rgba(255,255,255,0.62); text-align:left;
-  }
-  .items-table th:nth-child(1) { width:40%; }
-  .items-table th:nth-child(2),.items-table th:nth-child(3),.items-table th:nth-child(4) { width:20%; text-align:right; }
-  .items-table tbody tr { border-bottom:1px solid var(--border); }
-  .items-table tbody tr:last-child { border-bottom:none; }
-  .items-table tbody tr:nth-child(even) td { background:#FAFBFC; }
-  .items-table td { padding:14px 16px; font-size:12.5px; color:var(--navy); vertical-align:middle; }
-  .items-table td:nth-child(2),.items-table td:nth-child(3),.items-table td:nth-child(4) {
-    text-align:right; font-family:'Courier New',Courier,monospace; font-size:12px; white-space:nowrap;
-  }
-  .mat-name { font-size:13px; font-weight:600; color:var(--navy); }
-  .mat-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
-  .w-val    { color:var(--slate); }
-  .r-val    { color:var(--amber); }
-  .a-val    { color:var(--navy); font-weight:600; }
-  .items-table tfoot tr { border-top:2px solid var(--border); }
-  .items-table tfoot td { padding:12px 16px; font-size:12px; font-weight:600; color:var(--slate); }
-  .items-table tfoot td:last-child {
-    text-align:right; font-family:'Courier New',Courier,monospace; font-size:13px;
-    color:var(--navy); font-weight:700;
-  }
-
-  /* ── Lower grid ── */
-  .lower-grid { display:grid; grid-template-columns:1fr 240px; gap:14px; margin-bottom:22px; align-items:start; }
-  .order-details-table { border:1px solid var(--border); border-radius:10px; overflow:hidden; width:100%; border-collapse:collapse; }
-  .order-details-table tr { border-bottom:1px solid var(--border); }
-  .order-details-table tr:last-child { border-bottom:none; }
-  .order-details-table tr:nth-child(even) td { background:#FAFBFC; }
-  .order-details-table td { padding:9px 16px; font-size:11.5px; vertical-align:top; }
-  .order-details-table td:first-child { color:var(--muted); font-weight:500; width:45%; white-space:nowrap; }
-  .order-details-table td:last-child  { color:var(--navy); font-weight:500; }
-  .td-mono { font-family:'Courier New',Courier,monospace; font-size:11px; }
-  .td-teal { color:var(--teal)!important; font-weight:600!important; }
-  .totals-block { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .t-row {
-    display:flex; justify-content:space-between; align-items:center;
-    padding:11px 16px; border-bottom:1px solid var(--border); font-size:12px;
-  }
-  .t-row:last-child { border-bottom:none; }
-  .t-row .lbl { color:var(--slate); }
-  .t-row .val { font-family:'Courier New',Courier,monospace; font-size:12.5px; color:var(--navy); font-weight:500; }
-  .t-row.grand { background:var(--navy); padding:14px 16px; }
-  .t-row.grand .lbl { font-size:12px; font-weight:600; color:rgba(255,255,255,0.72); }
-  .t-row.grand .val { font-size:21px; font-weight:700; color:#fff; }
-
-  /* ── Payment banner ── */
-  .payment-banner {
-    background:var(--teal-light); border:1px solid rgba(26,107,99,0.18);
-    border-radius:10px; padding:16px 24px; display:flex;
-    align-items:center; justify-content:space-between; gap:20px;
-  }
-  .pb-title { font-size:13px; font-weight:700; color:var(--teal); }
-  .pb-sub   { font-size:10.5px; color:var(--slate); margin-top:3px; }
-  .pb-right { display:flex; align-items:center; gap:10px; }
-  .pb-check {
-    width:24px; height:24px; border-radius:50%; background:var(--teal);
-    display:flex; align-items:center; justify-content:center; flex-shrink:0;
-  }
-  .pb-amount { font-family:'Courier New',Courier,monospace; font-size:28px; font-weight:700; color:var(--teal); }
-
-  /* ── FOOTER ── */
-  .invoice-footer {
-    background:var(--navy); padding:16px 36px; display:flex;
-    align-items:center; justify-content:space-between; gap:20px;
-    flex-shrink:0; margin-top:auto;
-  }
-  .ft-brand { font-size:15px; font-weight:700; color:#fff; letter-spacing:-0.3px; }
-  .ft-brand span { color:var(--red); }
-  .ft-sub { font-size:10px; color:rgba(255,255,255,0.38); margin-top:2px; letter-spacing:0.04em; }
-  .ft-div { width:1px; height:32px; background:rgba(255,255,255,0.10); flex-shrink:0; }
-  .ft-legal { font-size:10px; color:rgba(255,255,255,0.36); line-height:1.65; text-align:center; flex:1; }
-  .ft-support { text-align:right; }
-  .ft-sup-lbl { font-size:9px; color:rgba(255,255,255,0.32); letter-spacing:0.10em; text-transform:uppercase; font-weight:600; margin-bottom:3px; }
-  .ft-sup-val { font-size:11px; color:rgba(255,255,255,0.62); }
-</style>
-</head>
-<body>
-<div class="invoice-shell">
-
-  <!-- HEADER -->
-  <div class="invoice-header">
-    <div class="header-brand-row">
-      <div>
-        <div class="brand-name">S<span>.</span>ortt</div>
-        <div class="brand-tagline">India's Scrap Marketplace &nbsp;&middot;&nbsp; ${sanitizeText(city)}</div>
-      </div>
-      <div class="invoice-id-block">
-        <div class="invoice-badge">Order Invoice</div>
-        <span class="invoice-number">${sanitizeText(invoiceNumber)}</span>
-        <span class="invoice-date-str">${sanitizeText(invoiceDate)}</span>
-      </div>
-    </div>
-
-    <div class="header-meta-strip">
-      <div class="meta-cell">
-        <div class="meta-lbl">Order Reference</div>
-        <div class="meta-val">${sanitizeText(orderDisplayId)}</div>
-      </div>
-      <div class="meta-cell">
-        <div class="meta-lbl">Pickup Date &amp; Time</div>
-        <div class="meta-val">${sanitizeText(formatDateTime(orderCompletedAt))}</div>
-      </div>
-      <div class="meta-cell">
-        <div class="meta-lbl">Payment Mode</div>
-        <div class="meta-val">Cash on Pickup</div>
-      </div>
-      <div class="meta-cell">
-        <div class="meta-lbl">City</div>
-        <div class="meta-val">${sanitizeText(city)}</div>
-      </div>
-    </div>
-
-    <div class="header-address-row">
-      <div>
-        <div class="addr-lbl">Pickup Location</div>
-        <div class="addr-val">${seller.locality ? sanitizeText(seller.locality) + ', ' : ''}${sanitizeText(city)}</div>
-      </div>
-      <div class="status-pill">Completed</div>
-    </div>
-  </div>
-
-  <!-- BODY -->
-  <div class="invoice-body">
-
-    <!-- PARTIES -->
-    <div class="sec-head">Transaction Parties</div>
-    <div class="party-row">
-      <div class="party-card seller">
-        <div class="p-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="7" r="4" stroke="#1C2E4A" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M4 20c0-3.314 3.582-6 8-6s8 2.686 8 6" stroke="#1C2E4A" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="p-info">
-          <div class="p-role">Seller</div>
-          <div class="p-type">${sellerType}</div>
-          <div class="p-name">${sanitizeText(seller.name)}</div>
-          <div class="p-detail">${sellerDetail}${sellerGstinRow}</div>
-        </div>
-      </div>
-
-      <div class="party-card buyer">
-        <div class="p-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M3 9l1-5h16l1 5" stroke="#1A6B63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M3 9a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0" stroke="#1A6B63" stroke-width="1.8"/>
-            <path d="M5 11v8h14v-8" stroke="#1A6B63" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M9 19v-4h6v4" stroke="#1A6B63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <div class="p-info">
-          <div class="p-role">Buyer</div>
-          <div class="p-type">Scrap Aggregator &nbsp;&middot;&nbsp; Verified Shop</div>
-          <div class="p-name">${aggName}${aggBiz}</div>
-          <div class="p-detail">${aggDetail}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- COLLECTED MATERIALS -->
-    <div class="sec-head">Collected Materials</div>
-    <div class="table-wrap">
-      <table class="items-table">
-        <thead>
-          <tr>
-            <th>Material</th>
-            <th style="text-align:right;">Confirmed Weight</th>
-            <th style="text-align:right;">Rate per kg</th>
-            <th style="text-align:right;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3" style="color:var(--slate);font-weight:500;font-size:11.5px;">
-              Total &mdash; ${lineItems.length} material type${lineItems.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; ${totalWeight.toFixed(2)} kg collected
-            </td>
-            <td>${fmtRs(subtotal)}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    <!-- ORDER DETAILS + TOTALS -->
-    <div class="lower-grid">
-      <div>
-        <div class="sec-head">Order Details</div>
-        <table class="order-details-table">
-          <tbody>
-            <tr><td>Order Reference</td><td class="td-mono">${sanitizeText(orderDisplayId)}</td></tr>
-            <tr><td>Invoice Number</td><td class="td-mono">${sanitizeText(invoiceNumber)}</td></tr>
-            <tr><td>Order Placed</td><td class="td-mono">${sanitizeText(formatDateTime(orderCreatedAt))}</td></tr>
-            <tr><td>Pickup Completed</td><td class="td-mono td-teal">${sanitizeText(formatDateTime(orderCompletedAt))}</td></tr>
-            <tr><td>Total Weight</td><td class="td-mono">${totalWeight.toFixed(2)} kg</td></tr>
-            <tr><td>Materials Count</td><td>${lineItems.length} material type${lineItems.length !== 1 ? 's' : ''}</td></tr>
-            <tr><td>Payment Mode</td><td>Cash on Pickup</td></tr>
-            ${seller.locality ? `<tr><td>Pickup Locality</td><td>${sanitizeText(seller.locality)}, ${sanitizeText(city)}</td></tr>` : ''}
-          </tbody>
-        </table>
-      </div>
-
-      <div>
-        <div class="sec-head">Amount</div>
-        <div class="totals-block">
-          <div class="t-row">
-            <span class="lbl">Subtotal</span>
-            <span class="val">${fmtRs(subtotal)}</span>
-          </div>
-          <div class="t-row">
-            <span class="lbl">Platform Fee</span>
-            <span class="val">${fmtRs(platformFee)}</span>
-          </div>
-          <div class="t-row grand">
-            <span class="lbl">Total Paid</span>
-            <span class="val">${fmtRs(totalAmount)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- PAYMENT BANNER -->
-    <div class="payment-banner">
-      <div>
-        <div class="pb-title">Payment Received by Seller</div>
-        <div class="pb-sub">
-          Cash paid by ${aggName}${aggregator.businessName ? ` (${sanitizeText(aggregator.businessName)})` : ''} &nbsp;&middot;&nbsp; ${sanitizeText(formatDate(orderCompletedAt))}
-        </div>
-      </div>
-      <div class="pb-right">
-        <div class="pb-check">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <span class="pb-amount">${fmtRs(totalAmount)}</span>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- FOOTER -->
-  <div class="invoice-footer">
-    <div>
-      <div class="ft-brand">S<span>.</span>ortt</div>
-      <div class="ft-sub">sortt.in &nbsp;&middot;&nbsp; India</div>
-    </div>
-    <div class="ft-div"></div>
-    <div class="ft-legal">
-      This is a system-generated invoice from Sortt.<br>
-      Please retain this document for your records.
-    </div>
-    <div class="ft-div"></div>
-    <div class="ft-support">
-      <div class="ft-sup-lbl">Disputes &amp; Support</div>
-      <div class="ft-sup-val">support@sortt.in</div>
-    </div>
-  </div>
-
-</div>
-</body>
-</html>`;
-}
-
-// --------------------------------------------------------------------------
-// Main export — fetch order data, build HTML, render to PDF, upload to R2
+// Main export — fetch order data, generate PDF, upload to R2
 // --------------------------------------------------------------------------
 export async function generateAndStoreInvoice(orderId: string): Promise<void> {
-  let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | null = null;
-
   try {
-    console.log(`[Invoice] Starting professional generation for order ${orderId}`);
+    console.log(`[Invoice] Starting robust pdf-lib generation for order ${orderId}`);
 
     const orderRes = await query(
       `SELECT o.id,
@@ -582,9 +210,10 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
       Sentry.captureMessage(`Invalid GSTIN for order ${orderId}: ${sellerGstin}`, 'warning');
     }
 
+    const year = new Date().getFullYear();
     const numericPart = String(order.order_number || '').padStart(6, '0');
     const orderDisplayId = `#${numericPart}`;
-    const invoiceNumber  = `INV-${new Date().getFullYear()}-${numericPart}`;
+    const invoiceNumber  = `INV-${year}-${numericPart}`;
     const invoiceDate    = formatDate(new Date());
 
     const lineItemsRaw = Array.isArray(order.line_items) ? order.line_items : [];
@@ -597,12 +226,13 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     }));
 
     const subtotal     = lineItems.reduce((s: number, i: { amount: number }) => s + i.amount, 0) || confirmedTotal;
-    const platformFee  = 0; // free during MVP
+    const platformFee  = 0;
     const totalAmount  = Number((subtotal + platformFee).toFixed(2));
+    const totalWeight  = lineItems.reduce((s: number, i: { confirmed_weight_kg: number }) => s + i.confirmed_weight_kg, 0);
 
     const city = sanitizeText(order.aggregator_city_code || order.seller_city_code || 'India');
 
-    // ── Persist DB record ──
+    // Persist DB record
     const invoiceData = {
       invoice_number: invoiceNumber,
       invoice_date:   new Date().toISOString().split('T')[0],
@@ -651,85 +281,280 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
       return;
     }
 
-    console.log(`[Invoice] DB record created id=${invoiceId}, generating PDF via Puppeteer...`);
+    console.log(`[Invoice] DB record created id=${invoiceId}, generating PDF via pdf-lib...`);
 
-    // ── Build HTML & render PDF ──
-    const html = buildInvoiceHtml({
-      invoiceNumber,
-      invoiceDate,
-      orderDisplayId,
-      orderCreatedAt:   order.order_created_at ?? null,
-      orderCompletedAt: order.order_updated_at ?? null,
-      city,
-      seller: {
-        name:        sanitizeText(order.seller_name),
-        businessName: sanitizeText(order.seller_business_name),
-        profileType:  sanitizeText(order.profile_type),
-        gstin:        sellerGstin,
-        locality:     sanitizeText(order.seller_locality),
-      },
-      aggregator: {
-        name:          sanitizeText(order.aggregator_name),
-        businessName:  sanitizeText(order.aggregator_business_name),
-        operatingArea: sanitizeText(order.aggregator_operating_area),
-      },
-      lineItems: lineItems.map((i: { material_label: string; material_code: string; confirmed_weight_kg: number; rate_per_kg: number; amount: number }) => ({
-        materialLabel:      i.material_label,
-        materialCode:       i.material_code,
-        confirmedWeightKg: i.confirmed_weight_kg,
-        ratePerKg:         i.rate_per_kg,
-        amount:            i.amount,
-      })),
-      subtotal,
-      platformFee,
-      totalAmount,
+    // PDF Generation
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
+
+    let fontSans: PDFFont;
+    let fontSansBold: PDFFont;
+    let fontMono: PDFFont;
+
+    try {
+      const dmSansBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMSans-Regular.ttf'));
+      const dmSansBoldBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMSans-Bold.ttf'));
+      const dmMonoBytes = fs.readFileSync(path.join(process.cwd(), 'assets/fonts/DMMono-Regular.ttf'));
+      fontSans = await pdfDoc.embedFont(dmSansBytes);
+      fontSansBold = await pdfDoc.embedFont(dmSansBoldBytes);
+      fontMono = await pdfDoc.embedFont(dmMonoBytes);
+      console.log('[Invoice] Successfully loaded DM custom fonts');
+    } catch (e) {
+      console.warn('[Invoice] Custom fonts not found, falling back to standard Helvetica/Courier in pdf-lib');
+      fontSans = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      fontSansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      fontMono = await pdfDoc.embedFont(StandardFonts.Courier);
+    }
+
+    // Dynamic height measurement
+    const MARGIN_SIDE = 44;
+    const PAGE_WIDTH = 595.28;
+    const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN_SIDE * 2);
+
+    const headerHeight = 155;
+    const partyHeight = 78;
+    const tableHeaderHeight = 28;
+    const rowHeight = 42;
+    const tableFooterHeight = 30;
+    const tableRowsHeight = lineItems.length * rowHeight;
+    const detailsHeight = 24 * 7;
+    const bannerHeight = 56;
+    const footerHeight = 52;
+    
+    // Sum padding and gaps roughly equal to html
+    const totalContentHeight = headerHeight + 32 + partyHeight + 26 + 12 + tableHeaderHeight + tableRowsHeight + tableFooterHeight + 26 + detailsHeight + 26 + bannerHeight + 40 + footerHeight;
+    const pageHeight = Math.max(841.89, totalContentHeight);
+    const page = pdfDoc.addPage([PAGE_WIDTH, pageHeight]);
+    const fromTop = (y: number) => pageHeight - y;
+
+    // SECTION 1 — HEADER
+    drawRect(page, 0, fromTop(0), PAGE_WIDTH, headerHeight, COLORS.navy);
+
+    // 1.2 Brand Name
+    const brandX = MARGIN_SIDE;
+    const sWidth = fontSansBold.widthOfTextAtSize('S', 28);
+    page.drawText('S', { x: brandX, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.red });
+    const dotWidth = fontSansBold.widthOfTextAtSize('.', 28);
+    page.drawText('.', { x: brandX + sWidth, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.red });
+    page.drawText('ortt', { x: brandX + sWidth + dotWidth, y: fromTop(36), font: fontSansBold, size: 28, color: COLORS.white });
+
+    // 1.3 Tagline
+    page.drawText(`India's Scrap Marketplace  ·  ${city}`, { x: brandX, y: fromTop(36 + 28), font: fontSans, size: 8, color: COLORS.navyFaint1 });
+
+    // 1.4 Invoice Badge
+    const rightEdge = PAGE_WIDTH - MARGIN_SIDE;
+    const badgeText = "ORDER INVOICE";
+    const badgeW = fontSansBold.widthOfTextAtSize(badgeText, 7) + 24;
+    drawRoundedRect(page, rightEdge - badgeW, fromTop(22), badgeW, 14, 7, COLORS.red);
+    page.drawText(badgeText, { x: rightEdge - badgeW + 12, y: fromTop(22 + 9), font: fontSansBold, size: 7, color: COLORS.white });
+
+    // 1.5 Invoice Number
+    drawTextRight(page, invoiceNumber, rightEdge, fromTop(56), fontMono, 18, COLORS.white);
+    
+    // 1.6 Invoice Date
+    drawTextRight(page, invoiceDate, rightEdge, fromTop(56 + 14), fontMono, 9, COLORS.navyFaint1);
+
+    // 1.7 Horizontal Rule
+    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(92) }, end: { x: rightEdge, y: fromTop(92) }, color: COLORS.navyLine, thickness: 0.5 });
+
+    // 1.8 4-column Meta Strip
+    const colWidth = CONTENT_WIDTH / 4;
+    const metaYlbl = fromTop(106);
+    const metaYval = fromTop(122);
+    
+    [[`ORDER REFERENCE`, orderDisplayId],
+     [`PICKUP DATE & TIME`, `${formatDate(order.order_updated_at)} · ${formatTime(order.order_updated_at)}`],
+     [`PAYMENT MODE`, `Cash on Pickup`],
+     [`CITY & STATE`, `${city}, Telangana`]].forEach((cell, i) => {
+       const x = MARGIN_SIDE + (i * colWidth) + (i === 0 ? 0 : 20);
+       if (i > 0) {
+         page.drawLine({ start: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(96) }, end: { x: MARGIN_SIDE + (i * colWidth), y: fromTop(130) }, color: COLORS.navyLine, thickness: 0.5 });
+       }
+       page.drawText(cell[0], { x, y: metaYlbl, font: fontSansBold, size: 7, color: COLORS.navyFaint1 });
+       page.drawText(cell[1], { x, y: metaYval, font: fontMono, size: 10, color: COLORS.navyFaint2 });
     });
 
-    const executablePath = await resolveBrowserExecutable();
-    browser = await puppeteerCore.launch({
-      args: [
-        ...chromium.args,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-extensions',
-      ],
-      defaultViewport: { width: 1200, height: 1754 }, // A4 @ 144 dpi
-      headless: true,
-      executablePath,
+    // 1.9 Rule 2
+    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(134) }, end: { x: rightEdge, y: fromTop(134) }, color: COLORS.navyLine, thickness: 0.5 });
+
+    // 1.10 Address
+    page.drawText("PICKUP ADDRESS", { x: MARGIN_SIDE, y: fromTop(145), font: fontSansBold, size: 7, color: COLORS.navyFaint1 });
+    const addressStr = order.seller_locality ? `${sanitizeText(order.seller_locality)}, ${city}` : city;
+    page.drawText(addressStr, { x: MARGIN_SIDE, y: fromTop(157), font: fontSans, size: 10, color: COLORS.white76 });
+
+    // 1.11 Completed Pill
+    const pillTw = fontSansBold.widthOfTextAtSize("COMPLETED", 8);
+    const pillW = pillTw + 36;
+    drawRoundedRect(page, rightEdge - pillW, fromTop(142), pillW, 18, 9, COLORS.teal);
+    page.drawCircle({ x: rightEdge - pillW + 12, y: fromTop(142 + 9), size: 3, color: COLORS.white, borderColor: COLORS.white });
+    page.drawText("COMPLETED", { x: rightEdge - pillW + 20, y: fromTop(142 + 12), font: fontSansBold, size: 8, color: COLORS.white });
+
+    // SECTION 2 — BODY
+    let curY = headerHeight + 32;
+    
+    // 2.1 Heading
+    page.drawText("TRANSACTION PARTIES", { x: MARGIN_SIDE, y: fromTop(curY), font: fontSansBold, size: 7, color: COLORS.muted });
+    const lblW = fontSansBold.widthOfTextAtSize("TRANSACTION PARTIES", 7);
+    page.drawLine({ start: { x: MARGIN_SIDE + lblW + 10, y: fromTop(curY - 3) }, end: { x: rightEdge, y: fromTop(curY - 3) }, color: COLORS.border, thickness: 0.5 });
+    curY += 16;
+
+    // 2.2 Cards
+    const cardW = (CONTENT_WIDTH - 16) / 2;
+    const cardH = partyHeight;
+    const sDetail = order.seller_locality ? `${sanitizeText(order.seller_locality)}\nSortt Verified Member` : `Sortt Verified Member`;
+
+    // Seller
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), cardW, cardH, 8, COLORS.bg, COLORS.border, 0.5);
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), 3, cardH, 2, COLORS.navy); 
+    page.drawText("SELLER", { x: MARGIN_SIDE + 16, y: fromTop(curY + 16), font: fontSansBold, size: 7, color: COLORS.navy });
+    page.drawText("Scrap Seller", { x: MARGIN_SIDE + 16, y: fromTop(curY + 28), font: fontSans, size: 9, color: COLORS.muted });
+    page.drawText(sanitizeText(order.seller_name), { x: MARGIN_SIDE + 16, y: fromTop(curY + 44), font: fontSansBold, size: 14, color: COLORS.navy });
+    page.drawText(sDetail, { x: MARGIN_SIDE + 16, y: fromTop(curY + 58), font: fontSans, size: 9, color: COLORS.slate, lineHeight: 12 });
+
+    // Buyer
+    const bOff = MARGIN_SIDE + cardW + 16;
+    drawRoundedRect(page, bOff, fromTop(curY), cardW, cardH, 8, COLORS.bg, COLORS.border, 0.5);
+    drawRoundedRect(page, bOff, fromTop(curY), 3, cardH, 2, COLORS.teal); 
+    page.drawText("BUYER", { x: bOff + 16, y: fromTop(curY + 16), font: fontSansBold, size: 7, color: COLORS.teal });
+    page.drawText("Scrap Aggregator", { x: bOff + 16, y: fromTop(curY + 28), font: fontSans, size: 9, color: COLORS.muted });
+    page.drawText(sanitizeText(order.aggregator_name), { x: bOff + 16, y: fromTop(curY + 44), font: fontSansBold, size: 14, color: COLORS.navy });
+    page.drawText("KYC Verified · Sortt Certified Partner", { x: bOff + 16, y: fromTop(curY + 58), font: fontSans, size: 9, color: COLORS.slate });
+
+    curY += cardH + 26;
+
+    // 2.3 Heading
+    page.drawText("COLLECTED MATERIALS", { x: MARGIN_SIDE, y: fromTop(curY), font: fontSansBold, size: 7, color: COLORS.muted });
+    const lblMatW = fontSansBold.widthOfTextAtSize("COLLECTED MATERIALS", 7);
+    page.drawLine({ start: { x: MARGIN_SIDE + lblMatW + 10, y: fromTop(curY - 3) }, end: { x: rightEdge, y: fromTop(curY - 3) }, color: COLORS.border, thickness: 0.5 });
+    curY += 16;
+
+    // 2.4 Table
+    const c1 = CONTENT_WIDTH * 0.36;
+    const c2 = CONTENT_WIDTH * 0.22;
+    const c3 = CONTENT_WIDTH * 0.22;
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), CONTENT_WIDTH, tableHeaderHeight, 8, COLORS.navy, undefined, 0, {tl: true, tr: true, bl: false, br: false});
+    
+    let thY = curY + 18;
+    page.drawText("MATERIAL", { x: MARGIN_SIDE + 18, y: fromTop(thY), font: fontSansBold, size: 7, color: COLORS.white65 });
+    drawTextRight(page, "CONFIRMED WEIGHT", MARGIN_SIDE + c1 + c2 - 16, fromTop(thY), fontSansBold, 7, COLORS.white65);
+    drawTextRight(page, "RATE PER KG", MARGIN_SIDE + c1 + c2 + c3 - 16, fromTop(thY), fontSansBold, 7, COLORS.white65);
+    drawTextRight(page, "AMOUNT", rightEdge - 16, fromTop(thY), fontSansBold, 7, COLORS.white65);
+    
+    curY += tableHeaderHeight;
+
+    // Table body
+    for (let i = 0; i < lineItems.length; i++) {
+        const item = lineItems[i];
+        page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(curY) }, end: { x: rightEdge, y: fromTop(curY) }, color: COLORS.border, thickness: 0.5 });
+        
+        page.drawText(item.material_label, { x: MARGIN_SIDE + 18, y: fromTop(curY + 18), font: fontSansBold, size: 12, color: COLORS.navy });
+        page.drawText(item.material_code, { x: MARGIN_SIDE + 18, y: fromTop(curY + 30), font: fontSans, size: 9, color: COLORS.muted });
+        
+        drawTextRight(page, `${item.confirmed_weight_kg.toFixed(2)} kg`, MARGIN_SIDE + c1 + c2 - 16, fromTop(curY + 24), fontMono, 11, COLORS.slate);
+        drawTextRight(page, fmtAmount(item.rate_per_kg), MARGIN_SIDE + c1 + c2 + c3 - 16, fromTop(curY + 24), fontMono, 11, COLORS.amber);
+        drawTextRight(page, fmtAmount(item.amount), rightEdge - 16, fromTop(curY + 24), fontMono, 12, COLORS.navy);
+
+        curY += rowHeight;
+    }
+
+    // Table Footer
+    page.drawLine({ start: { x: MARGIN_SIDE, y: fromTop(curY) }, end: { x: rightEdge, y: fromTop(curY) }, color: COLORS.border, thickness: 1 });
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), CONTENT_WIDTH, tableFooterHeight, 8, COLORS.bg, undefined, 0, {tl:false, tr:false, bl:true, br:true});
+    
+    page.drawText(`${lineItems.length} material type(s)  ·  Total collected weight: ${totalWeight.toFixed(2)} kg`, 
+                 { x: MARGIN_SIDE + 18, y: fromTop(curY + 19), font: fontSans, size: 10, color: COLORS.slate });
+    drawTextRight(page, fmtAmount(subtotal), rightEdge - 16, fromTop(curY + 19), fontSansBold, 12, COLORS.navy);
+    
+    curY += tableFooterHeight;
+    // Outer border around whole table
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY - (tableHeaderHeight + tableRowsHeight + tableFooterHeight)), CONTENT_WIDTH, tableHeaderHeight + tableRowsHeight + tableFooterHeight, 8, undefined, COLORS.border, 0.5);
+
+    curY += 26;
+
+    // 2.5 Lower Grid
+    const lwLeft = CONTENT_WIDTH - 284 - 20;
+    page.drawText("ORDER DETAILS", { x: MARGIN_SIDE, y: fromTop(curY), font: fontSansBold, size: 7, color: COLORS.muted });
+    page.drawText("AMOUNT", { x: rightEdge - 284, y: fromTop(curY), font: fontSansBold, size: 7, color: COLORS.muted });
+    
+    curY += 12;
+    
+    const detailsGridY = curY;
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), lwLeft, detailsHeight, 8, COLORS.bg, COLORS.border, 0.5);
+    
+    const dLeftData = [
+       ["Order Reference", orderDisplayId],
+       ["Invoice Number", invoiceNumber],
+       ["Order Placed", `${formatDate(order.order_created_at)}, ${formatTime(order.order_created_at)}`],
+       ["Pickup Completed", `${formatDate(order.order_updated_at)}, ${formatTime(order.order_updated_at)}`],
+       ["Total Weight", `${totalWeight.toFixed(2)} kg`],
+       ["Materials Collected", `${lineItems.length} type(s)`],
+       ["Payment Mode", "Cash on Pickup"]
+    ];
+
+    let rowY = curY;
+    dLeftData.forEach((row, i) => {
+        if (i > 0) page.drawLine({ start:{x:MARGIN_SIDE, y:fromTop(rowY)}, end:{x:MARGIN_SIDE+lwLeft, y:fromTop(rowY)}, color:COLORS.border, thickness:0.5 });
+        page.drawText(row[0], { x: MARGIN_SIDE + 12, y: fromTop(rowY + 16), font: fontSans, size: 10, color: COLORS.muted });
+        const valX = MARGIN_SIDE + lwLeft - 12;
+        const col = i === 3 ? COLORS.teal : COLORS.navy;
+        const font = (i < 5) ? fontMono : fontSansBold;
+        drawTextRight(page, row[1], valX, fromTop(rowY + 16), font, 10, col);
+        rowY += 24;
     });
 
-    const page = await browser.newPage();
+    const dRightY = detailsGridY;
+    const totalsH = 30 + 30 + 38;
+    drawRoundedRect(page, rightEdge - 284, fromTop(dRightY), 284, totalsH, 8, COLORS.bg, COLORS.border, 0.5);
+    page.drawText("Subtotal", { x: rightEdge - 284 + 16, y: fromTop(dRightY + 19), font: fontSans, size: 12, color: COLORS.slate });
+    drawTextRight(page, fmtAmount(subtotal), rightEdge - 16, fromTop(dRightY + 19), fontMono, 12, COLORS.navy);
+    
+    page.drawLine({ start:{x:rightEdge-284, y:fromTop(dRightY+30)}, end:{x:rightEdge, y:fromTop(dRightY+30)}, color:COLORS.border, thickness:0.5 });
+    page.drawText("Platform Fee", { x: rightEdge - 284 + 16, y: fromTop(dRightY + 30 + 19), font: fontSans, size: 12, color: COLORS.slate });
+    drawTextRight(page, fmtAmount(platformFee), rightEdge - 16, fromTop(dRightY + 30 + 19), fontMono, 12, COLORS.navy);
 
-    // Block external network requests (Google Fonts, analytics, etc.) to prevent hangs.
-    // All assets are now inlined or use system fonts.
-    await page.setRequestInterception(true);
-    page.on('request', (req: import('puppeteer-core').HTTPRequest) => {
-      const url = req.url();
-      // Abort requests to external domains — only allow data URIs and about:blank
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
+    drawRoundedRect(page, rightEdge - 284, fromTop(dRightY + 60), 284, 38, 8, COLORS.navy, undefined, 0, {tl:false, tr:false, bl:true, br:true});
+    page.drawText("Total Paid", { x: rightEdge - 284 + 16, y: fromTop(dRightY + 60 + 24), font: fontSansBold, size: 11, color: COLORS.white75 });
+    drawTextRight(page, fmtAmount(totalAmount), rightEdge - 16, fromTop(dRightY + 60 + 26), fontMono, 18, COLORS.white);
 
-    // Use domcontentloaded — no external resources to wait for
-    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    curY = Math.max(curY + detailsHeight, dRightY + totalsH) + 26;
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
-    });
+    // 2.6 Banner
+    drawRoundedRect(page, MARGIN_SIDE, fromTop(curY), CONTENT_WIDTH, bannerHeight, 8, COLORS.tealLight, COLORS.teal, 0.2);
+    page.drawText("Payment Received by Seller", { x: MARGIN_SIDE + 24, y: fromTop(curY + 20), font: fontSansBold, size: 12, color: COLORS.teal });
+    page.drawText(`Cash paid by ${sanitizeText(order.aggregator_name)} ${order.aggregator_business_name ? `— ${sanitizeText(order.aggregator_business_name)}` : ''}`, { x: MARGIN_SIDE + 24, y: fromTop(curY + 35), font: fontSans, size: 9.5, color: COLORS.slate });
+    page.drawText(`${formatDate(order.order_updated_at)} at ${formatTime(order.order_updated_at)}  ·  Order ${orderDisplayId}`, { x: MARGIN_SIDE + 24, y: fromTop(curY + 47), font: fontSans, size: 9.5, color: COLORS.slate });
+
+    const checkRootX = rightEdge - 120;
+    page.drawCircle({ x: checkRootX, y: fromTop(curY + bannerHeight/2), size: 10, color: COLORS.teal, borderColor: COLORS.teal });
+    page.drawLine({ start:{x:checkRootX-3, y:fromTop(curY+bannerHeight/2)}, end:{x:checkRootX-1, y:fromTop(curY+bannerHeight/2-2)}, color:COLORS.white, thickness:1.5, lineCap:LineCapStyle.Round });
+    page.drawLine({ start:{x:checkRootX-1, y:fromTop(curY+bannerHeight/2-2)}, end:{x:checkRootX+3, y:fromTop(curY+bannerHeight/2+3)}, color:COLORS.white, thickness:1.5, lineCap:LineCapStyle.Round });
+
+    drawTextRight(page, fmtAmount(totalAmount), rightEdge - 24, fromTop(curY + 36), fontMono, 26, COLORS.teal);
+
+    // SECTION 3 — FOOTER
+    drawRect(page, 0, fromTop(pageHeight - footerHeight), PAGE_WIDTH, footerHeight, COLORS.navy);
+    
+    const ftBrandX = MARGIN_SIDE;
+    const fsW = fontSansBold.widthOfTextAtSize('S', 14);
+    const fdW = fontSansBold.widthOfTextAtSize('.', 14);
+    page.drawText('S', { x: ftBrandX, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
+    page.drawText('.', { x: ftBrandX + fsW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.red });
+    page.drawText('ortt', { x: ftBrandX + fsW + fdW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
+    page.drawText('sortt.in · Hyderabad, India', { x: ftBrandX, y: fromTop(pageHeight - 12), font: fontSans, size: 9, color: COLORS.white36 });
+
+    page.drawLine({ start:{x: 185, y: fromTop(pageHeight - 42)}, end:{x: 185, y: fromTop(pageHeight - 10)}, color: COLORS.white10, thickness:1 });
+    page.drawLine({ start:{x: 400, y: fromTop(pageHeight - 42)}, end:{x: 400, y: fromTop(pageHeight - 10)}, color: COLORS.white10, thickness:1 });
+
+    page.drawText('This is a system-generated invoice issued by Sortt.', { x: 200, y: fromTop(pageHeight - 26), font: fontSans, size: 9, color: COLORS.white34 });
+    page.drawText('Please retain this document for your personal records.', { x: 200, y: fromTop(pageHeight - 14), font: fontSans, size: 9, color: COLORS.white34 });
+
+    drawTextRight(page, "DISPUTES & SUPPORT", rightEdge, fromTop(pageHeight - 28), fontSansBold, 7, COLORS.white30);
+    drawTextRight(page, "support@sortt.in", rightEdge, fromTop(pageHeight - 14), fontSans, 10, COLORS.white60);
+
+    const pdfBuffer = await pdfDoc.save();
 
     console.log(`[Invoice] PDF generated (${pdfBuffer.length} bytes), uploading...`);
 
-    // ── Upload to R2 ──
     const randomHex = crypto.randomBytes(8).toString('hex');
     const fileKey   = `invoices/${orderId}/${randomHex}.pdf`;
 
@@ -746,9 +571,5 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     console.error(`[Invoice] GENERATION FAILED for order ${orderId}:`, err);
     Sentry.captureException(err);
     throw err;
-  } finally {
-    if (browser) {
-      try { await browser.close(); } catch { /* ignore */ }
-    }
   }
 }
