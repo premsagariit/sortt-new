@@ -145,12 +145,11 @@ export default function SellerOrderReceiptScreen() {
     return iso ? new Date(iso) : null;
   }, [order?.history, order?.updatedAt, order?.createdAt]);
 
-  // Invoice expires 30 days after order completion
+  // Invoice download disabled 30 minutes after order completion
   const isInvoiceExpired = useMemo(() => {
     if (!completedAtDate) return false;
-    const expiryDate = new Date(completedAtDate);
-    expiryDate.setDate(expiryDate.getDate() + 30);
-    return new Date() > expiryDate;
+    const expiryTime = new Date(completedAtDate.getTime() + 30 * 60 * 1000); // 30 minutes
+    return new Date() > expiryTime;
   }, [completedAtDate]);
 
   const handleDownloadInvoice = React.useCallback(async () => {
@@ -499,7 +498,7 @@ export default function SellerOrderReceiptScreen() {
                 <View style={styles.invoiceExpiredWrap}>
                   <Prohibit size={20} color={colors.muted} />
                   <Text variant="caption" color={colors.muted} style={styles.invoiceExpiredText}>
-                    Invoice expired — available for 30 days after order completion
+                  Invoice download expired — available for 30 minutes after order completion
                   </Text>
                 </View>
               ) : (

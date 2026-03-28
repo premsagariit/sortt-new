@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import crypto from 'crypto';
 import sanitizeHtml from 'sanitize-html';
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, LineCapStyle } from 'pdf-lib';
@@ -288,6 +290,16 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     const fontMono     = await pdfDoc.embedFont(StandardFonts.Courier);
     console.log('[Invoice] Using standard Helvetica/Courier fonts (WinAnsi-safe)');
 
+    // Embed app logo — icon.png from mobile assets copied to backend/assets/
+    let logoImage: import('pdf-lib').PDFImage | null = null;
+    try {
+      const logoPath = path.join(process.cwd(), 'assets', 'logo.png');
+      const logoBytes = fs.readFileSync(logoPath);
+      logoImage = await pdfDoc.embedPng(logoBytes);
+    } catch {
+      console.warn('[Invoice] Logo image not found, using text fallback');
+    }
+
     // Dynamic height measurement
     const MARGIN_SIDE = 44;
     const PAGE_WIDTH = 595.28;
@@ -312,24 +324,32 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     // SECTION 1 — HEADER
     drawRect(page, 0, fromTop(0), PAGE_WIDTH, headerHeight, COLORS.navy);
 
-    // 1.2 Logo — drawn "S" logomark inside a circle + wordmark
+    // 1.2 Logo — app icon image or drawn text fallback
     const brandX = MARGIN_SIDE;
-    const logoR = 16;   // radius of the circle badge
-    const logoCX = brandX + logoR;
-    const logoCY = fromTop(36);
-    // Outer teal ring
-    page.drawCircle({ x: logoCX, y: logoCY, size: logoR, color: COLORS.teal });
-    // Inner "S" letter centred in the circle
-    const sChar = 'S';
-    const sCharSize = 18;
-    const sCharW = fontSansBold.widthOfTextAtSize(sChar, sCharSize);
-    page.drawText(sChar, { x: logoCX - sCharW / 2, y: logoCY - sCharSize * 0.36, font: fontSansBold, size: sCharSize, color: COLORS.white });
-    // Wordmark beside the badge
-    const wordmarkX = brandX + logoR * 2 + 8;
-    page.drawText('sortt', { x: wordmarkX, y: fromTop(36 + 10), font: fontSansBold, size: 22, color: COLORS.white });
-    const dotAccentW = fontSansBold.widthOfTextAtSize('s', 22);
-    // Red dot accent under first letter
-    page.drawCircle({ x: wordmarkX + dotAccentW / 2, y: fromTop(36 + 10) - 6, size: 2.5, color: COLORS.red });
+    const logoH = 44;
+    if (logoImage) {
+      const logoDims = logoImage.scaleToFit(logoH * 2.2, logoH); // wider than tall
+      page.drawImage(logoImage, {
+        x: brandX,
+        y: fromTop(12 + logoDims.height),
+        width: logoDims.width,
+        height: logoDims.height,
+      });
+    } else {
+      // Drawn text fallback: teal circle + 'S' + 'sortt' wordmark
+      const logoR = 16;
+      const logoCX = brandX + logoR;
+      const logoCY = fromTop(36);
+      page.drawCircle({ x: logoCX, y: logoCY, size: logoR, color: COLORS.teal });
+      const sChar = 'S';
+      const sCharSize = 18;
+      const sCharW = fontSansBold.widthOfTextAtSize(sChar, sCharSize);
+      page.drawText(sChar, { x: logoCX - sCharW / 2, y: logoCY - sCharSize * 0.36, font: fontSansBold, size: sCharSize, color: COLORS.white });
+      const wordmarkX = brandX + logoR * 2 + 8;
+      page.drawText('sortt', { x: wordmarkX, y: fromTop(36 + 10), font: fontSansBold, size: 22, color: COLORS.white });
+      const dotAccentW = fontSansBold.widthOfTextAtSize('s', 22);
+      page.drawCircle({ x: wordmarkX + dotAccentW / 2, y: fromTop(36 + 10) - 6, size: 2.5, color: COLORS.red });
+    }
 
     // 1.3 Tagline
     page.drawText(`India's Scrap Marketplace  ·  ${city}`, { x: brandX, y: fromTop(36 + 42), font: fontSans, size: 8, color: COLORS.navyFaint1 });
@@ -533,11 +553,21 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     drawRect(page, 0, fromTop(pageHeight - footerHeight), PAGE_WIDTH, footerHeight, COLORS.navy);
     
     const ftBrandX = MARGIN_SIDE;
-    const fsW = fontSansBold.widthOfTextAtSize('S', 14);
-    const fdW = fontSansBold.widthOfTextAtSize('.', 14);
-    page.drawText('S', { x: ftBrandX, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
-    page.drawText('.', { x: ftBrandX + fsW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.red });
-    page.drawText('ortt', { x: ftBrandX + fsW + fdW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
+    if (logoImage) {
+      const ftLogoDims = logoImage.scaleToFit(footerHeight - 12, footerHeight - 16);
+      page.drawImage(logoImage, {
+        x: ftBrandX,
+        y: fromTop(pageHeight - 6 - ftLogoDims.height),
+        width: ftLogoDims.width,
+        height: ftLogoDims.height,
+      });
+    } else {
+      const fsW = fontSansBold.widthOfTextAtSize('S', 14);
+      const fdW = fontSansBold.widthOfTextAtSize('.', 14);
+      page.drawText('S', { x: ftBrandX, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
+      page.drawText('.', { x: ftBrandX + fsW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.red });
+      page.drawText('ortt', { x: ftBrandX + fsW + fdW, y: fromTop(pageHeight - 28), font: fontSansBold, size: 14, color: COLORS.white });
+    }
     page.drawText('sortt.in · Hyderabad, India', { x: ftBrandX, y: fromTop(pageHeight - 12), font: fontSans, size: 9, color: COLORS.white36 });
 
     page.drawLine({ start:{x: 185, y: fromTop(pageHeight - 42)}, end:{x: 185, y: fromTop(pageHeight - 10)}, color: COLORS.white10, thickness:1 });
