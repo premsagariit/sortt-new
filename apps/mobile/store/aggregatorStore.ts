@@ -904,11 +904,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         type: 'image/jpeg',
       } as any);
 
-      await api.post(`/api/orders/${orderId}/media`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await api.post(`/api/orders/${orderId}/media`, formData);
 
       set({ isLoading: false });
     } catch (e: any) {

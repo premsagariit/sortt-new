@@ -293,7 +293,9 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
     // Embed app logo — icon.png from mobile assets copied to backend/assets/
     let logoImage: import('pdf-lib').PDFImage | null = null;
     try {
-      const logoPath = path.join(process.cwd(), 'assets', 'logo.png');
+      const p1 = path.join(process.cwd(), 'assets', 'logo.png');
+      const p2 = path.resolve(__dirname, '../../assets/logo.png');
+      const logoPath = fs.existsSync(p1) ? p1 : p2;
       const logoBytes = fs.readFileSync(logoPath);
       logoImage = await pdfDoc.embedPng(logoBytes);
     } catch {
