@@ -193,10 +193,10 @@ router.get('/me/rates', verifyRole('aggregator'), async (req: Request, res: Resp
 
     try {
         const result = await query(
-            `SELECT material_code, rate_per_kg, updated_at
+            `SELECT material_code, custom_label, is_custom, rate_per_kg, updated_at
              FROM aggregator_material_rates
              WHERE aggregator_id = $1
-             ORDER BY material_code ASC`,
+             ORDER BY is_custom ASC, COALESCE(material_code, custom_label) ASC`,
             [userId]
         );
 
@@ -354,10 +354,14 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
     }
 });
 
-// Updates materials rates
+// Updates materials rates (standard + custom)
 router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { rates } = req.body; // Expects [{ material_code: 'paper', rate_per_kg: 15.5 }, ...]
+    // Expects: [
+    //   { material_code: 'paper', rate_per_kg: 15.5 },          // standard
+    //   { custom_label: 'Copper Wire', rate_per_kg: 80, is_custom: true }, // custom
+    // ]
+    const { rates } = req.body;
     console.log('[DIAG] PATCH /api/aggregators/rates', { userId, ratesCount: rates?.length });
 
     try {
@@ -367,14 +371,77 @@ router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Respo
 
         await query('BEGIN');
 
-        for (const rate of rates) {
+        // Separate standard vs custom
+        const standardRates = rates.filter((r: any) => !r.is_custom && r.material_code);
+        const customRates   = rates.filter((r: any) =>  r.is_custom && r.custom_label);
+
+        // Remove standard entries no longer in the payload (user deselected a material)
+        const keepCodes = standardRates.map((r: any) => r.material_code as string);
+        if (keepCodes.length > 0) {
+            // Delete rows not present in the new set
             await query(
-                `INSERT INTO aggregator_material_rates (aggregator_id, material_code, rate_per_kg, updated_at)
-                 VALUES ($1, $2, $3, NOW())
-                 ON CONFLICT (aggregator_id, material_code) DO UPDATE SET
-                    rate_per_kg = EXCLUDED.rate_per_kg,
-                    updated_at = NOW()`,
-                [userId, rate.material_code, rate.rate_per_kg]
+                `DELETE FROM aggregator_material_rates
+                 WHERE aggregator_id = $1
+                   AND is_custom = FALSE
+                   AND material_code <> ALL($2::text[])`,
+                [userId, keepCodes]
+            );
+        } else {
+            // All standard rates removed
+            await query(
+                `DELETE FROM aggregator_material_rates
+                 WHERE aggregator_id = $1 AND is_custom = FALSE`,
+                [userId]
+            );
+        }
+
+        // Remove custom entries no longer in the payload
+        const keepLabels = customRates.map((r: any) => r.custom_label as string);
+        if (keepLabels.length > 0) {
+            await query(
+                `DELETE FROM aggregator_material_rates
+                 WHERE aggregator_id = $1
+                   AND is_custom = TRUE
+                   AND custom_label <> ALL($2::text[])`,
+                [userId, keepLabels]
+            );
+        } else {
+            await query(
+                `DELETE FROM aggregator_material_rates
+                 WHERE aggregator_id = $1 AND is_custom = TRUE`,
+                [userId]
+            );
+        }
+
+        // Upsert standard rates
+        for (const rate of standardRates) {
+            const rateValue = Number(rate.rate_per_kg);
+            if (!Number.isFinite(rateValue) || rateValue <= 0) continue;
+            await query(
+                `INSERT INTO aggregator_material_rates
+                    (aggregator_id, material_code, rate_per_kg, is_custom, updated_at)
+                 VALUES ($1, $2, $3, FALSE, NOW())
+                 ON CONFLICT (aggregator_id, material_code)
+                 WHERE is_custom = FALSE AND material_code IS NOT NULL
+                 DO UPDATE SET rate_per_kg = EXCLUDED.rate_per_kg, updated_at = NOW()`,
+                [userId, rate.material_code, rateValue]
+            );
+        }
+
+        // Upsert custom rates
+        for (const rate of customRates) {
+            const rateValue = Number(rate.rate_per_kg);
+            if (!Number.isFinite(rateValue) || rateValue <= 0) continue;
+            const label = String(rate.custom_label).trim().slice(0, 100);
+            if (!label) continue;
+            await query(
+                `INSERT INTO aggregator_material_rates
+                    (aggregator_id, material_code, custom_label, rate_per_kg, is_custom, updated_at)
+                 VALUES ($1, NULL, $2, $3, TRUE, NOW())
+                 ON CONFLICT (aggregator_id, custom_label)
+                 WHERE is_custom = TRUE AND custom_label IS NOT NULL
+                 DO UPDATE SET rate_per_kg = EXCLUDED.rate_per_kg, updated_at = NOW()`,
+                [userId, label, rateValue]
             );
         }
 

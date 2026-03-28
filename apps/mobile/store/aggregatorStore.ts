@@ -32,9 +32,11 @@ export interface AggregatorProfile {
 }
 
 export interface AggregatorRate {
-  material_code: string;
+  material_code: string | null;
   rate_per_kg: number;
   updated_at?: string;
+  is_custom?: boolean;
+  custom_label?: string | null;
 }
 
 export interface AggregatorEarningsPayload {
@@ -188,8 +190,8 @@ interface AggregatorStoreState {
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates business_name, operating_area */
   updateProfile: (payload: { business_name?: string; operating_area?: string; operating_hours?: any }) => Promise<void>;
-  /** PATCH /api/aggregators/rates — updates material rates */
-  updateRates: (rates: { material_code: string; rate_per_kg: number }[]) => Promise<void>;
+  /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
+  updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
   updateOnlineStatus: (v: boolean) => Promise<void>;
   /** POST /api/orders/:id/accept */
@@ -746,12 +748,14 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   // ── Async: PATCH /api/aggregators/rates ─────────────────────────
   updateRates: async (rates) => {
     const previousRates = get().materialRates;
+    // Optimistic update for standard rates only
+    const standardRates = rates.filter(r => !r.is_custom && r.material_code);
     set((state) => ({
       isLoading: true,
       error: null,
-      materialRates: rates,
+      materialRates: rates as AggregatorRate[],
       materials: state.materials.map((material) => {
-        const incoming = rates.find((r) => r.material_code === material.id);
+        const incoming = standardRates.find((r) => r.material_code === material.id);
         if (!incoming) return material;
         return {
           ...material,

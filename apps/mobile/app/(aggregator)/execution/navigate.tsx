@@ -514,6 +514,10 @@ const styles = StyleSheet.create({
         flex: 2,
         height: 48,
     },
+    errorText: {
+        marginBottom: spacing.sm,
+        textAlign: 'center',
+    },
     cardActions: {
         flexDirection: 'row',
         gap: spacing.sm,
@@ -542,8 +546,5 @@ const styles = StyleSheet.create({
         fontSize: 10,
         lineHeight: 12,
         fontFamily: 'DMSans-Bold',
-    },
-    arrivedButton: {
-        width: '100%',
     },
 });
