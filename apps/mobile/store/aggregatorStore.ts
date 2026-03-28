@@ -155,6 +155,7 @@ interface AggregatorStoreState {
 
   dismissOrder: (orderId: string) => void;
   dismissNewOrder: (orderId: string) => void;
+  dismissFeedOrderApi: (orderId: string) => Promise<void>;
   acceptNewOrder: (orderId: string) => void;
   prependFeedOrder: (order: NewOrderRequest) => void;
 
@@ -245,6 +246,21 @@ const SLOT_LABELS: Record<string, string> = {
   afternoon: 'Afternoon',
   evening: 'Evening',
   anytime: 'Flexible',
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const inferUploadMimeType = (uri: string): 'image/jpeg' | 'image/png' | 'image/heic' => {
+  const lower = String(uri || '').toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.heic') || lower.endsWith('.heif')) return 'image/heic';
+  return 'image/jpeg';
+};
+
+const inferUploadExtension = (mimeType: 'image/jpeg' | 'image/png' | 'image/heic'): 'jpg' | 'png' | 'heic' => {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/heic') return 'heic';
+  return 'jpg';
 };
 
 // Maps feed API order → NewOrderRequest (V25: never includes pickup_address)
@@ -422,16 +438,31 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   setLoading: (v) => set({ isLoading: v }),
 
   dismissOrder: (orderId) => set((state) => ({
-    dismissedOrderIds: [...state.dismissedOrderIds, orderId],
+    dismissedOrderIds: state.dismissedOrderIds.includes(orderId)
+      ? state.dismissedOrderIds
+      : [...state.dismissedOrderIds, orderId],
   })),
 
   dismissNewOrder: (orderId) => set((state) => ({
+    dismissedOrderIds: state.dismissedOrderIds.includes(orderId)
+      ? state.dismissedOrderIds
+      : [...state.dismissedOrderIds, orderId],
     newOrders: state.newOrders.filter(o => o.id !== orderId),
   })),
 
+  dismissFeedOrderApi: async (orderId) => {
+    try {
+      await api.post(`/api/orders/${orderId}/dismiss`);
+      get().dismissNewOrder(orderId);
+    } catch (e: any) {
+      set({ error: e.response?.data?.error ?? e.message ?? 'Failed to dismiss order' });
+      throw e;
+    }
+  },
+
   prependFeedOrder: (order) => set((state) => {
     const exists = state.newOrders.some(existing => existing.id === order.id);
-    if (exists) {
+    if (exists || state.dismissedOrderIds.includes(order.id)) {
       return {};
     }
 
@@ -583,7 +614,10 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       }
 
       const res = await api.get('/api/orders/feed', { params });
-      const orders = (res.data.orders ?? []).map(mapFeedOrder);
+      const dismissed = new Set(get().dismissedOrderIds);
+      const orders = (res.data.orders ?? [])
+        .map(mapFeedOrder)
+        .filter((o: NewOrderRequest) => !dismissed.has(o.id));
       set({ newOrders: orders, isLoading: false, feedError: null, lastFeedError: null, lastFeedSyncAt: new Date().toISOString(), isNetworkError: false });
     } catch (e: any) {
       const message = e.response?.data?.error ?? e.message ?? 'Failed to load feed';
@@ -932,15 +966,43 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   uploadOrderMediaApi: async (orderId, photoUri, mediaType) => {
     set({ isLoading: true, error: null });
     try {
-      const formData = new FormData();
-      formData.append('media_type', mediaType);
-      formData.append('file', {
-        uri: photoUri,
-        name: `${mediaType}.jpg`,
-        type: 'image/jpeg',
-      } as any);
+      const maxAttempts = 3;
+      const mimeType = inferUploadMimeType(photoUri);
+      const extension = inferUploadExtension(mimeType);
 
-      await api.post(`/api/orders/${orderId}/media`, formData);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const formData = new FormData();
+          formData.append('media_type', mediaType);
+          formData.append('file', {
+            uri: photoUri,
+            name: `${mediaType}_${Date.now()}.${extension}`,
+            type: mimeType,
+          } as any);
+
+          await api.post(`/api/orders/${orderId}/media`, formData, {
+            timeout: 90000,
+          });
+
+          set({ isLoading: false, error: null });
+          return;
+        } catch (e: any) {
+          const status = e?.response?.status;
+          if (status === 413) {
+            const tooLargeMessage = 'Photo is too large. Retake a closer image and try again.';
+            set({ error: tooLargeMessage, isLoading: false });
+            throw new Error(tooLargeMessage);
+          }
+
+          const retryable = isNetworkError(e) || e?.code === 'ECONNABORTED' || status === 429 || status >= 500;
+          if (attempt < maxAttempts && retryable) {
+            await sleep(attempt * 700);
+            continue;
+          }
+
+          throw e;
+        }
+      }
 
       set({ isLoading: false });
     } catch (e: any) {

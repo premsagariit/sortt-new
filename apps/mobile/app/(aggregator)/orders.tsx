@@ -20,7 +20,7 @@ type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
 export default function AggregatorOrdersScreen() {
   const router = useRouter();
-  const { newOrders, aggOrders, dismissNewOrder, acceptOrderApi, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
+  const { newOrders, aggOrders, dismissFeedOrderApi, acceptOrderApi, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
   const materials = useAggregatorStore((s) => s.materials);
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
@@ -288,7 +288,13 @@ export default function AggregatorOrdersScreen() {
               label="Reject"
               style={[styles.chatBtn, { borderColor: colors.red }]}
               textStyle={{ color: colors.red }}
-              onPress={() => dismissNewOrder(order.id)}
+              onPress={async () => {
+                try {
+                  await dismissFeedOrderApi(order.id);
+                } catch (e: any) {
+                  Alert.alert('Error', e?.message || 'Failed to reject order');
+                }
+              }}
             />
           </View>
         </View>

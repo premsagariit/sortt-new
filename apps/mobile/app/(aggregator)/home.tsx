@@ -236,7 +236,7 @@ export default function AggregatorHomeScreen() {
   }, [lastFeedSyncAt, isOnline]);
 
   const FeedCard = ({ item }: { item: NewOrderRequest }) => {
-    const { dismissNewOrder, materials } = useAggregatorStore();
+    const { dismissFeedOrderApi, materials } = useAggregatorStore();
     
     // G11.6: Acceptance Threshold logic
     const isLocked = useMemo(() => {
@@ -323,7 +323,15 @@ export default function AggregatorHomeScreen() {
             </Pressable>
           )}
           <View style={styles.feedBtnDivider} />
-          <Pressable style={[styles.feedBtn, styles.feedBtnReject]} onPress={() => dismissNewOrder(item.id)}>
+          <Pressable
+            style={[styles.feedBtn, styles.feedBtnReject]}
+            onPress={async () => {
+              try {
+                await dismissFeedOrderApi(item.id);
+              } catch {
+              }
+            }}
+          >
             <Text variant="button" style={styles.feedBtnRejectText}>Dismiss</Text>
           </Pressable>
         </View>

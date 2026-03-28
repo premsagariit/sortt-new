@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera, MapPin, User } from 'phosphor-react-native';
+import { Briefcase, Camera, MapPin, User } from 'phosphor-react-native';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';

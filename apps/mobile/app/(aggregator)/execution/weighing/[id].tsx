@@ -221,7 +221,13 @@ export default function WeighingScreen() {
 
         try {
             for (const uri of scalePhotoUris) {
-                await uploadOrderMediaApi(id, uri, 'scale_photo');
+                try {
+                    await uploadOrderMediaApi(id, uri, 'scale_photo');
+                } catch (uploadErr) {
+                    // Scale photos are optional; do not block order progression on media failure.
+                    console.warn('Scale photo upload failed (non-blocking):', uploadErr);
+                    break;
+                }
             }
 
             const lineItems = materials.map((mat, idx) => {
@@ -354,10 +360,10 @@ export default function WeighingScreen() {
                                 </View>
                                 <View style={styles.photoActions}>
                                     <View style={styles.photoActionBtnWrap}>
-                                        <SecondaryButton label="Add More" onPress={handleAddPhoto} />
+                                        <SecondaryButton label="+" onPress={handleAddPhoto} />
                                     </View>
                                     <View style={styles.photoActionBtnWrap}>
-                                        <SecondaryButton label="Remove" onPress={handleRemoveLastPhoto} />
+                                        <SecondaryButton label="-" onPress={handleRemoveLastPhoto} />
                                     </View>
                                 </View>
                             </View>
@@ -513,7 +519,7 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
     },
     photoActions: {
-        flexDirection: 'column',
+        flexDirection: 'row',
         width: '100%',
         gap: spacing.xs,
     },

@@ -367,6 +367,12 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
                             AND r.material_code = oi.material_code
                           WHERE o.status = 'created'
                             AND o.deleted_at IS NULL
+                                                        AND NOT EXISTS (
+                                                                SELECT 1
+                                                                FROM aggregator_order_dismissals dod
+                                                                WHERE dod.aggregator_id = $1
+                                                                    AND dod.order_id = o.id
+                                                        )
                             AND LOWER(TRIM(COALESCE(o.city_code, ''))) = LOWER(TRIM(COALESCE($2::text, '')))
                           GROUP BY o.id
                           HAVING COUNT(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL)

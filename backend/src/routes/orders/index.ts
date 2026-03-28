@@ -26,10 +26,10 @@ import {
   parseOperatingHoursSchedule,
 } from '../../utils/availability';
 
-// Multer for media uploads (5MB, images only)
+// Multer for media uploads (8MB, images only)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/heic'];
     allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
@@ -224,6 +224,12 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
               JOIN aggregator_profiles p
                 ON a.user_id = p.user_id
               WHERE LOWER(TRIM(COALESCE(p.city_code, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM aggregator_order_dismissals dod
+                  WHERE dod.aggregator_id = p.user_id
+                    AND dod.order_id = $3::uuid
+                )
                 AND (
                   SELECT COUNT(DISTINCT m.material_code)
                   FROM aggregator_material_rates m
@@ -233,7 +239,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
                   SELECT COUNT(DISTINCT code)
                   FROM unnest($2::text[]) AS code
                 )
-            `, [selectedAddress.city_code, material_codes]);
+            `, [selectedAddress.city_code, material_codes, order.id]);
 
         const matchedRows = aggRes.rows.filter((row: any) => {
           const areas = parseOperatingAreas(row.operating_area);
@@ -544,6 +550,12 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
                AND r.material_code = oi.material_code
             WHERE o.status = 'created'
               AND o.deleted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM aggregator_order_dismissals dod
+                WHERE dod.aggregator_id = $1
+                  AND dod.order_id = o.id
+              )
               AND LOWER(TRIM(COALESCE(o.city_code, ''))) = LOWER(TRIM(COALESCE($2::text, '')))
               ${cursorClause}
               ${areaClause}
@@ -732,6 +744,44 @@ router.get('/:id/invoice', verifyUserRole(['seller', 'aggregator']), async (req,
   } catch (error) {
     console.error('[Invoice] GET error:', error);
     Sentry.captureException(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3c. POST /api/orders/:id/dismiss — aggregator marks created order as not interested
+router.post('/:id/dismiss', verifyUserRole('aggregator'), async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const orderId = req.params.id;
+    const orderRes = await query(
+      `SELECT id, status, deleted_at
+         FROM orders
+        WHERE id = $1`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0 || orderRes.rows[0].deleted_at) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (orderRes.rows[0].status !== 'created') {
+      return res.status(400).json({ error: 'Only created orders can be dismissed' });
+    }
+
+    await query(
+      `INSERT INTO aggregator_order_dismissals (aggregator_id, order_id, dismissed_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (aggregator_id, order_id)
+       DO UPDATE SET dismissed_at = NOW()`,
+      [userId, orderId]
+    );
+
+    return res.json({ success: true });
+  } catch (e: any) {
+    console.error('POST /api/orders/:id/dismiss error:', e);
+    Sentry.captureException(e);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

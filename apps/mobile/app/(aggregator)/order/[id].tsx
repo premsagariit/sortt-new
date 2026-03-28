@@ -27,7 +27,7 @@ export default function AggregatorOrderByIdScreen() {
   const newOrders = useAggregatorStore((s) => s.newOrders);
   const materialsCfg = useAggregatorStore((s) => s.materials);
   const acceptOrderApi = useAggregatorStore((s) => s.acceptOrderApi);
-  const dismissNewOrder = useAggregatorStore((s) => s.dismissNewOrder);
+  const dismissFeedOrderApi = useAggregatorStore((s) => s.dismissFeedOrderApi);
 
   const aggUserId = useAuthStore((s: any) => s.userId);
   const chatUnread = useChatStore((state) => {
@@ -347,9 +347,14 @@ export default function AggregatorOrderByIdScreen() {
           label="Reject"
           style={styles.rejectBtn}
           textStyle={styles.btnText}
-          onPress={() => {
-            dismissNewOrder(internalOrderId);
-            safeBack('/(aggregator)/orders');
+          onPress={async () => {
+            try {
+              await dismissFeedOrderApi(internalOrderId);
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to reject order');
+            } finally {
+              safeBack('/(aggregator)/orders');
+            }
           }}
         />
         <PrimaryButton

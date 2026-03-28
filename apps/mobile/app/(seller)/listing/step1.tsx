@@ -171,10 +171,10 @@ export default function Step1Screen() {
                   </View>
                   <View style={styles.photoActionsRow}>
                     <View style={styles.photoActionBtnWrap}>
-                      <SecondaryButton label="Add More" onPress={handleAddPhoto} />
+                      <SecondaryButton label="+" onPress={handleAddPhoto} />
                     </View>
                     <View style={styles.photoActionBtnWrap}>
-                      <SecondaryButton label="Remove" onPress={handleRemoveLast} />
+                      <SecondaryButton label="-" onPress={handleRemoveLast} />
                     </View>
                   </View>
                 </View>
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   },
   photoHeaderRow: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.sm },
   photoStatus: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colorExtended.tealLight, borderRadius: 8 },
-  photoActionsRow: { flexDirection: 'column', width: '100%', gap: spacing.xs },
+  photoActionsRow: { flexDirection: 'row', width: '100%', gap: spacing.xs },
   photoActionBtnWrap: { flex: 1 },
   permissionBanner: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.amber, borderRadius: radius.btn, padding: spacing.sm, marginBottom: spacing.sm, gap: spacing.xs,
