@@ -34,6 +34,51 @@ export class OlaMapsProvider implements IMapProvider {
     return component?.long_name ?? '';
   }
 
+  /**
+   * Resolves a human-readable city to a short city code.
+   * Parses address_components first (most accurate), then falls back to the
+   * formatted_address string, and finally defaults to 'HYD' for MVP safety.
+   */
+  private resolveCityCode(components: OlaAddressComponent[], formattedAddress: string): string {
+    const CITY_CODE_MAP: Record<string, string> = {
+      hyderabad: 'HYD',
+      secunderabad: 'HYD',
+      bangalore: 'BLR',
+      bengaluru: 'BLR',
+      mumbai: 'BOM',
+      bombay: 'BOM',
+      chennai: 'MAA',
+      madras: 'MAA',
+      delhi: 'DEL',
+      'new delhi': 'DEL',
+      pune: 'PNQ',
+      kolkata: 'CCU',
+      calcutta: 'CCU',
+      ahmedabad: 'AMD',
+      jaipur: 'JAI',
+    };
+
+    // Primary: parse from address_components (most accurate)
+    const cityComponent =
+      this.getAddressComponent(components, 'locality') ||
+      this.getAddressComponent(components, 'administrative_area_level_2') ||
+      this.getAddressComponent(components, 'administrative_area_level_1');
+
+    const cityText = cityComponent.toLowerCase();
+    for (const [key, code] of Object.entries(CITY_CODE_MAP)) {
+      if (cityText.includes(key)) return code;
+    }
+
+    // Fallback: scan the formatted address string
+    const addressLower = formattedAddress.toLowerCase();
+    for (const [key, code] of Object.entries(CITY_CODE_MAP)) {
+      if (addressLower.includes(key)) return code;
+    }
+
+    // Safe MVP default
+    return 'HYD';
+  }
+
   async geocode(address: string): Promise<GeoResult> {
     const response = await axios.get(`${BASE_URL}/places/v1/geocode`, {
       params: {
@@ -57,7 +102,7 @@ export class OlaMapsProvider implements IMapProvider {
     return {
       lat: Number.isFinite(latitude) ? latitude : 0,
       lng: Number.isFinite(longitude) ? longitude : 0,
-      city_code: 'HYD',
+      city_code: this.resolveCityCode(components, String(result.formatted_address ?? address)),
       locality:
         this.getAddressComponent(components, 'sublocality_level_1') ||
         this.getAddressComponent(components, 'locality') ||
