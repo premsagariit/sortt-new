@@ -103,7 +103,7 @@ function buildInvoiceHtml(data: {
 <head>
 <meta charset="UTF-8">
 <title>Sortt — Order Invoice ${invoiceNumber}</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>/* Google Fonts omitted for server-side rendering — system fonts used */</style>
 <style>
 
   :root {
@@ -121,7 +121,7 @@ function buildInvoiceHtml(data: {
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: #FFFFFF;
     color: var(--navy);
   }
@@ -172,11 +172,11 @@ function buildInvoiceHtml(data: {
     text-transform:uppercase; padding:3px 12px; border-radius:20px; margin-bottom:7px;
   }
   .invoice-number {
-    font-family:'DM Mono',monospace; font-size:21px; font-weight:500;
+    font-family:'Courier New',Courier,monospace; font-size:21px; font-weight:500;
     color:#fff; display:block; letter-spacing:0.02em;
   }
   .invoice-date-str {
-    font-family:'DM Mono',monospace; font-size:11px;
+    font-family:'Courier New',Courier,monospace; font-size:11px;
     color:rgba(255,255,255,0.48); display:block; margin-top:3px;
   }
   .header-meta-strip {
@@ -194,7 +194,7 @@ function buildInvoiceHtml(data: {
     text-transform:uppercase; font-weight:600; margin-bottom:4px;
   }
   .meta-val {
-    font-family:'DM Mono',monospace; font-size:11.5px;
+    font-family:'Courier New',Courier,monospace; font-size:11.5px;
     color:rgba(255,255,255,0.86); font-weight:400; line-height:1.4;
   }
   .header-address-row {
@@ -260,7 +260,7 @@ function buildInvoiceHtml(data: {
   .items-table tbody tr:nth-child(even) td { background:#FAFBFC; }
   .items-table td { padding:14px 16px; font-size:12.5px; color:var(--navy); vertical-align:middle; }
   .items-table td:nth-child(2),.items-table td:nth-child(3),.items-table td:nth-child(4) {
-    text-align:right; font-family:'DM Mono',monospace; font-size:12px; white-space:nowrap;
+    text-align:right; font-family:'Courier New',Courier,monospace; font-size:12px; white-space:nowrap;
   }
   .mat-name { font-size:13px; font-weight:600; color:var(--navy); }
   .mat-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
@@ -270,7 +270,7 @@ function buildInvoiceHtml(data: {
   .items-table tfoot tr { border-top:2px solid var(--border); }
   .items-table tfoot td { padding:12px 16px; font-size:12px; font-weight:600; color:var(--slate); }
   .items-table tfoot td:last-child {
-    text-align:right; font-family:'DM Mono',monospace; font-size:13px;
+    text-align:right; font-family:'Courier New',Courier,monospace; font-size:13px;
     color:var(--navy); font-weight:700;
   }
 
@@ -283,7 +283,7 @@ function buildInvoiceHtml(data: {
   .order-details-table td { padding:9px 16px; font-size:11.5px; vertical-align:top; }
   .order-details-table td:first-child { color:var(--muted); font-weight:500; width:45%; white-space:nowrap; }
   .order-details-table td:last-child  { color:var(--navy); font-weight:500; }
-  .td-mono { font-family:'DM Mono',monospace; font-size:11px; }
+  .td-mono { font-family:'Courier New',Courier,monospace; font-size:11px; }
   .td-teal { color:var(--teal)!important; font-weight:600!important; }
   .totals-block { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
   .t-row {
@@ -292,7 +292,7 @@ function buildInvoiceHtml(data: {
   }
   .t-row:last-child { border-bottom:none; }
   .t-row .lbl { color:var(--slate); }
-  .t-row .val { font-family:'DM Mono',monospace; font-size:12.5px; color:var(--navy); font-weight:500; }
+  .t-row .val { font-family:'Courier New',Courier,monospace; font-size:12.5px; color:var(--navy); font-weight:500; }
   .t-row.grand { background:var(--navy); padding:14px 16px; }
   .t-row.grand .lbl { font-size:12px; font-weight:600; color:rgba(255,255,255,0.72); }
   .t-row.grand .val { font-size:21px; font-weight:700; color:#fff; }
@@ -310,7 +310,7 @@ function buildInvoiceHtml(data: {
     width:24px; height:24px; border-radius:50%; background:var(--teal);
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
-  .pb-amount { font-family:'DM Mono',monospace; font-size:28px; font-weight:700; color:var(--teal); }
+  .pb-amount { font-family:'Courier New',Courier,monospace; font-size:28px; font-weight:700; color:var(--teal); }
 
   /* ── FOOTER ── */
   .invoice-footer {
@@ -703,8 +703,21 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
 
     const page = await browser.newPage();
 
-    // Set content and wait for fonts to load
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    // Block external network requests (Google Fonts, analytics, etc.) to prevent hangs.
+    // All assets are now inlined or use system fonts.
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const url = req.url();
+      // Abort requests to external domains — only allow data URIs and about:blank
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    // Use domcontentloaded — no external resources to wait for
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
