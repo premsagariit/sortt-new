@@ -41,14 +41,16 @@ export default function OperatingAreasScreen() {
     };
 
     const handleSave = async () => {
+        if (selectedZones.length === 0) return;
         setIsSaving(true);
         try {
-            setOperatingAreas(selectedZones);
             await updateProfile({ operating_area: selectedZones.join(', ') });
             setIsSaving(false);
-            safeBack('/(aggregator)/profile');
-        } catch {
+            router.back();
+        } catch (err: any) {
+            console.error('[OperatingAreas] Save failed:', err);
             setIsSaving(false);
+            // In a real app, we'd show a toast here
         }
     };
 

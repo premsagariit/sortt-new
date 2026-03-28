@@ -223,7 +223,7 @@ const initialMaterials: MaterialConfig[] = [
   { id: 'glass', name: 'Glass', selected: false, ratePerKg: 0, avgRateHint: 0, bgToken: 'glassBg' },
 ];
 
-const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
+export const WEEKLY_SCHEDULE_DEFAULT: DaySchedule[] = [
   { day: 'Monday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
   { day: 'Tuesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
   { day: 'Wednesday', isOpen: true, start: '09:00 AM', end: '06:00 PM' },
@@ -340,12 +340,14 @@ function computeOrderAmount(order: any): number {
 
 // Returns true if right now falls within the aggregator's scheduled working hours
 function isWithinWorkingHours(schedule: DaySchedule[]): boolean {
-  if (!schedule || schedule.length === 0) return true;
+  if (!schedule || schedule.length === 0) return false;
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const now = new Date();
   const todayEntry = schedule.find(s => s.day === dayNames[now.getDay()]);
   if (!todayEntry || !todayEntry.isOpen) return false;
+
   const parseTime = (t: string): number => {
+    if (!t) return -1;
     const m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (!m) return -1;
     let h = parseInt(m[1]);
@@ -355,10 +357,12 @@ function isWithinWorkingHours(schedule: DaySchedule[]): boolean {
     if (ap === 'AM' && h === 12) h = 0;
     return h * 60 + min;
   };
+
   const cur = now.getHours() * 60 + now.getMinutes();
   const start = parseTime(todayEntry.start);
   const end = parseTime(todayEntry.end);
-  if (start === -1 || end === -1) return true;
+
+  if (start === -1 || end === -1) return false;
   return cur >= start && cur <= end;
 }
 
@@ -634,28 +638,49 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
       const cityCode = payload.city_code ?? payload.aggregator_city_code ?? null;
       const kycStatus = payload.kyc_status ?? payload.aggregator_kyc_status ?? null;
-      const isOnline = payload.is_online !== undefined ? Boolean(payload.is_online) : true;
 
-      const parsedSchedule = Array.isArray(operatingHours?.days)
-        ? operatingHours.days
-        : get().weeklySchedule;
+      // Ensure we have exactly 7 days in the schedule. If missing any, fill with defaults.
+      let incomingDays = Array.isArray(operatingHours?.days) ? operatingHours.days : [];
+      if (incomingDays.length < 7) {
+        // Create a map of existing days for easy lookup
+        const existingMap = new Map(incomingDays.map((d: any) => [d.day, d]));
+        incomingDays = WEEKLY_SCHEDULE_DEFAULT.map(def => {
+          return existingMap.get(def.day) || def;
+        });
+      }
+
+      const parsedSchedule = incomingDays;
+      const areasArray = operatingArea
+        ? String(operatingArea).split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
+      // Logic: Forced Online if within working hours, otherwise reflect DB status
+      const scheduledOnline = isWithinWorkingHours(parsedSchedule);
+      const isOnline = scheduledOnline || (payload.is_online !== undefined ? Boolean(payload.is_online) : false);
 
       set({
         profile: {
           name,
           businessName,
           operatingArea,
-          operatingHours,
+          operatingHours: { ...operatingHours, days: parsedSchedule },
           kycStatus,
           cityCode,
         },
+        fullName: name ?? '',
         businessName: businessName ?? '',
         primaryArea: operatingArea ?? '',
+        operatingAreas: areasArray,
         weeklySchedule: parsedSchedule,
-        isOnline: payload.is_online !== undefined ? Boolean(payload.is_online) : isWithinWorkingHours(parsedSchedule),
+        isOnline,
         isProfileLoading: false,
         profileError: null,
       });
+
+      // If we are forced online by schedule but DB might be out of sync, trigger a heartbeat
+      if (scheduledOnline && !payload.is_online) {
+        get().updateOnlineStatus(true);
+      }
     } catch (e: any) {
       set({
         isProfileLoading: false,
@@ -738,7 +763,10 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         set({ businessName: payload.business_name });
       }
       if (payload.operating_area !== undefined) {
-        set({ primaryArea: payload.operating_area });
+        const areasArray = payload.operating_area
+          ? String(payload.operating_area).split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        set({ primaryArea: payload.operating_area, operatingAreas: areasArray });
       }
       await get().fetchAggregatorProfile();
       set({ isLoading: false });

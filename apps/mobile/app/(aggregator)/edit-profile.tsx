@@ -39,6 +39,7 @@ export default function AggregatorEditProfileScreen() {
     }, [fetchAggregatorProfile]);
 
     React.useEffect(() => {
+        // Correctly distinguish between user's name and business name
         setNewFullName(profile?.name || name);
         setNewBusinessName(profile?.businessName || '');
         setNewLocality(profile?.operatingArea || locality);
@@ -134,7 +135,7 @@ export default function AggregatorEditProfileScreen() {
                     <View style={styles.inputGroup}>
                         <Text variant="label" color={colors.muted} style={styles.inputLabel}>BUSINESS NAME</Text>
                         <View style={styles.inputWrap}>
-                            <User size={20} color={colors.muted} />
+                            <Briefcase size={20} color={colors.muted} />
                             <TextInput
                                 style={styles.input}
                                 value={newBusinessName}

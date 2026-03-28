@@ -33,6 +33,7 @@ export interface DbOrder {
   }>;
   estimated_total?: number | null;
   confirmed_total?: number | null;
+  total_weight_kg?: number | null;
   seller_has_rated?: boolean;
   [key: string]: any;
 }
@@ -141,6 +142,7 @@ export function buildOrderDto(
     estimated_total: estimatedTotal,
     confirmed_total: confirmedTotal,
     display_amount: displayAmount,
+    total_weight_kg: typeof order.total_weight_kg === 'number' ? order.total_weight_kg : (order.totalWeightKg ?? order.estimated_weight_kg ?? 0),
     is_final_amount: isFinalAmount,
     pickup_address: canSeeAddress ? order.pickup_address : null,
     pickup_locality: normalizedPickupLocality,

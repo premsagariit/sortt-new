@@ -34,14 +34,23 @@ export default function OrderSummary() {
     const completedOrders = (aggOrders || []).filter((order: any) => order.status === 'completed');
     
     const getAmount = (order: any) => {
+        // Prefer store-computed amount first
+        if (typeof order.orderAmount === 'number') return order.orderAmount;
+        
+        // Fallback to various amount fields from DTO
         const val = order.display_amount ?? order.displayAmount ?? order.confirmed_value ?? order.confirmedAmount ?? 0;
         return Number(val || 0);
     };
 
     const getVolume = (order: any) => {
+        // Prefer explicit total_weight_kg from backend aggregation
+        if (typeof order.total_weight_kg === 'number') return order.total_weight_kg;
+        if (typeof order.totalWeightKg === 'number') return order.totalWeightKg;
+
         const weights = order.estimated_weights ?? order.estimatedWeights ?? {};
         const sumWeights = Object.values(weights).reduce((sum: number, val: any) => sum + Number(val || 0), 0);
-        return sumWeights > 0 ? sumWeights : Number(order.total_weight_kg ?? order.totalWeightKg ?? order.estimated_weight_kg ?? 0);
+        
+        return sumWeights > 0 ? sumWeights : Number(order.estimated_weight_kg ?? 0);
     };
 
     const totalPayout = completedOrders.reduce((sum: number, order: any) => sum + getAmount(order), 0);

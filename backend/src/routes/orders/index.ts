@@ -324,7 +324,8 @@ router.get('/', async (req, res) => {
                  '[]'
                ) as line_items,
                COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
-               COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
+               COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
+               COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN material_types mt ON oi.material_code = mt.code
@@ -431,15 +432,15 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    // Fetch city_code from DB (V21 — never trust client-supplied)
+    // Fetch city_code and operating_area from DB (V21 — never trust client-supplied)
     const profRes = await query(
-      'SELECT city_code FROM aggregator_profiles WHERE user_id = $1',
+      'SELECT city_code, operating_area FROM aggregator_profiles WHERE user_id = $1',
       [userId]
     );
     if (!profRes.rows[0]) {
       return res.status(403).json({ error: 'Aggregator profile not found' });
     }
-    const { city_code } = profRes.rows[0];
+    const { city_code, operating_area } = profRes.rows[0];
 
     const { cursor } = req.query;
     const limit = 20;
@@ -454,6 +455,17 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     }
     params.push(limit + 1);
 
+    // Filter by operating area if set (comma-separated string in DB)
+    let areaClause = '';
+    if (operating_area && operating_area.trim().length > 0) {
+      // Split by comma and trim to get clean array of localities
+      const areas = operating_area.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (areas.length > 0) {
+        areaClause = `AND o.pickup_locality = ANY($${params.length + 1})`;
+        params.push(areas);
+      }
+    }
+
     const result = await query(`
             SELECT o.*,
                    COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
@@ -467,9 +479,10 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
               AND o.deleted_at IS NULL
               AND o.city_code = $2
               ${cursorClause}
+              ${areaClause}
             GROUP BY o.id
             ORDER BY o.created_at DESC
-            LIMIT $${params.length}
+            LIMIT $${params.length === 3 && areaClause ? 3 : params.length}
         `, params);
 
     const rows = result.rows;

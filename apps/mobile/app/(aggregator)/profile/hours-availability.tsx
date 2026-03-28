@@ -9,7 +9,7 @@ import { Text, Numeric } from '../../../components/ui/Typography';
 import { NavBar } from '../../../components/ui/NavBar';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { safeBack } from '../../../utils/navigation';
-import { useAggregatorStore, DaySchedule } from '../../../store/aggregatorStore';
+import { useAggregatorStore, DaySchedule, WEEKLY_SCHEDULE_DEFAULT } from '../../../store/aggregatorStore';
 
 // Helper to parse "09:00 AM" to Date
 const parseTimeString = (timeStr: string) => {
@@ -42,11 +42,15 @@ export default function HoursAvailabilityScreen() {
 
     const isOnline = useAggregatorStore((s) => s.isOnline);
     const updateOnlineStatus = useAggregatorStore((s) => s.updateOnlineStatus);
-    const [schedule, setSchedule] = useState<DaySchedule[]>(storeSchedule);
+    const [schedule, setSchedule] = useState<DaySchedule[]>(
+        storeSchedule && storeSchedule.length === 7 ? storeSchedule : WEEKLY_SCHEDULE_DEFAULT
+    );
     const [isSaving, setIsSaving] = useState(false);
 
     React.useEffect(() => {
-        setSchedule(storeSchedule);
+        if (storeSchedule && storeSchedule.length === 7) {
+            setSchedule(storeSchedule);
+        }
     }, [storeSchedule]);
 
     // Modal state

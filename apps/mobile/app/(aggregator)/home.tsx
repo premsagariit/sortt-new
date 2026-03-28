@@ -719,8 +719,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   onlinePillActive: {
-    backgroundColor: 'rgba(74,222,128,0.12)',
-    borderColor: 'rgba(74,222,128,0.2)',
+    backgroundColor: 'rgba(74,222,128,0.20)',
+    borderColor: 'rgba(74,222,128,0.35)',
   },
   onlinePillInactive: {
     backgroundColor: 'rgba(142,155,170,0.12)',
