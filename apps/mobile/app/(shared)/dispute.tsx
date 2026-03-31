@@ -24,8 +24,8 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Warning, UploadSimple, CheckCircle, CaretRight } from 'phosphor-react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Warning, UploadSimple, CheckCircle } from 'phosphor-react-native';
 
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -34,6 +34,8 @@ import { NavBar } from '../../components/ui/NavBar';
 import { StatusChip } from '../../components/ui/StatusChip';
 import { BaseCard } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
+import { api } from '../../lib/api';
+import { safeBack } from '../../utils/navigation';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -43,16 +45,18 @@ type IssueOption = {
 };
 
 const AGGREGATOR_ISSUES: IssueOption[] = [
-    { id: 'absent', label: 'Seller was not present at address' },
-    { id: 'quantity', label: 'Scrap quantity significantly less than listed' },
-    { id: 'behavior', label: 'Abusive or unsafe behaviour' },
+    { id: 'no_show', label: 'Seller was not present at address' },
+    { id: 'wrong_weight', label: 'Wrong weight recorded' },
+    { id: 'abusive_behaviour', label: 'Abusive or unsafe behaviour' },
+    { id: 'payment_not_made', label: 'Payment not made' },
     { id: 'other', label: 'Other' },
 ];
 
 const SELLER_ISSUES: IssueOption[] = [
-    { id: 'weight', label: 'Wrong weight recorded' },
-    { id: 'payment', label: 'Payment not made' },
-    { id: 'noshow', label: 'Aggregator no-show' },
+    { id: 'wrong_weight', label: 'Wrong weight recorded' },
+    { id: 'payment_not_made', label: 'Payment not made' },
+    { id: 'no_show', label: 'Aggregator no-show' },
+    { id: 'abusive_behaviour', label: 'Abusive or unsafe behaviour' },
     { id: 'other', label: 'Other' },
 ];
 
@@ -61,26 +65,45 @@ const SELLER_ISSUES: IssueOption[] = [
 export default function DisputeScreen() {
     const insets = useSafeAreaInsets();
     const userType = useAuthStore((state) => state.userType);
+    const params = useLocalSearchParams<{ orderId?: string; id?: string; fallbackRoute?: string }>();
+    const orderId = typeof params.orderId === 'string'
+        ? params.orderId
+        : (typeof params.id === 'string' ? params.id : '');
+    const fallbackRoute = typeof params.fallbackRoute === 'string'
+        ? params.fallbackRoute
+        : (userType === 'aggregator' ? '/(aggregator)/orders' : '/(seller)/orders');
 
     const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
     const [description, setDescription] = useState('');
     const [evidenceSelected, setEvidenceSelected] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const issueOptions = userType === 'aggregator' ? AGGREGATOR_ISSUES : SELLER_ISSUES;
-    const counterpartyLabel = userType === 'aggregator' ? 'Seller' : 'Aggregator';
     const counterpartyName = userType === 'aggregator' ? 'Rahul Sharma' : 'Kumar Scrap Co.';
 
-    const isFormValid = selectedIssue !== null && description.length >= 10;
+    const isFormValid = !!orderId && selectedIssue !== null && description.trim().length >= 10;
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
+        if (!selectedIssue) return;
         setIsSubmitting(true);
-        // Simulate API delay
-        setTimeout(() => {
+        setSubmitError(null);
+        try {
+            await api.post('/api/disputes', {
+                order_id: orderId,
+                issue_type: selectedIssue,
+                description: description.trim(),
+            });
             setIsSubmitting(false);
             setIsSubmitted(true);
-        }, 1500);
+        } catch (error: any) {
+            const message = error?.response?.data?.message
+                || error?.response?.data?.error
+                || 'Failed to submit dispute. Please try again.';
+            setSubmitError(String(message));
+            setIsSubmitting(false);
+        }
     };
 
     if (isSubmitted) {
@@ -104,7 +127,7 @@ export default function DisputeScreen() {
                 <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
                     <PrimaryButton
                         label="Back to Orders"
-                        onPress={() => router.back()}
+                        onPress={() => safeBack(fallbackRoute)}
                     />
                 </View>
             </View>
@@ -115,7 +138,7 @@ export default function DisputeScreen() {
         <View style={styles.container}>
             <NavBar
                 title="File a Dispute"
-                onBack={() => router.back()}
+                onBack={() => safeBack(fallbackRoute)}
                 variant="light"
             />
 
@@ -142,7 +165,7 @@ export default function DisputeScreen() {
                             <View>
                                 <Text variant="label" style={styles.cardSectionLabel}>Order</Text>
                                 <View style={styles.orderMeta}>
-                                    <Numeric size={12} color={colors.muted}>Order ID unavailable</Numeric>
+                                    <Numeric size={12} color={colors.muted}>{orderId || 'Order ID unavailable'}</Numeric>
                                     <StatusChip status="completed" />
                                 </View>
                             </View>
@@ -200,10 +223,14 @@ export default function DisputeScreen() {
                                 : "The aggregator recorded 8 kg but my estimate was clearly around 12 kg..."}
                             placeholderTextColor={colors.muted}
                             multiline
+                            maxLength={2000}
                             textAlignVertical="top"
                             value={description}
                             onChangeText={setDescription}
                         />
+                        <Text variant="caption" color={colors.muted}>
+                            {description.length}/2000
+                        </Text>
                     </View>
 
                     {/* ── Evidence Upload ───────────────────────────────── */}
@@ -233,6 +260,9 @@ export default function DisputeScreen() {
 
             {/* ── Fixed Bottom Button ─────────────────────────────── */}
             <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+                {submitError ? (
+                    <Text variant="caption" style={styles.errorText}>{submitError}</Text>
+                ) : null}
                 <PrimaryButton
                     label={isSubmitting ? "Submitting..." : "Submit Dispute"}
                     onPress={handleSubmit}
@@ -384,9 +414,13 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         padding: spacing.md,
+        gap: spacing.xs,
         backgroundColor: colors.surface,
         borderTopWidth: 1,
         borderTopColor: colors.border,
+    },
+    errorText: {
+        color: colors.red,
     },
 
     // Success Content

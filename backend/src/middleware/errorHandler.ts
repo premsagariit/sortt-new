@@ -12,16 +12,14 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     });
 
     const statusCode = err.status || err.statusCode || 500;
+    const message = (statusCode >= 400 && statusCode < 500)
+        ? (err.message || 'Client Error')
+        : 'Internal Server Error';
 
     if (process.env.NODE_ENV === 'production') {
-        // Do not mask 4xx client errors as 500 Internal Server Errors
-        const message = (statusCode >= 400 && statusCode < 500) 
-            ? (err.message || 'Client Error') 
-            : 'Internal Server Error';
-            
         res.status(statusCode).json({ error: message });
     } else {
-        // In dev, sometimes it outputs a helpful stack or message
-        res.status(statusCode).json({ error: err.message || 'Internal Server Error', stack: err.stack });
+        // D3: never expose stack traces in API responses.
+        res.status(statusCode).json({ error: message });
     }
 };

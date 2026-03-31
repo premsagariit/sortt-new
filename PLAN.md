@@ -31,7 +31,7 @@
 |---|---|---|---|
 | **1** | Foundation + Design System | Monorepo, tokens, fonts, UI component library |
 | **2** | Auth UI + Seller UI (static) | All seller screens with mock data |
-| **3** | Aggregator UI (static) | All aggregator screens — web portal deferred |
+| **3** | Aggregator UI (static) | All aggregator screens (mobile only) |
 | **4** | Azure PostgreSQL Setup + Migrations Part 1 | 2h | DB live, migrations 0001–0006 applied |
 | **5** | Migrations Part 2 + RLS + Indexes + Triggers | 2.5h | Full schema live, all RLS policies active |
 | **6** | Express Backend Foundation | 2.5h | Backend live on Azure, helmet, CORS, middleware |
@@ -43,8 +43,8 @@
 | **12** | Atomic Ops — Accept + OTP Verify Routes | 2.5h | First-accept-wins + OTP completion live |
 | **13** | Ably Realtime + Push Notifications | 2.5h | Live chat + status updates + push |
 | **14** | Provider Abstractions (All 5 Packages) | 2.5h | All provider interfaces complete + swap stubs |
-| **15** | Gemini Vision + GST Invoice + Price Scraper | 2.5h | AI estimates + PDF invoices + price data |
-| **16** | Web Portal + Admin Dashboard + Tests | 3h | Business dashboard + Admin panel + test suite |
+| **15** | [x] Gemini Vision + GST Invoice + Price Scraper | 2.5h | All capabilities live + verified |
+| **16** | **Active** — Admin Web Dashboard + Tests | 3h | Admin panel + test suite (business/aggregator web deferred) |
 | **17** | Security Audit + Monitoring + Launch | 2.5h | All security gates green, production deploy |
 
 ---
@@ -82,6 +82,11 @@
   - [x] Chat header/meta and quick-reply layout hardened for small screens (320–360dp) to avoid text/button overflow.
   - [x] Seller listing step2 and aggregator weighing photo action buttons now stack safely on narrow screens.
   - [x] Realtime cleanup adjusted to avoid detached-channel runtime errors during screen transitions.
+- [x] **Day 15 Completion Update (2026-03-30)**:
+  - [x] Gemini Vision integrated via `packages/analysis` for automated scrap estimation.
+  - [x] GST Invoice engine implemented using `pdf-lib` (reverted from Puppeteer for Azure compatibility).
+  - [x] Price index scraper functional/seeding via `scraper/main.py`.
+  - [x] Ola Maps abstraction complete (`packages/maps`), though map rendering is restricted to dev builds (incompatible with Expo Go).
 
 ---
 
@@ -267,9 +272,9 @@
 
 ---
 
-## ✅ DAY 3 — Aggregator UI + Web Portal Shell (Static)
+## ✅ DAY 3 — Aggregator UI (Static) + Web Scope Clarification
 
-> **Goal:** All aggregator screens complete. Next.js web portal scaffolded with all pages static.
+> **Goal:** All aggregator mobile screens complete. No business/aggregator web UI is built in this phase.
 
 ### 3.1 Aggregator Onboarding — [COMPLETE]
 - [x] Aggregator Registration Screens (3-Screen Wizard: Profile, Area, Materials)
@@ -321,19 +326,17 @@
 - [x] `(auth)/aggregator/kyc.tsx` — new screen. Two independent `usePhotoCapture` instances. Each card independent. Submit disabled until both `kycAadhaarUri` + `kycShopPhotoUri` non-null.
 - [x] `aggregatorStore.ts` — added `scalePhotoUri`, `kycAadhaarUri`, `kycShopPhotoUri` + 3 setters.
 
-### 3.7 Next.js Web Portal Shell
-- [ ] DEFERRED — Web portal build moved to after Day 7.
-  Reason: Business dashboard and Admin panel require live backend data
-  to be useful. Building a static shell adds no testable value before
-  the core transaction loop is working on mobile.
-  Web portal resumes at Day 8 once backend integration is complete.
+### 3.7 Web Scope Clarification (Updated 2026-03-30)
+- [x] Business seller and aggregator web UI are explicitly deferred to a later phase.
+- [x] Day 16 scope is admin web pages only.
+- [x] Admin web implementation will follow `sortt_admin_ui.html` and use live backend data.
 
 - [x] **G3.1** — All aggregator screens render without crash on iOS + Android.
 - [x] **G3.2** — Order feed: locality only visible — no full address string in component tree.
 - [x] **G3.3** — 409 "Order already taken" state renders correctly with back navigation.
 - [x] **G3.4** — Weighing screen: "Send for Confirmation" disabled until weights > 0 AND scale photo captured.
 - [x] **G3.5** — Chat screen: phone pattern `9876543210` in mock data renders as `[phone number removed]`.
-- [x] **G3.6** — Web portal deferred by design. Not a gate blocker.
+- [x] **G3.6** — No Day 3 web implementation is required. Admin web starts on Day 16.
 - [x] **G3.9** — Zero TypeScript errors across mobile + web.
 
 
@@ -845,6 +848,15 @@
 - [x] **G10.7** — Feed excludes no-rate orders: ✅ PASS
 - [x] **G10.8** — Disputes atomic transaction: ✅ PASS
 
+#### Dispute Post-Audit Hardening — [COMPLETED — 2026-03-31]
+- [x] `POST /api/disputes` now enforces completed-only precondition (`status==='completed'`) and blocks duplicate open disputes with HTTP 409.
+- [x] Server-side `issue_type` validation aligned to DB/TRD enum: `wrong_weight|payment_not_made|no_show|abusive_behaviour|other`.
+- [x] API-level `description <= 2000` validation added before DB write.
+- [x] `GET /api/disputes/:id` implemented (party/admin access) with evidence list retrieval.
+- [x] `POST /api/disputes/:id/evidence` implemented with EXIF strip (`sharp`), provider upload, and private `storage_path` persistence.
+- [x] `dispute_evidence` RLS SELECT widened to both order parties via migration `0032_dispute_rls_and_status_history_integrity.sql`.
+- [x] `order_status_history.changed_by` enforced `NOT NULL` via migration `0032_dispute_rls_and_status_history_integrity.sql`.
+
 ---
 
 ## ✅ DAY 11 — Wire Mobile Screens to Live API (Both Sides)
@@ -1099,33 +1111,25 @@
 
 ---
 
-## ✅ DAY 16 — Web Portal + Admin Dashboard + Tests
-> **Goal:** Business dashboard live against real API. Admin panel functional. Unit and integration test suites passing. CI pipeline green.
+## ✅ DAY 16 — Admin Web Dashboard + Tests
+> **Goal:** Admin panel live against real API and storage/auth integrations, with unit + integration test suites passing and CI green.
 > **Time:** ~3 hours
-> **Note:** Web portal built against live backend. No static shells.
+> **Scope lock:** Business seller and aggregator web UI are out of scope for Day 16 and deferred to a later phase.
+> **UI reference:** `sortt_admin_ui.html` is the canonical admin UI sample for page structure and component styling.
 
-### 16.1 Business Mode Web Dashboard (~60 min)
+### 16.1 Admin Web Dashboard (~90 min)
 - [ ] Scaffold Next.js 15 App Router in `apps/web/` with Tailwind CSS + Radix UI.
 - [ ] Security headers in `next.config.js` `headers()`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, CSP (V34).
-- [ ] Configure Tailwind with same colour tokens from `apps/web/constants/tokens.ts`.
-- [ ] `app/(auth)/` — phone OTP login (web adaptation of mobile auth flow). Uses same backend OTP routes.
-- [ ] `app/(business)/` — authenticated business seller dashboard:
-  - **Listings**: `GET /api/orders?role=seller` → paginated table. Create listing form → `POST /api/orders`.
-  - **Recurring Schedule**: stored in `seller_profiles.recurring_schedule`. Display and edit UI.
-  - **Sub-user Management**: `business_members` CRUD — invite by phone, assign role (admin/operator/viewer), revoke.
-  - **Order History**: filter by date/status/material. Export CSV (client-side from API data).
-  - **GST Invoice History**: list + PDF download via signed URL.
-
-### 16.2 Admin Dashboard (~50 min)
 - [ ] Vercel Edge Middleware `middleware.ts`: IP allowlist for ALL `/admin/*` routes (X4). Reads `ADMIN_IP_ALLOWLIST` env var.
 - [ ] 15-minute inactivity timeout → auto logout.
-- [ ] `app/(admin)/` — admin panel:
-  **KYC Queue**: table of `kyc_status='pending'` aggregators. View all submitted KYC documents via signed URLs: Aadhaar front, Aadhaar back, selfie, and the conditional shop or vehicle photo (determined by `aggregator_type`). Signed URLs served by admin route only — never in aggregator-facing responses.
-  - **Disputes**: chat history + scale photos + OTP log. 72-hour SLA indicator. Resolve/Dismiss route.
-  - **Price Override**: manual rate entry. `is_manual_override=true`. Logged to `admin_audit_log`.
+- [ ] Build `app/(admin)/` pages using `sortt_admin_ui.html` as the visual/layout reference:
+  - **KYC Queue**: `kyc_status='pending'` list with signed document URLs (Aadhaar front/back, selfie, conditional shop/vehicle photo).
+  - **Disputes**: chat history + scale photos + OTP log with 72-hour SLA indicator and resolve/dismiss actions.
+  - **Price Override**: manual rate entry (`is_manual_override=true`) with `admin_audit_log` write.
   - **Flagged Aggregators**: avg rating < 3.0 after 10+ completed orders.
+- [ ] Ensure every admin widget fetches live data from backend routes and provider-backed systems (database, storage, auth); no mock payloads.
 
-### 16.3 Unit Tests (~30 min)
+### 16.2 Unit Tests (~40 min)
 - [ ] RLS policy tests (using `pg` pool with `SET LOCAL app.current_user_id`):
   - Seller cannot read other seller's orders.
   - Aggregator sees only `status='created'` orders in same `city_code`.
@@ -1139,7 +1143,7 @@
   - `verifyUserRole`: returns false for `is_active=false` user.
   - OTP rate limiter: 4th request in 10 min → 429.
 
-### 16.4 Integration Tests + CI/CD (~40 min)
+### 16.3 Integration Tests + CI/CD (~50 min)
 - [ ] Full order lifecycle integration test: seller creates → aggregator accepts (FOR UPDATE SKIP LOCKED) → status transitions → scale photo → OTP verify → `status='completed'` → invoice generated.
 - [ ] Race condition test: concurrent accept calls → exactly one 200, one 409. No duplicate `order_status_history` rows.
 - [ ] OTP one-time use: same OTP twice → second returns 400.
@@ -1150,14 +1154,14 @@
 
 ### 🚦 DAY 16 VERIFICATION GATE
 - [ ] **G16.1** — Admin route without IP allowlist match → 403 (test from non-whitelisted IP).
-- [ ] **G16.2** — Business sub-user with `viewer` role: can read orders, `POST /api/orders` returns 403.
+- [ ] **G16.2** — Admin KYC queue loads live pending records and signed URLs are generated server-side only.
 - [ ] **G16.3** — All unit tests pass: `pnpm test` → 0 failures.
 - [ ] **G16.4** — Integration test: full order lifecycle completes. Invoice PDF generated. Receipt visible on mobile.
 - [ ] **G16.5** — Race test: concurrent acceptance → 1 success + 1 × 409. Zero duplicate history rows.
 - [ ] **G16.6** — CI pipeline passes on a fresh PR (green check in GitHub).
 - [ ] **G16.7** — `pnpm type-check` monorepo-wide: 0 errors.
 - [ ] **G16.8** — EAS preview APK installs and runs on physical Android device.
-- [ ] **G16.9** — Web portal security headers: `curl -I https://<vercel-url>` shows `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`.
+- [ ] **G16.9** — Admin web security headers: `curl -I https://<vercel-url>` shows `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`.
 
 ---
 
@@ -1390,8 +1394,8 @@
 - [x] Day 12 — Atomic Ops (Accept + OTP Verify) *(completed)*
 - [x] Day 13 — Ably Realtime + Push Notifications *(2026-03-20)*
 - [x] Day 14 — Provider Abstractions (All 5 Packages) *(2026-03-24)*
-- [x] Day 15 — Gemini Vision + GST Invoice + Price Scraper *(2026-03-27)*
-- [ ] Day 16 — Web Portal + Admin Dashboard + Tests
+- [x] Day 15 — Gemini Vision + GST Invoice + Price Scraper *(2026-03-30 — COMPLETE)*
+- [ ] Day 16 — Admin Web Dashboard + Tests
 - [ ] Day 17 — Security Audit + Monitoring + Launch
 
 ---

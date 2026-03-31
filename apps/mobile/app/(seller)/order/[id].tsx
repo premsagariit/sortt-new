@@ -525,6 +525,23 @@ export default function SellerOrderDetailScreen() {
           currentStatus={order.status}
         />
 
+        {order.status === 'completed' && (
+          <Pressable
+            style={styles.disputeAction}
+            onPress={() =>
+              router.push({
+                pathname: '/(shared)/dispute',
+                params: {
+                  orderId: order.orderId,
+                  fallbackRoute: `/(seller)/order/receipt/${order.orderId}`,
+                },
+              } as any)
+            }
+          >
+            <Text variant="label" color={colors.red}>Raise Dispute</Text>
+          </Pressable>
+        )}
+
         {!['completed', 'cancelled', 'disputed'].includes(order.status) && (
           <Pressable
             style={styles.cancelAction}
@@ -702,6 +719,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: spacing.xl,
     padding: spacing.md,
+  },
+  disputeAction: {
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.red,
+    borderRadius: radius.input,
+    backgroundColor: colors.surface,
   },
   floatingFooter: {
     position: 'absolute',

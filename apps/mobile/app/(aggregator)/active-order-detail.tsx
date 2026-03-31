@@ -160,6 +160,8 @@ export default function ActiveOrderDetailScreen() {
         } as any);
     };
 
+    const canRaiseDispute = storeOrder?.status === 'completed';
+
     // ── Summary strip ──────────────────────────────────────────────
     const renderSummaryStrip = () => (
         <View style={styles.summaryStrip}>
@@ -291,26 +293,45 @@ export default function ActiveOrderDetailScreen() {
                 </View>
             </ScrollView>
 
-            {/* ── Sticky Bottom Bar (Navigate + Cancel) ──────────── */}
+            {/* ── Sticky Bottom Bar ───────────────────────────────── */}
             <View style={styles.bottomBar}>
-                <SecondaryButton
-                    label="Cancel Order"
-                    style={styles.cancelBtn}
-                    textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
-                    onPress={() => setShowCancelModal(true)}
-                />
-                <PrimaryButton
-                    label={
-                        activeOrder.status === 'weighing_in_progress'
-                            ? 'Continue OTP'
-                            : activeOrder.status === 'arrived'
-                                ? 'Start Weighing'
-                                : 'Navigate'
-                    }
-                    style={styles.navigateBtn}
-                    textStyle={styles.btnText}
-                    onPress={routeToExecutionStage}
-                />
+                {canRaiseDispute ? (
+                    <PrimaryButton
+                        label="Raise Dispute"
+                        style={styles.disputeBtn}
+                        textStyle={styles.btnText}
+                        onPress={() =>
+                            router.push({
+                                pathname: '/(shared)/dispute',
+                                params: {
+                                    orderId: internalOrderId,
+                                    fallbackRoute: '/(aggregator)/orders',
+                                },
+                            } as any)
+                        }
+                    />
+                ) : (
+                    <>
+                        <SecondaryButton
+                            label="Cancel Order"
+                            style={styles.cancelBtn}
+                            textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
+                            onPress={() => setShowCancelModal(true)}
+                        />
+                        <PrimaryButton
+                            label={
+                                activeOrder.status === 'weighing_in_progress'
+                                    ? 'Continue OTP'
+                                    : activeOrder.status === 'arrived'
+                                        ? 'Start Weighing'
+                                        : 'Navigate'
+                            }
+                            style={styles.navigateBtn}
+                            textStyle={styles.btnText}
+                            onPress={routeToExecutionStage}
+                        />
+                    </>
+                )}
             </View>
 
             {/* Cancel modal */}
@@ -456,6 +477,11 @@ const styles = StyleSheet.create({
         flex: 2,
         height: 48,
         backgroundColor: colors.teal,
+    },
+    disputeBtn: {
+        flex: 1,
+        height: 48,
+        backgroundColor: colors.red,
     },
     btnText: { fontSize: 14, fontFamily: 'DMSans-Bold' },
 });

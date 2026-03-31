@@ -22,6 +22,8 @@ import realtimeRouter from './routes/realtime';
 import addressesRouter from './routes/addresses';
 import mapsRouter from './routes/maps';
 import scrapRouter from './routes/scrap';
+import adminRouter from './routes/admin';
+import adminAuthRouter from './routes/admin-auth';
 import { startScheduler } from './scheduler';
 
 // ── Startup environment validation ─────────────────────────────────────────
@@ -49,8 +51,8 @@ console.log('[DIAG] Backend initializing...');
 console.log('[DIAG] env.PORT:', process.env.PORT);
 console.log('[DIAG] env.NODE_ENV:', process.env.NODE_ENV);
 console.log('[DIAG] env.DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('[DIAG] env.CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? `${process.env.CLERK_SECRET_KEY.slice(0, 8)}...` : 'MISSING ⚠️');
-console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY:', process.env.CLERK_PUBLISHABLE_KEY ? `${process.env.CLERK_PUBLISHABLE_KEY.slice(0, 8)}...` : 'MISSING ⚠️');
+console.log('[DIAG] env.CLERK_SECRET_KEY configured:', !!process.env.CLERK_SECRET_KEY);
+console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY configured:', !!process.env.CLERK_PUBLISHABLE_KEY);
 console.log('[DIAG] env.ABLY_API_KEY exists:', !!process.env.ABLY_API_KEY);
 console.log('[DIAG] env.R2_BUCKET_NAME:', process.env.R2_BUCKET_NAME || 'MISSING ⚠️');
 
@@ -79,6 +81,7 @@ app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 
 // Public auth routes — before Clerk middleware so OTP endpoints never need a token
 app.use('/api/auth', authRouter);
+app.use('/api/admin/auth', adminAuthRouter);
 
 // clerkMiddleware() populates req.auth so getAuth() works in route handlers.
 // Passing secretKey and publishableKey explicitly prevents Clerk from throwing
@@ -118,12 +121,19 @@ app.use('/api/ratings', ratingsRouter);
 app.use('/api/disputes', disputesRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/realtime', realtimeRouter);
+app.use('/api/admin', adminRouter);
+
 
 app.use(errorHandler);
 
+export default app;
+
 const PORT = process.env.PORT || 8080;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  startScheduler();
-});
+// Only start the server if this file is run directly (not in jest/test environment)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    startScheduler();
+  });
+}

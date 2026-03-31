@@ -5,7 +5,12 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 15 Complete (2026-03-27), Ready for Day 16 (Web + Admin + Tests)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 15 Complete (2026-03-27), Ready for Day 16 (Admin Web + Tests)
+
+> ✅ **Scope Sync Note (2026-03-30) — Web Clarification**
+> - Business seller and aggregator web UI are deferred to a later phase.
+> - Day 16 scope is admin web pages only.
+> - Admin web UI implementation must follow `sortt_admin_ui.html` and consume live backend/provider data (no mock payloads).
 
 > ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
 
@@ -26,7 +31,8 @@
 > - Google Maps → Ola Maps migration completed:
 >   - `packages/maps/src/providers/OlaMapsProvider.ts` implemented for geocode/reverse + autocomplete helper.
 >   - `backend/src/routes/maps.ts` now includes authenticated autocomplete endpoint.
->   - Mobile map screens now use MapLibre + Ola tiles with Expo Go fallback gate (`MAP_RENDERING_AVAILABLE=false` by default).
+>   - Mobile map screens now use MapLibre + Ola tiles with Expo Go fallback gate.
+>   - ⚠️ **CRITICAL LIMITATION:** **Ola Maps rendering is NOT supported in Expo Go.** Map rendering stays disabled (`MAP_RENDERING_AVAILABLE=false`) in Expo Go; full map features require an APK/Dev Build with the `maplibre-react-native` native module.
 > - Aggregator distance/header reliability fix completed:
 >   - Numeric parsing hardened for coordinate/distance fields in `apps/mobile/store/orderStore.ts` and feed distance mapping in `apps/mobile/store/aggregatorStore.ts`.
 >   - Pre-accept order header now falls back to `liveDistanceKm` when direct coordinate-based calculation is unavailable.
@@ -106,7 +112,7 @@ Day 15    → Gemini + invoice + scraper           [GATE PASSED 2026-03-27]
 UI Polish + refinements                          [COMPLETE — 2026-03-20]
 
 ⏳ NEXT:
-Days 16–17 → Web portal + admin + security audit
+Days 16–17 → Admin web + security audit (business/aggregator web deferred)
 ```
 
 **Rules that follow from this:**
@@ -124,7 +130,7 @@ Days 16–17 → Web portal + admin + security audit
 | Layer | Technology | Notes |
 |---|---|---|
 | Mobile App | React Native, Expo SDK 51+, Expo Router | Primary for all user types |
-| Web Portal | Next.js 15 (App Router), Tailwind CSS, Radix UI | Mandatory for Business Mode sellers + Admin |
+| Web App | Next.js 15 (App Router), Tailwind CSS, Radix UI | Admin pages active in current scope; business/aggregator web deferred |
 | Core Backend | Node.js / Express on Azure App Service | All non-atomic business logic |
 | Atomic Operations | Express PostgreSQL Transactions | v2.0 update: replaces Edge Functions |
 | Database | Azure PostgreSQL Flexible Server | Central India region (CentralIndia) |
@@ -398,7 +404,7 @@ Allowed transitions only:
 - **V27:** Randomised invoice storage paths (see §3.9 above).
 - **V30:** All `order_status_history` timestamps set by DB `DEFAULT NOW()` — never client-supplied.
 - **V32:** HMAC-suffixed channel names (see §3.3 above).
-- **V34:** `helmet` npm package on Express backend. `headers()` config in `next.config.js` for web portal.
+- **V34:** `helmet` npm package on Express backend. `headers()` config in `next.config.js` for admin web routes.
 - **V35:** `kyc_status` is blocklisted from all aggregator-facing update endpoints. Only updatable via `/api/admin/aggregators/:id/kyc`. DB trigger prevents non-service-role updates.
 
 ---
@@ -493,8 +499,8 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 │   │   └── constants/
 │   │       ├── tokens.ts         # All design tokens (SINGLE SOURCE OF TRUTH for visuals)
 │   │       └── app.ts            # APP_NAME, APP_DOMAIN, APP_SLUG — SINGLE SOURCE OF TRUTH for brand identity
-│   ├── web/                      # Next.js 15 web portal
-│   └── admin/                    # Next.js admin panel (or sub-route of web)
+│   ├── web/                      # Next.js 15 admin web app (`/admin/*` active)
+│   └── admin/                    # Deferred placeholder (business/aggregator web remains out of current scope)
 ├── packages/
 │   ├── maps/                     # IMapProvider abstraction
 │   ├── realtime/                 # IRealtimeProvider abstraction
@@ -866,6 +872,15 @@ Do not delete old entries. Append only.
 - **[2026-03-18] Notifications require structured metadata for deterministic deep-linking:** `notifications.data` must carry `order_id` (+ optional `order_display_id`, `kind`) when type=`order`; UI tap handlers should route by current role to seller/aggregator detail paths and fall back to mark-read-only when metadata is missing. Affects: `backend/src/lib/notifications.ts`, `backend/src/routes/notifications.ts`, `apps/mobile/app/(shared)/notifications.tsx`.
 - **[2026-03-18] Locality alias compatibility:** `pickup_locality` is the canonical DB field; DTOs should also expose compatibility aliases (`pickupLocality`, `locality`) during migration windows to prevent list/detail display drift across older client mapping code. Affects: `backend/src/utils/orderDto.ts`, `apps/mobile/store/orderStore.ts`.
 - **[2026-03-18] Accept-flow state synchronization:** After aggregator accepts an order, refresh canonical order state before transitioning to active detail to avoid stale intermediate values from mixed store sources. Affects: `apps/mobile/app/(aggregator)/order/[id].tsx`, `apps/mobile/store/orderStore.ts`, `apps/mobile/store/aggregatorStore.ts`.
+
+- **[2026-03-31] Dispute status guard inversion:** `POST /api/disputes` incorrectly blocked `completed` orders and allowed non-completed statuses. Fixed by enforcing `order.status === 'completed'`, returning 400 for non-completed and 409 for already-disputed/open-dispute cases. Root cause: guard logic drift from PRD/TRD state-machine requirement. Affects: `backend/src/routes/disputes.ts`.
+- **[2026-03-31] Dispute input contract enforcement gaps:** Server accepted arbitrary `issue_type` and lacked API-level description max-length checks. Fixed with strict enum validation (`wrong_weight|payment_not_made|no_show|abusive_behaviour|other`) and explicit `description <= 2000` validation before insert. Root cause: over-reliance on DB CHECK constraints without app-level validation. Affects: `backend/src/routes/disputes.ts`.
+- **[2026-03-31] Missing dispute detail/evidence APIs:** `GET /api/disputes/:id` and `POST /api/disputes/:id/evidence` were absent. Implemented both with party/admin access checks, EXIF stripping via `sharp`, storage through provider adapter only, persisted private `storage_path` key, and signed URL retrieval on read. Root cause: partial Day 10 implementation not carried to full TRD route table scope. Affects: `backend/src/routes/disputes.ts`.
+- **[2026-03-31] Dispute evidence RLS asymmetry + status history nullability:** `dispute_evidence` SELECT policy only allowed raiser; `order_status_history.changed_by` remained nullable in schema. Fixed with migration `0032_dispute_rls_and_status_history_integrity.sql` to allow both order parties to read evidence and enforce `changed_by NOT NULL` after backfill. Root cause: schema hardening left incomplete after initial rollout. Affects: `migrations/0032_dispute_rls_and_status_history_integrity.sql`.
+- **[2026-03-31] Dispute mobile screen shipped as mock:** Shared dispute UI used `setTimeout` mock submit, wrong issue enums, missing maxLength, no inline error, and raw back navigation. Fixed to call `/api/disputes` through shared API client, use exact issue enums, enforce 2000-char input cap, render inline errors, and use `safeBack(fallbackRoute)`. Root cause: UI scaffold not converted to production API integration. Affects: `apps/mobile/app/(shared)/dispute.tsx`.
+- **[2026-03-31] Dispute entry-point gaps in order detail screens:** Required raise-dispute entry points were missing in scoped seller/aggregator detail files. Added completed-status-gated dispute actions with explicit route params and fallback navigation. Root cause: dispute CTA placement focused on alternate receipt flows, leaving scoped detail surfaces incomplete. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `apps/mobile/app/(aggregator)/active-order-detail.tsx`.
+- **[2026-03-31] Error response stack leakage in dev paths:** API could return stack traces for malformed requests in non-production environments. Fixed global error handler to return sanitized error bodies without stack in all environments, preserving 4xx vs 5xx semantics. Root cause: debug-oriented non-prod branch leaked internals. Affects: `backend/src/middleware/errorHandler.ts`.
+- **[2026-03-31] Startup diagnostics secret-prefix exposure:** Boot logs printed partial secret prefixes for Clerk keys. Replaced with boolean configured/missing diagnostics only. Root cause: convenience debugging log was not security-hardened. Affects: `backend/src/index.ts`.
 
 ---
 
