@@ -8,10 +8,13 @@ Sortt
 │   │   ├── Daily price scraper integrated via `backend/src/scheduler.ts` spawning `scraper/main.py`
 │   │   ├── Seller listing AI hint flow wired in `apps/mobile/app/(seller)/listing/step2.tsx`
 │   │   └── Receipt invoice download flow wired in `apps/mobile/app/(seller)/order/receipt/[id].tsx` and `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
-│   ├── Invoice PDF engine migrated (2026-03-27): `pdf-lib` → `puppeteer-core` + `@sparticuz/chromium`
-│   │   ├── Pixel-perfect A4 invoice matching canonical `sortt_invoice.html` (Navy/Teal brand, DM Sans + DM Mono fonts)
-│   │   └── New deps: `puppeteer-core`, `@sparticuz/chromium` in `backend/package.json`
-│   ├── Project execution state: implementation complete through Day 15; Day 16 is next (Web portal + admin dashboard + tests)
+│   ├── Invoice PDF engine migrated (2026-03-28): Reverted to `pdf-lib` for Azure compatibility
+│   │   ├── Lightweight vector rendering (DM Sans/Mono fonts) replacing Chromium/Puppeteer
+│   │   └── Removed `puppeteer-core` and `@sparticuz/chromium` from backend dependencies
+│   ├── Project execution state (updated 2026-04-02): implementation complete through Day 15; Day 16 (admin web pages + tests) is in progress and not yet closed
+│   ├── Verification snapshot (2026-04-02): `pnpm type-check` fails, `pnpm lint` passes with warnings, `pnpm test` fails (backend Jest config parse error caused by invalid JSON in `backend/package.json`)
+│   ├── Day 17 status: blocked until Day 16 verification gates are fully green
+│   ├── Web scope clarification (2026-03-30): business seller + aggregator web UI deferred; admin web pages only in current phase
 │   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
 │   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff
 │   ├── Listing wizard step3 + seller addresses list integrated with map-first address flow
@@ -226,7 +229,7 @@ Sortt
 │   │       ├── error.ts # Error normalization/classification helpers
 │   │       └── navigation.tsx # Navigation safety helpers and route utilities
 │   │
-│   └── web # Next.js web app
+│   └── web # Next.js admin web app (current scope)
 │       ├── package.json # Web app dependencies and scripts
 │       ├── tsconfig.json # Web app TypeScript config
 │       ├── next-env.d.ts # Next.js type declarations
@@ -235,8 +238,8 @@ Sortt
 │       │   ├── layout.tsx # Web app root layout
 │       │   ├── page.tsx # Web app landing page
 │       │   ├── globals.css # Global CSS styles for web app
-│       │   ├── admin # Admin route segment
-│       │   └── aggregator # Aggregator portal route segment
+│       │   ├── admin # Admin route segment (active)
+│       │   └── aggregator # Deferred placeholder route segment (not in current scope)
 │       ├── components
 │       │   └── ui
 │       │       └── SorttLogo.tsx # Reusable web logo component
@@ -299,7 +302,7 @@ Sortt
 │   │   │       └── index.ts # Order lifecycle routes (create, accept, finalize, invoice download)
 │   │   └── utils
 │   │       ├── channelHelper.ts # Channel naming/access helper utilities
-│   │       ├── invoiceGenerator.ts # Puppeteer-based A4 GST invoice PDF builder (matches sortt_invoice.html)
+│   │       ├── invoiceGenerator.ts # pdf-lib based A4 GST invoice PDF builder
 │   │       ├── orderDto.ts # Order response normalization/sanitization helpers
 │   │       ├── orderStateMachine.ts # Allowed order state transition rules
 │   │       ├── pushHelper.ts # Legacy push helper (superseded by pushNotifications.ts)
@@ -333,8 +336,8 @@ Sortt
 │   │       ├── index.ts # IMapProvider exports + factory
 │   │       ├── types.ts # GeoResult + IMapProvider interface
 │   │       └── providers
-│   │           ├── GoogleMapsProvider.ts # Default maps implementation
-│   │           └── OlaMapsProvider.ts # Swap stub (NotImplementedError)
+│   │           ├── GoogleMapsProvider.ts # Legacy/Secondary maps implementation
+│   │           └── OlaMapsProvider.ts # Full Ola Maps implementation
 │   ├── realtime
 │   │   ├── package.json # Realtime package manifest
 │   │   ├── tsconfig.json # Realtime package TypeScript config

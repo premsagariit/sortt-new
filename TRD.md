@@ -59,7 +59,9 @@
 > - Mobile Day 15 flows are wired:
 >   - Seller listing step2 AI estimate hint UI is connected to `/api/scrap/analyze`.
 >   - Receipt invoice download button is connected to `GET /api/orders/:id/invoice`.
-> - Execution state: implementation is complete through Day 15; Day 16 (Web portal + Admin dashboard + tests) is next.
+> - Execution state: implementation is complete through Day 15; Day 16 (admin web pages + tests) is in progress and not yet closed.
+> - Verification snapshot (2026-04-02): `pnpm type-check` fails, `pnpm lint` passes with warnings, and `pnpm test` fails due backend Jest config parse failure caused by invalid JSON in `backend/package.json`.
+> - Day 17 (Security Audit + Monitoring) is blocked until Day 16 verification gates are fully green.
 
 
 ---
@@ -70,7 +72,7 @@ To prevent Metro server crashes, port contention, and path resolution discrepanc
 
 Never `cd` into application child directories to launch local servers. Use only:
 1. **Mobile:** `pnpm dev:mobile`
-2. **Web Portal:** `pnpm dev:web`
+2. **Admin Web:** `pnpm dev:web`
 3. **Backend API:** `pnpm dev:backend`
 
 ---
@@ -145,7 +147,7 @@ Every tool listed below is either free, open-source, or covered by student credi
 | Layer | Technology | Free Tier / Credit |
 |---|---|---|
 | Mobile App | React Native, Expo SDK 51+, Expo Router | — |
-| Web Portal | Next.js 15 (App Router), Tailwind CSS, Radix UI | Vercel hobby |
+| Web (Admin Pages) | Next.js 15 (App Router), Tailwind CSS, Radix UI | Vercel hobby |
 | Core Backend | Node.js / Express on **Azure App Service** (Central India — Pune) | Azure for Students free tier hours |
 | Database | **Azure PostgreSQL Flexible Server B1ms** (Central India — Pune) + pgcrypto + uuid-ossp | Azure for Students — 750 hrs/month B1ms free for 12 months |
 | Auth | **Clerk** — Phone OTP (enable India in Clerk Dashboard → SMS Settings) | Free up to 10,000 MAU |
@@ -831,7 +833,7 @@ app.get('/api/realtime/token', clerkJwtMiddleware, async (req, res) => {
 });
 ```
 
-> ⚠️ **`NEXT_PUBLIC_ABLY_KEY` is DEPRECATED for mobile.** If it appears in any `.env` file for the mobile app, remove it. The web portal (Next.js) may use a restricted read-only Ably key if server-side token auth is not feasible, but this must be reviewed before Day 16.
+> ⚠️ **`NEXT_PUBLIC_ABLY_KEY` is DEPRECATED for mobile and not required for current admin web scope.** If it appears in any `.env` file for the mobile app, remove it. Revisit only when business/aggregator web realtime features are resumed.
 
 ---
 
@@ -1451,8 +1453,8 @@ sortt-app/
 │   │   ├── store/                    # Zustand state stores
 │   │   └── constants/
 │   │       └── tokens.ts             # Design tokens (SINGLE SOURCE OF TRUTH — unchanged)
-│   ├── web/                          # Next.js 15 web portal
-│   └── admin/                        # Next.js admin panel
+│   ├── web/                          # Next.js 15 admin web app (`/admin/*` active)
+│   └── admin/                        # Deferred placeholder for future dedicated web surfaces
 ├── packages/
 │   ├── maps/                         # IMapProvider abstraction
 │   ├── realtime/                     # IRealtimeProvider → AblyRealtimeProvider
@@ -1535,7 +1537,7 @@ These rules apply to every agent in every session:
 
 | Day | Domain | Primary Technologies |
 |---|---|---|
-| 1–3 | UI Foundation (all screens, static data) | React Native, Expo Router, Zustand, Next.js 15, Design System |
+| 1–3 | UI Foundation (all screens, static data) | React Native, Expo Router, Zustand, Design System |
 | 4 | Database schema (PostgreSQL) — initial tables + extensions | `uuid-ossp`, `pgcrypto`, migrations 0001–0003 |
 | 5 | RLS policies + triggers + indexes + materialized views | PostgreSQL RLS, functions, 0002–0006 migrations |
 | 6 | Express backend foundation + auth wiring (WhatsApp OTP) | Express, Clerk JWT, Upstash Redis, Meta WhatsApp API |
@@ -1546,8 +1548,8 @@ These rules apply to every agent in every session:
 | 11 | AI scrap analysis (Gemini Vision), invoice PDF generation | `IAnalysisProvider`, Gemini Flash, pdf-lib, GST format |
 | 12 | Mobile auth wiring — `otp.tsx` rewrite (WhatsApp flow) | Clerk Expo SDK, `POST /api/auth/*` integration |
 | 13 | Provider abstraction swap tests (Ola Maps, Soketi) | `IMapProvider`, `IRealtimeProvider`, env-var-driven swaps |
-| 14 | Web portal + Admin panel | Next.js 15, Vercel Edge Middleware, IP allowlist |
-| 15 | Business Mode — sub-users, GST invoices, web portal CRUD | `business_members`, role RLS, `PATCH /api/sellers/profile` |
+| 14 | Admin web panel + IP security | Next.js 15, Vercel Edge Middleware, IP allowlist |
+| 15 | Business Mode APIs + GST invoices (mobile surfaces active; web deferred) | `business_members`, role RLS, `PATCH /api/sellers/profile` |
 | 16 | EAS build, E2E testing, Sentry/PostHog, performance audit | Detox/Playwright, Jest coverage, Azure Monitor review |
 | 17 | Security audit, penetration testing, launch readiness | All V-series + X-series checks, admin audit log review |
 
@@ -1988,7 +1990,7 @@ export interface IMapProvider {
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Client apps | Clerk publishable key — safe for client use |
 | `DATABASE_URL` | Backend only | Azure PostgreSQL connection string (SSL required) |
 | `ABLY_API_KEY` | **Backend only** | Ably server API key — NEVER in client bundle |
-| ~~`NEXT_PUBLIC_ABLY_KEY`~~ | ~~Client apps~~ | **DEPRECATED for mobile** — mobile uses Ably Token Auth via `GET /api/realtime/token`. Removed from mobile `.env`. Web portal review required before Day 16. |
+| ~~`NEXT_PUBLIC_ABLY_KEY`~~ | ~~Client apps~~ | **DEPRECATED for mobile** — mobile uses Ably Token Auth via `GET /api/realtime/token`. Removed from mobile `.env`. Not needed for current admin web scope. |
 | `R2_ACCOUNT_ID` | Backend only | Cloudflare account ID (used in endpoint URL) |
 | `R2_ACCESS_KEY_ID` | Backend only | R2 API token access key |
 | `R2_SECRET_ACCESS_KEY` | Backend only | R2 API token secret key |

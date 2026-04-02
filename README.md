@@ -1,8 +1,8 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** MVP Build (In Progress — Day 15 complete, ready to begin Day 16)  
+> **Status:** MVP Build (In Progress — Day 16 admin web + tests currently in validation/fix cycle)  
 > **Architecture:** pnpm Monorepo  
-> **Tech Stack:** Expo SDK 54+, Next.js 15, Node.js (Express), Azure PostgreSQL, Gemini AI.
+> **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI.
 
 ---
 
@@ -12,8 +12,7 @@
 [APP_NAME]/
 ├── apps/
 │   ├── mobile/       # React Native (Expo SDK 54) — User/Aggregator App
-│   ├── web/          # Next.js 15 — Business & Admin Portals
-│   └── admin/        # Admin Dashboard (integrated into web as role-gated routes)
+│   └── web/          # Next.js 15 — Admin web pages (`/admin/*`)
 ├── backend/          # Node.js/Express — Central API & Webhooks
 ├── packages/         # Shared Provider Abstractions (@sortt/*)
 │   ├── auth/         # IAuthProvider (Clerk Auth)
@@ -68,7 +67,7 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 pnpm dev:mobile
 ```
 
-**Start Web Portal (Next.js):**
+**Start Admin Web (Next.js):**
 ```bash
 pnpm dev:web
 ```
@@ -85,7 +84,7 @@ pnpm dev:backend
 | Layer | Technology |
 |---|---|
 | **Mobile** | React Native, Expo Router, DM Sans/Mono, Zustand, Phosphor Icons |
-| **Web** | Next.js 15, Tailwind CSS, Radix UI |
+| **Web (Admin Only)** | Next.js 15, Tailwind CSS, Radix UI |
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
 | **Database** | Azure PostgreSQL, RLS, migration-driven schema |
 | **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
@@ -94,7 +93,7 @@ pnpm dev:backend
 
 ---
 
-### 🗓 Current Status (2026-03-27)
+### 🗓 Current Status (2026-04-02)
 ✅ Core API and mobile wiring completed through Day 11 gates.
 
 ✅ Day 13 realtime + push baseline remains complete (2026-03-20) and validated.
@@ -111,7 +110,19 @@ pnpm dev:backend
 - Daily Python price scraper is wired through `backend/src/scheduler.ts` (node-cron spawn of `scraper/main.py`) and feeds `price_index`.
 - Mobile listing step 2 uses AI estimate hints, and receipt flows support invoice download.
 
-✅ Execution status: Days 1–15 are complete. Day 16 (Web portal + Admin dashboard + tests) is the active next phase.
+✅ Execution status: Days 1–15 are complete.
+
+⚠ Day 16 is in progress and not yet gate-complete.
+
+⚠ Latest verification snapshot (2026-04-02):
+- `pnpm type-check` failed (web TypeScript errors in admin and aggregator web modules).
+- `pnpm lint` completed with warnings only (no lint errors; warnings remain in mobile/web).
+- `pnpm test` failed in backend due Jest config parse failure caused by invalid JSON in `backend/package.json`.
+- Day 17 has not started; it remains blocked on Day 16 completion.
+
+✅ Scope clarification (2026-03-30):
+- Business seller web UI and aggregator web UI are deferred to a later phase.
+- Current web scope is admin pages only, built from `sortt_admin_ui.html` and wired to live backend data.
 
 ✅ Seller address management and listing wizard integration updates applied:
 - Two-step seller address flow split into map-first + details form (`address-map` → `address-form`).
@@ -161,7 +172,7 @@ pnpm dev:backend
 - Provider env switches documented (`MAP_PROVIDER`, `REALTIME_PROVIDER`, `SOKETI_URL`).
 - No additional installation or startup commands are required.
 
-✅ Validation: `pnpm type-check` exits 0 at workspace root.
+⚠ Validation update (2026-04-02): `pnpm type-check` currently fails at workspace root and requires fixes before Day 16 closure.
 
 ✅ Google → Ola maps migration completed (2026-03-25):
 - `packages/maps/src/providers/OlaMapsProvider.ts` now implements geocode + reverse geocode + autocomplete.

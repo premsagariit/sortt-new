@@ -32,13 +32,15 @@
 > - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow supports inline rating with post-submit refresh; notifications now deep-link to order detail via metadata payloads.
 > - ✅ **Maps migration (2026-03-25):** Google-based map integration has been replaced with Ola-backed provider implementation + MapLibre mobile rendering. Existing address pinning, reverse-geocode fallback, live tracking, and route planning behaviors are preserved with Expo Go fallback gating.
 > - ✅ **Day 15 completion (2026-03-27):** Gemini Vision analysis route (`POST /api/scrap/analyze`) is live with EXIF stripping + Redis circuit breaker; GST invoice generator + signed download route (`GET /api/orders/:id/invoice`) are live; daily Python price scraper (`scraper/main.py`) is scheduled through backend node-cron and writes to `price_index` with sanity checks.
-> - ✅ **Execution state:** Project implementation is complete through Day 15 and ready to begin Day 16 (Web portal + Admin dashboard + tests).
+> - ⚠ **Execution state (updated 2026-04-02):** Project implementation is complete through Day 15. Day 16 (admin web pages + tests) is in progress and currently blocked by remaining verification failures.
+> - ⚠ **Latest verification snapshot:** `pnpm type-check` fails, `pnpm lint` passes with warnings, and `pnpm test` fails due backend Jest config parse failure caused by invalid JSON in `backend/package.json`.
+> - ⏳ **Day 17 status:** Not started; begins only after Day 16 gate closure.
 
 ---
 
 ## 1. Executive Summary
 
-**[APP_NAME]** is a hyperlocal, two-sided marketplace mobile and web application that digitises India's informal scrap recycling economy. The platform connects individual households, residential communities, offices, industries, and factories (Sellers) with verified local scrap aggregators and kabadiwallas (Aggregators) to facilitate transparent, efficient, and trusted scrap transactions.
+**[APP_NAME]** is a hyperlocal, two-sided marketplace with a mobile-first user experience and an admin web operations panel. The platform connects individual households, residential communities, offices, industries, and factories (Sellers) with verified local scrap aggregators and kabadiwallas (Aggregators) to facilitate transparent, efficient, and trusted scrap transactions.
 
 India's scrap and recycling sector is estimated at over ₹1 lakh crore annually, yet remains almost entirely unorganised. Sellers have no visibility into fair prices; aggregators waste time and fuel on fragmented logistics; and there is zero trust infrastructure between the two sides. **[APP_NAME]** resolves all three pain points through real-time price transparency, AI-assisted scrap evaluation, structured order management, and a robust trust layer.
 
@@ -70,7 +72,7 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 | **Who they are** | Urban households, apartment residents, small offices | Manufacturing units, warehouses, hospitals, bulk offices |
 | **Volume** | 5–50 kg per transaction, occasional | 500 kg – several tonnes, recurring |
 | **Primary need** | Convenience, fair price, no price haggling | Compliance (GST/E-way), scheduled bulk pickup, invoice trail |
-| **Platform** | Mobile app (Android/iOS) | Web portal + mobile app |
+| **Platform** | Mobile app (Android/iOS) | Mobile app (Business Mode); dedicated web UI deferred |
 | **Tech comfort** | Medium — comfortable with WhatsApp/Swiggy-level UX | High — used to ERPs and portals |
 
 ### 3.2 Aggregator Personas
@@ -89,14 +91,14 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 ### 4.1 Platforms Supported
 
 - **Mobile App:** Android & iOS (primary for all user types)
-- **Web Application:** Browser-based portal, mandatory for Industry/Factory sellers and recommended for shop-based aggregators. Must stay in real-time sync with the mobile app.
+- **Web Application (Current MVP Scope):** Admin operations panel only. Business seller and aggregator web UI are deferred to a later phase.
 
 ### 4.2 User Types
 
 - Seller – Household/Office (mobile-first)
-- Seller – Industry/Factory (web + mobile, 'Business Mode')
+- Seller – Industry/Factory (mobile-first 'Business Mode'; web UI deferred)
 - Aggregator – Shop-based or Mobile (mobile-first)
-- Admin – Internal operations panel (web only, integrated into the web portal behind a role-based auth wall)
+- Admin – Internal operations panel (web only, implemented in `apps/web` admin routes)
 
 ---
 
@@ -296,14 +298,16 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 | Transaction Receipt | Completion confirmation, invoice download (Business Mode only via signed URL), rating prompt |
 | Rate & Review | Star rating input, optional text, submit — appears after order completion |
 
-### 6.3 Seller Screens — Business Mode (Industry/Factory)
+### 6.3 Seller Screens — Business Mode (Industry/Factory, Mobile in Current MVP)
 | Screen / Page | Key Elements |
 | :--- | :--- |
-| Business Dashboard | Monthly scrap volume chart, total earnings, upcoming scheduled pickups, compliance alerts |
+| Business Overview (Mobile) | Monthly scrap volume summary, total earnings, upcoming scheduled pickups, compliance alerts |
 | Bulk Listing | Same 4-step wizard as Household but with bulk weight fields, recurring schedule option, GSTIN entry for invoice |
 | Recurring Pickup Manager | View/edit scheduled pickups, pause/resume, history |
 | Compliance Documents | GST invoices for all eligible transactions, download as PDF (E-Way bills are post-MVP) |
 | Team Management | Add / remove sub-users (up to 5), assign roles (View Only / Operator / Admin). Role enforcement at DB level via `business_members` table (R1). |
+
+> **Scope note (2026-03-30):** Business/aggregator web pages are deferred. Admin web pages remain in scope.
 
 ### 6.4 Aggregator Screens
 | Screen | Key Elements |
@@ -434,7 +438,7 @@ The MVP is built over 17 days in a sequential single-thread model. The exact day
 | **Phase 8: Realtime** | Day 13 | Ably + Push | Live chat, status updates without refresh, push notifications |
 | **Phase 9: Providers** | Day 14 | Provider abstractions | All 5 provider packages complete (maps, realtime, auth, storage, analysis) |
 | **Phase 10: Intelligence** | Day 15 | AI + Invoice + Scraper | Gemini image analysis, GST PDF invoices, daily price scraper |
-| **Phase 11: Web + Admin** | Day 16 | Web portal + tests | Business Mode dashboard, Admin dispute/KYC panel, test suite |
+| **Phase 11: Admin Web + Tests** | Day 16 | Admin panel + tests | Admin dispute/KYC panel, live-data wiring, test suite |
 | **Phase 12: Launch** | Day 17 | Security + CI/CD | Security audit, monitoring (PostHog, Sentry), production deploy |
 
 **Post-MVP roadmap (not in Days 4–17):**
@@ -479,7 +483,7 @@ This document is a PRD only. Full technical architecture is in TRD v4.1.
 | What is the aggregator subscription fee percentage? | **Open** — suggested 1–2% of monthly earnings; needs market testing in Phase 7. |
 | Should the app show the seller which specific aggregator has viewed their order before acceptance, or only the accepted aggregator? | **Resolved: Only the accepted aggregator is shown.** An `order_views` tracking table is not in the MVP schema. Pre-acceptance: seller sees "Awaiting aggregator" state. Post-acceptance: seller sees accepted aggregator's name and rating. |
 | What is the exact security deposit amount for aggregators in v2? | **Open (v2)** — ₹500–₹1,000 suggested; research required. |
-| Will the admin panel be a standalone web app or integrated into the main web portal behind a role-based auth wall? | **Resolved: Integrated into the web portal behind a role-based auth wall.** Admin routes (`/api/admin/*`) are protected by Clerk JWT + DB-verified `is_admin` role check. The web portal has an `/admin` section (Day 16). No separate deployment needed. |
+| Will the admin panel be a standalone web app or integrated into the main web portal behind a role-based auth wall? | **Resolved: Integrated into `apps/web` behind a role-based auth wall.** Admin routes (`/api/admin/*`) are protected by Clerk JWT + DB-verified `is_admin` role check. Current Day 16 scope is admin web pages only; business/aggregator web UI is deferred. No separate deployment needed. |
 | GST invoice template: does this need a CA's input for legal compliance, or is a standard template sufficient for v1? | **Resolved: Standard template is sufficient for v1.** CA review is recommended before launch but is not a blocker. The `invoices.invoice_data JSONB NOT NULL` column satisfies the audit trail requirement. Full GST API integration is v2. |
 
 ### 11.2 TRD-Derived Open Questions (Product Decisions Required)
@@ -490,6 +494,6 @@ These questions were identified in the TRD v4.1 patch session. They require prod
 | :--- | :--- | :--- | :--- |
 | **OQ-1** | **Dispute escalation threshold:** The PRD states "3 upheld disputes = account review and possible ban." Is this automated (backend trigger / cron job suspends the aggregator account) or manual (admin reviews a queue in the admin panel)? If automated, a `seller_flags` insert path + aggregator suspension trigger is required. If manual, the admin panel (Day 16) needs a "flagged aggregators" queue view. | Day 10 | Product |
 | **OQ-2** | **Localisation scope for MVP:** The `preferred_language` column exists in `users` schema. Is i18n (Telugu or other language) in-scope for Days 4–17? If yes, which library (i18next or expo-localization), which strings, and at which day? If no, `(seller)/language.tsx` must be explicitly annotated as post-MVP and the onboarding language selection slide disabled. Current PRD assumes English-only at MVP launch. | Day 14 | Product |
-| **OQ-3** | **Ably key strategy for Next.js web portal (Day 16):** TRD §6.5 specifies Token Auth for mobile clients. Does the web portal also require full Token Auth (requiring a server-side token endpoint call per browser session), or is a restricted read-only Ably capability key acceptable for the web portal's use case (order status display only, no chat send)? | Day 14 | Engineering + Product |
+| **OQ-3** | **Closed (scope update):** Web portal Ably key strategy is deferred until business/aggregator web UI resumes. Current Day 16 admin web scope does not require a client-side Ably key. | Deferred | Engineering + Product |
 | **OQ-4** | **Referral & rewards schema timing:** No `referral_code` or `referred_by` columns exist in `seller_profiles` schema. When does this need to be added — before or after MVP launch? Adding it post-launch requires a schema migration under live traffic. If pre-launch, it should be added to `migrations/0003_profiles.sql`. | Post-launch (or Day 4 if pre-launch) | Product |
 | **OQ-5** | **`account-type.tsx` vs `user-type.tsx` filename:** UI_REFERENCE.md §3 lists the file as `account-type.tsx`. PLAN.md §2.1 lists it as `user-type.tsx`. The actual filename on disk must be confirmed, and whichever doc is wrong must be corrected before Day 12 auth wiring (which hardcodes this route). Needs a 30-second `ls` check, not a design decision. | Day 12 | Engineering |

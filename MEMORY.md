@@ -5,12 +5,18 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 15 Complete (2026-03-27), Ready for Day 16 (Admin Web + Tests)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 16 In Progress (2026-04-02 validation cycle), Day 17 not started
 
 > ✅ **Scope Sync Note (2026-03-30) — Web Clarification**
 > - Business seller and aggregator web UI are deferred to a later phase.
 > - Day 16 scope is admin web pages only.
 > - Admin web UI implementation must follow `sortt_admin_ui.html` and consume live backend/provider data (no mock payloads).
+
+> ⚠ **Verification Snapshot (2026-04-02) — Day 16 Not Yet Closed**
+> - `pnpm type-check` currently fails (web TypeScript issues remain).
+> - `pnpm lint` runs clean on errors but reports warnings across mobile/web.
+> - `pnpm test` currently fails in backend due Jest config parse failure from invalid JSON in `backend/package.json`.
+> - Day 17 remains blocked until Day 16 verification gates are fully green.
 
 > ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
 
@@ -112,7 +118,8 @@ Day 15    → Gemini + invoice + scraper           [GATE PASSED 2026-03-27]
 UI Polish + refinements                          [COMPLETE — 2026-03-20]
 
 ⏳ NEXT:
-Days 16–17 → Admin web + security audit (business/aggregator web deferred)
+Day 16 completion → fix remaining type-check/test blockers and close gates
+Day 17 → start only after Day 16 is fully green (business/aggregator web deferred)
 ```
 
 **Rules that follow from this:**
