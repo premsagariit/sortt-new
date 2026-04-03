@@ -4,5 +4,6 @@
     "types": ["node", "jest"],
     "outDir": "dist-test"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
