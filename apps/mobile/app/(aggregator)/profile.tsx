@@ -4,6 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SealCheck, CaretRight, SignOut, Trash, ArrowsLeftRight, CheckCircle, CurrencyInr, ChartBar, MapPin, Clock, IdentificationCard, User, Bell, Globe, Question, ShieldCheck, Star } from 'phosphor-react-native';
 import { SorttLogo } from '../../components/ui/SorttLogo';
+import { useI18n } from '../../hooks/useI18n';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -11,6 +12,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
+import { useLanguageStore } from '../../store/languageStore';
 import { useNotificationStore } from '../../store/notificationStore';
 
 const { width } = Dimensions.get('window');
@@ -64,6 +66,8 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
 }
 
 export default function AggregatorProfileScreen() {
+  const { getLanguageName } = useI18n();
+  const language = useLanguageStore((state) => state.language);
   const router = useRouter();
   const authStore = useAuthStore();
   const { fetchMe, name, locality } = authStore;
@@ -271,7 +275,7 @@ export default function AggregatorProfileScreen() {
             unreadCount={unreadNotificationsCount}
           />
           <MenuItem
-            icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle="English"
+            icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <MenuItem

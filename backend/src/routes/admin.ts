@@ -215,7 +215,7 @@ router.patch('/aggregators/:id/kyc', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/disputes', async (req: Request, res: Response) => {
   try {
-    const result = await query(
+    const disputesResult = await query(
       `SELECT
          d.id,
          d.order_id,
@@ -236,7 +236,26 @@ router.get('/disputes', async (req: Request, res: Response) => {
        WHERE d.status = 'open'
        ORDER BY d.created_at ASC`
     );
-    return res.json(result.rows);
+
+    const disputes = await Promise.all(
+      disputesResult.rows.map(async (d: any) => {
+        const mediaRes = await query(
+          `SELECT storage_path FROM order_media
+           WHERE order_id = $1 AND media_type IN ('scale_photo', 'scrap_photo', 'evidence_photo')`,
+          [d.order_id]
+        );
+
+        const evidence_urls = await Promise.all(
+          mediaRes.rows.map(async (m: { storage_path: string }) =>
+            storageProvider.getSignedUrl(m.storage_path, 3600)
+          )
+        );
+
+        return { ...d, evidence_urls };
+      })
+    );
+
+    return res.json(disputes);
   } catch (err) {
     console.error('[admin/disputes]', err);
     return res.status(500).json({ error: 'Failed to fetch disputes' });

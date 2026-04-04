@@ -29,6 +29,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, radius, spacing } from '../../constants/tokens';
+import { translate } from '../../lib/i18n';
+import { useLanguageStore } from '../../store/languageStore';
 import { Text } from './Typography';
 import { SkeletonLoader } from './SkeletonLoader';
 
@@ -61,7 +63,9 @@ export function PrimaryButton({
   style,
   textStyle,
 }: PrimaryButtonProps) {
+  const language = useLanguageStore((state) => state.language);
   const isDisabled = disabled || loading;
+  const translatedLabel = translate(label, { language });
 
   return (
     <Pressable
@@ -74,7 +78,7 @@ export function PrimaryButton({
       ]}
       accessible
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={translatedLabel}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
     >
       {loading ? (
@@ -83,7 +87,7 @@ export function PrimaryButton({
         <View style={styles.primaryInner}>
           {icon && <View style={styles.iconShift}>{icon}</View>}
           <Text variant="button" style={[styles.primaryLabel, textStyle]}>
-            {label}
+            {translatedLabel}
           </Text>
         </View>
       )}
@@ -112,7 +116,9 @@ export function SecondaryButton({
   style,
   textStyle,
 }: SecondaryButtonProps) {
+  const language = useLanguageStore((state) => state.language);
   const isDisabled = disabled || loading;
+  const translatedLabel = translate(label, { language });
   const customColorStyle = color ? {
     borderColor: colors[color],
   } : undefined;
@@ -132,7 +138,7 @@ export function SecondaryButton({
       ]}
       accessible
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={translatedLabel}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
     >
       {loading ? (
@@ -141,7 +147,7 @@ export function SecondaryButton({
         <View style={styles.secondaryInner}>
           {icon && <View style={styles.iconShift}>{icon}</View>}
           <Text variant="button" style={[styles.secondaryLabel, customTextStyle, textStyle] as any}>
-            {label}
+            {translatedLabel}
           </Text>
         </View>
       )}
@@ -166,6 +172,9 @@ export function IconButton({
   accessibilityLabel,
   style,
 }: IconButtonProps) {
+  const language = useLanguageStore((state) => state.language);
+  const translatedAccessibilityLabel = translate(accessibilityLabel, { language });
+
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
@@ -177,7 +186,7 @@ export function IconButton({
       ]}
       accessible
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={translatedAccessibilityLabel}
       accessibilityState={{ disabled }}
     >
       <View style={styles.iconInner}>{icon}</View>

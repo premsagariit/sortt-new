@@ -1,7 +1,7 @@
 ﻿import type { IAnalysisProvider } from './types';
 import { GeminiVisionProvider } from './providers/GeminiVisionProvider';
 
-export { IAnalysisProvider, AnalysisResult } from './types';
+export { IAnalysisProvider, AnalysisLanguage, AnalysisResult } from './types';
 export { GeminiVisionProvider } from './providers/GeminiVisionProvider';
 
 /**

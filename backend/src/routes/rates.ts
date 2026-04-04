@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import etag from 'etag';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
+import { resolveRequestLanguage } from '../utils/language';
 
 const router = Router();
 
@@ -33,17 +34,35 @@ function computeTrend(code: string, rate: number): 'up' | 'down' | 'flat' {
 // Queries current_price_index materialized view (refreshed daily by node-cron)
 router.get('/', async (req: Request, res: Response) => {
     try {
+                const language = resolveRequestLanguage({
+                        explicit: typeof req.query.language === 'string' ? req.query.language : null,
+                        header: typeof req.headers['accept-language'] === 'string' ? req.headers['accept-language'] : null,
+                        userPreferred: (req as any).user?.preferred_language ?? null,
+                });
+
         const result = await query(`
-            SELECT city_code, material_code, rate_per_kg, scraped_at
-            FROM current_price_index
-            ORDER BY material_code
-        `);
+                        SELECT c.city_code,
+                                     c.material_code,
+                                     c.rate_per_kg,
+                                     c.scraped_at,
+                                     COALESCE(
+                                         CASE
+                                             WHEN $1 = 'te' THEN mt.label_te
+                                             WHEN $1 = 'hi' THEN to_jsonb(mt) ->> 'label_hi'
+                                             ELSE mt.label_en
+                                         END,
+                                         mt.label_en
+                                     ) AS material_label
+                        FROM current_price_index c
+                        LEFT JOIN material_types mt ON mt.code = c.material_code
+                        ORDER BY c.material_code
+                `, [language]);
 
         // Enrich with display name and trend before sending
         const rates = result.rows.map((r: any) => ({
             city_code:    r.city_code,
             material_code: r.material_code,
-            name:          MATERIAL_NAMES[r.material_code] ?? r.material_code,
+            name:          r.material_label ?? MATERIAL_NAMES[r.material_code] ?? r.material_code,
             rate_per_kg:   Number(r.rate_per_kg),
             trend:         computeTrend(r.material_code, Number(r.rate_per_kg)),
             scraped_at:    r.scraped_at,

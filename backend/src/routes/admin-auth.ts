@@ -114,7 +114,7 @@ router.post('/login', async (req: Request, res: Response) => {
         if (userResult.rowCount === 0) {
             await redis?.incr(attemptKey);
             await redis?.expire(attemptKey, ADMIN_LOCKOUT_DURATION);
-            return res.status(401).json({ error: 'invalid_credentials', attempts: attempts + 1, maxAttempts: ADMIN_MAX_ATTEMPTS });
+            return res.status(401).json({ error: 'invalid_credentials', message: 'Incorrect email or password', attempts: attempts + 1, maxAttempts: ADMIN_MAX_ATTEMPTS });
         }
 
         const userRecord = userResult.rows[0];
@@ -122,7 +122,7 @@ router.post('/login', async (req: Request, res: Response) => {
                 if (userRecord.user_type !== 'admin') {
                     return res.status(403).json({
                         error: 'not_admin',
-                        message: 'This account does not have admin access.',
+                        message: 'Invalid admin access.',
                     });
                 }
 
@@ -140,7 +140,7 @@ router.post('/login', async (req: Request, res: Response) => {
         if (!isMatch) {
             await redis?.incr(attemptKey);
             await redis?.expire(attemptKey, ADMIN_LOCKOUT_DURATION);
-            return res.status(401).json({ error: 'invalid_credentials', attempts: attempts + 1, maxAttempts: ADMIN_MAX_ATTEMPTS });
+            return res.status(401).json({ error: 'invalid_credentials', message: 'Incorrect email or password', attempts: attempts + 1, maxAttempts: ADMIN_MAX_ATTEMPTS });
         }
 
         // On success, reset attempts

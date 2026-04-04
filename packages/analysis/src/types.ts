@@ -10,10 +10,13 @@
  */
 export interface AnalysisResult {
   material_code: string;           // Must exist in material_types table
+  material_label?: string;         // Optional localized label for display
   estimated_weight_kg: number;     // > 0
   confidence: number;              // 0.0 - 1.0
   is_ai_estimate: true;            // Always true — signals non-authoritative
 }
+
+export type AnalysisLanguage = 'en' | 'te' | 'hi';
 
 export interface IAnalysisProvider {
   /**
@@ -21,5 +24,5 @@ export interface IAnalysisProvider {
    * V18: EXIF stripping happens INSIDE this method BEFORE Gemini call.
    * I1: Returns { ...result, is_ai_estimate: true } — type guarantees non-authoritative.
    */
-  analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult[]>;
+  analyzeScrapImage(imageBuffer: Buffer, language?: AnalysisLanguage): Promise<AnalysisResult[]>;
 }

@@ -47,21 +47,16 @@
 >   - Mobile map rendering migrated from `react-native-maps` to MapLibre + Ola vector tiles with `apps/mobile/utils/mapAvailable.ts` gate (`MAP_RENDERING_AVAILABLE=false` default for Expo Go).
 >   - Aggregator route planner now supports store-backed order pins on MapLibre when rendering is enabled.
 
-> ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
-> - Gemini Vision provider implementation is live:
->   - `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with `GEMINI_MODEL` env support (`gemini-2.5-flash` default).
->   - `backend/src/routes/scrap.ts` provides authenticated `POST /api/scrap/analyze` with EXIF stripping, Redis image-hash cache, and daily circuit breaker (`GEMINI_DAILY_LIMIT`).
-> - GST invoice generation and download are live:
->   - `backend/src/utils/invoiceGenerator.ts` generates legal `invoice_data` JSONB + PDF and uploads to Cloudflare R2.
->   - `backend/src/routes/orders/index.ts` provides `GET /api/orders/:id/invoice` with signed URL response + ownership checks.
-> - Price scraper delivery is live:
->   - `scraper/main.py` implemented and scheduled by node-cron in `backend/src/scheduler.ts` (`Price Scraper (Python Spawn)` job).
-> - Mobile Day 15 flows are wired:
->   - Seller listing step2 AI estimate hint UI is connected to `/api/scrap/analyze`.
->   - Receipt invoice download button is connected to `GET /api/orders/:id/invoice`.
-> - Execution state: implementation is complete through Day 15; Day 16 (admin web pages + tests) is in progress and not yet closed.
-> - Verification snapshot (2026-04-02): `pnpm type-check` fails, `pnpm lint` passes with warnings, and `pnpm test` fails due backend Jest config parse failure caused by invalid JSON in `backend/package.json`.
-> - Day 17 (Security Audit + Monitoring) is blocked until Day 16 verification gates are fully green.
+> ✅ **Implementation Sync Note (2026-04-04) — Day 16 Complete**
+> - Admin Web Dashboard (`apps/web`) is fully operational and integrated with production APIs.
+> - Admin navigation, login, KYC queue, and Dispute management modules are production-ready.
+> - Design system tokens from `apps/web/constants/tokens.ts` are applied across all admin screens, ensuring visual consistency.
+> - Next.js optimized `<Image />` components implemented for all remote assets (R2/Clerk).
+> - All Day 16 verification gates are **PASS**:
+>   - `pnpm type-check` (monorepo-wide) → Success.
+>   - `pnpm lint` (monorepo-wide) → Success (0 errors).
+>   - `pnpm test` (Backend/Web/Mobile) → Success (100% pass rate).
+> - Day 17 (Security Audit + Monitoring + Launch) is now **Active**.
 
 
 ---

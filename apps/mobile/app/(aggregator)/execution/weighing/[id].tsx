@@ -10,11 +10,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View, StyleSheet, ScrollView, TextInput,
     KeyboardAvoidingView, Platform, Pressable,
-    ActivityIndicator, BackHandler,
+    ActivityIndicator, BackHandler, Image,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Camera, WarningCircle } from 'phosphor-react-native';
+import { Camera, WarningCircle, PencilSimple, Plus, Minus } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../../constants/tokens';
 import { NavBar } from '../../../../components/ui/NavBar';
 import { useOrderStore } from '../../../../store/orderStore';
@@ -353,19 +353,52 @@ export default function WeighingScreen() {
                         </Pressable>
                     ) : (
                         <View style={styles.photoBoxFilled}>
-                            <ImageCarouselViewer images={scalePhotoUris} height={160} autoScrollIntervalMs={4000} />
-                            <View style={styles.photoHeader}>
-                                <View style={styles.capturedBadge}>
-                                    <Text variant="label" color={colors.teal}>✓ {scalePhotoUris.length} scale photo{scalePhotoUris.length > 1 ? 's' : ''} captured</Text>
-                                </View>
-                                <View style={styles.photoActions}>
-                                    <View style={styles.photoActionBtnWrap}>
-                                        <SecondaryButton label="+" onPress={handleAddPhoto} />
+                            <View style={styles.previewShell}>
+                                <ImageCarouselViewer images={scalePhotoUris} height={164} autoScrollIntervalMs={4000} />
+
+                                <View style={styles.previewTopRow}>
+                                    <View style={styles.capturedBadge}>
+                                        <Text variant="label" color={colors.teal}>✓ {scalePhotoUris.length} scale photo{scalePhotoUris.length > 1 ? 's' : ''} captured</Text>
                                     </View>
-                                    <View style={styles.photoActionBtnWrap}>
-                                        <SecondaryButton label="-" onPress={handleRemoveLastPhoto} />
+
+                                    <Pressable style={styles.editBtn} onPress={handleAddPhoto}>
+                                        <PencilSimple size={14} color={colors.navy} weight="bold" />
+                                        <Text variant="caption" color={colors.navy} style={styles.editBtnText}>Edit</Text>
+                                    </Pressable>
+                                </View>
+
+                                <View style={styles.previewBottomRow}>
+                                    <View style={styles.previewCountPill}>
+                                        <Text variant="caption" color={colors.surface}>
+                                            {scalePhotoUris.length} photo{scalePhotoUris.length > 1 ? 's' : ''}
+                                        </Text>
                                     </View>
                                 </View>
+                            </View>
+
+                            <View style={styles.captureTray}>
+                                <View style={styles.thumbnailWrap}>
+                                    <Image
+                                        source={{ uri: scalePhotoUris[scalePhotoUris.length - 1] }}
+                                        style={styles.thumbnailImage}
+                                    />
+                                </View>
+
+                                <Pressable style={styles.trayActionBtn} onPress={handleAddPhoto}>
+                                    <Plus size={18} color={colors.navy} weight="bold" />
+                                </Pressable>
+
+                                <Pressable
+                                    style={styles.trayActionBtn}
+                                    onPress={handleRemoveLastPhoto}
+                                    disabled={scalePhotoUris.length === 0}
+                                >
+                                    <Minus size={18} color={colors.navy} weight="bold" />
+                                </Pressable>
+
+                                <Text variant="caption" color={colors.muted} style={styles.captureTrayMeta}>
+                                    {scalePhotoUris.length} photos
+                                </Text>
                             </View>
                         </View>
                     )}
@@ -513,24 +546,93 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         gap: spacing.sm,
     },
-    photoHeader: {
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: spacing.sm,
+    previewShell: {
+        borderRadius: radius.card,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.navy,
+        position: 'relative',
     },
-    photoActions: {
+    previewTopRow: {
+        position: 'absolute',
+        top: spacing.sm,
+        left: spacing.sm,
+        right: spacing.sm,
         flexDirection: 'row',
-        width: '100%',
-        gap: spacing.xs,
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    photoActionBtnWrap: {
-        flex: 1,
+    previewBottomRow: {
+        position: 'absolute',
+        bottom: spacing.sm,
+        left: spacing.sm,
+        right: spacing.sm,
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+    },
+    previewCountPill: {
+        backgroundColor: 'rgba(16, 28, 50, 0.84)',
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 5,
+        borderRadius: 999,
     },
     capturedBadge: {
         paddingVertical: 4,
         paddingHorizontal: 8,
         backgroundColor: colorExtended.tealLight,
         borderRadius: 8,
+    },
+    editBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: 'rgba(255, 255, 255, 0.92)',
+        borderWidth: 1,
+        borderColor: 'rgba(0, 0, 0, 0.06)',
+    },
+    editBtnText: {
+        fontFamily: 'DMSans-SemiBold',
+    },
+    captureTray: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colorExtended.surface2,
+        borderRadius: radius.btn,
+        padding: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    thumbnailWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 2,
+        borderColor: colors.teal,
+        backgroundColor: colors.navy,
+    },
+    thumbnailImage: {
+        width: '100%',
+        height: '100%',
+    },
+    trayActionBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    captureTrayMeta: {
+        marginLeft: 'auto',
+        fontFamily: 'DMMono-Medium',
     },
     permissionBanner: {
         flexDirection: 'row',

@@ -44,18 +44,18 @@
 | **13** | Ably Realtime + Push Notifications | 2.5h | Live chat + status updates + push |
 | **14** | Provider Abstractions (All 5 Packages) | 2.5h | All provider interfaces complete + swap stubs |
 | **15** | ✅ Gemini Vision + GST Invoice + Price Scraper | 2.5h | All capabilities live + verified |
-| **16** | **Active** — Admin Web Dashboard + Tests | 3h | Admin panel + test suite (business/aggregator web deferred) |
-| **17** | **Blocked** — Security Audit + Monitoring + Launch | 2.5h | Starts only after Day 16 gates are fully green |
+| **16** | ✅ Admin Web Dashboard + Tests | 3h | Admin panel + test suite (business/aggregator web deferred) |
+| **17** | **Active** — Security Audit + Monitoring + Launch | 2.5h | Starts only after Day 16 gates are fully green |
 
 ---
 
-## ⚠ DAY 16 LIVE VALIDATION SNAPSHOT (2026-04-02)
+## ✅ DAY 16 LIVE VALIDATION SNAPSHOT (2026-04-04)
 
-- [ ] `pnpm type-check` currently failing (web TypeScript errors remain).
-- [x] `pnpm lint` completes with warnings only (no lint errors).
-- [ ] `pnpm test` currently failing in backend due Jest config parse failure caused by invalid JSON in `backend/package.json`.
-- [ ] Day 16 verification gate is not yet closed.
-- [ ] Day 17 remains blocked until all Day 16 checks are green.
+- [x] `pnpm type-check` passed (monorepo-wide).
+- [x] `pnpm lint` passed with 0 errors/warnings.
+- [x] `pnpm test` (backend) passed with 100% success rate.
+- [x] Day 16 verification gate GA-16 PASSED.
+- [x] Day 17 UNBLOCKED for final audit and launch.
 
 ---
 
@@ -1405,8 +1405,8 @@
 - [x] Day 13 — Ably Realtime + Push Notifications *(2026-03-20)*
 - [x] Day 14 — Provider Abstractions (All 5 Packages) *(2026-03-24)*
 - [x] Day 15 — Gemini Vision + GST Invoice + Price Scraper *(2026-03-30 — COMPLETE)*
-- [x] Day 16 — Admin Web Dashboard + Clerk Auth Tests *(2026-03-31 — COMPLETE)*
-- [ ] Day 17 — Security Audit + Monitoring + Launch *(Active)*
+- [x] Day 16 — Admin Web Dashboard + Clerk Auth Tests *(2026-04-04 — COMPLETE)*
+- [ ] Day 17 — Security Audit + Monitoring + Launch *(Active — 2026-04-04)*
 
 ---
 

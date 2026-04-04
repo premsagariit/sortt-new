@@ -1,16 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   BackHandler,
   Dimensions,
   FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowsCounterClockwise, CurrencyInr, Camera, ChartLineUp } from 'phosphor-react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -18,46 +16,54 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
-import { colors, colorExtended, spacing } from '../../constants/tokens';
+import { useI18n } from '../../hooks/useI18n';
+import { type SupportedLanguage } from '../../lib/i18n';
+import { useLanguageStore } from '../../store/languageStore';
+import { colors, spacing } from '../../constants/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ONBOARDING_DATA = [
+const LANGUAGE_OPTIONS: SupportedLanguage[] = ['en', 'te', 'hi'];
+
+const buildOnboardingData = (t: (value: string) => string) => [
   {
     id: '1',
-    title: 'Get the best price for your scrap',
-    description: 'See live rates in your area. Compare aggregator prices and earn more from every pickup — no guesswork.',
+    title: t('Get the best price for your scrap'),
+    description: t('See live rates in your area. Compare aggregator prices and earn more from every pickup — no guesswork.'),
     icon: CurrencyInr,
     circleStyle: { right: -40, bottom: -40, width: 200, height: 200 },
   },
   {
     id: '2',
-    title: 'AI evaluates your scrap instantly',
-    description: 'Snap a photo. Our AI identifies materials, estimates weight, and gives you an instant quote — before any aggregator arrives.',
+    title: t('AI evaluates your scrap instantly'),
+    description: t('Snap a photo. Our AI identifies materials, estimates weight, and gives you an instant quote — before any aggregator arrives.'),
     icon: Camera,
     circleStyle: { left: -40, top: -40, width: 180, height: 180 },
   },
   {
     id: '3',
-    title: 'Pickup at your doorstep',
-    description: 'Verified aggregators near you come to you. Track in real time, confirm with OTP, get paid on the spot.',
+    title: t('Pickup at your doorstep'),
+    description: t('Verified aggregators near you come to you. Track in real time, confirm with OTP, get paid on the spot.'),
     icon: ArrowsCounterClockwise,
     circleStyle: { left: -60, bottom: -60, width: 200, height: 200 },
   },
   {
     id: '4',
-    title: 'Every rupee tracked. Every pickup recorded.',
-    description: 'Verified reports and digital records for every transaction. Digital transparency at every step.',
+    title: t('Every rupee tracked. Every pickup recorded.'),
+    description: t('Verified reports and digital records for every transaction. Digital transparency at every step.'),
     icon: ChartLineUp,
     circleStyle: { right: -40, bottom: -40, width: 200, height: 200 },
   },
 ];
 
 export default function OnboardingScreen() {
+  const { t, getLanguageName } = useI18n();
+  const language = useLanguageStore((state) => state.language);
+  const setLanguage = useLanguageStore((state) => state.setLanguage);
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
-  const insets = useSafeAreaInsets();
+  const onboardingData = useMemo(() => buildOnboardingData(t), [t]);
 
   // ── Block hardware back ────────────────────────────────────────
   useEffect(() => {
@@ -93,7 +99,7 @@ export default function OnboardingScreen() {
   }, []);
 
   const handleNext = () => {
-    if (currentIndex < ONBOARDING_DATA.length - 1) {
+    if (currentIndex < onboardingData.length - 1) {
       flatListRef.current?.scrollToIndex({
         index: currentIndex + 1,
         animated: true,
@@ -103,7 +109,7 @@ export default function OnboardingScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: typeof ONBOARDING_DATA[0] }) => {
+  const renderItem = ({ item }: { item: (typeof onboardingData)[number] }) => {
     const Icon = item.icon;
     return (
       <View style={styles.slide}>
@@ -130,7 +136,7 @@ export default function OnboardingScreen() {
       
       <FlatList
         ref={flatListRef}
-        data={ONBOARDING_DATA}
+        data={onboardingData}
         renderItem={renderItem}
         horizontal
         pagingEnabled
@@ -145,7 +151,7 @@ export default function OnboardingScreen() {
       <SafeAreaView style={styles.footer} edges={['bottom']}>
         {/* Dots Container */}
         <View style={styles.dotContainer}>
-          {ONBOARDING_DATA.map((_, i) => {
+          {onboardingData.map((_, i) => {
             const inputRange = [
               (i - 1) * SCREEN_WIDTH,
               i * SCREEN_WIDTH,
@@ -195,29 +201,39 @@ export default function OnboardingScreen() {
 
         <View style={styles.actionArea}>
           <PrimaryButton
-            label={currentIndex === ONBOARDING_DATA.length - 1 ? "Get Started" : "Next"}
+            label={currentIndex === onboardingData.length - 1 ? t('Get Started') : t('Next')}
             onPress={handleNext}
           />
 
           {/* Language Switcher on Slide 4 */}
-          {currentIndex === ONBOARDING_DATA.length - 1 && (
+          {currentIndex === onboardingData.length - 1 && (
             <View style={styles.languageContainer}>
-              <Text variant="caption" color={colors.muted}>Language:</Text>
-              <View style={[styles.langChip, styles.langChipActive]}>
-                <Text variant="label" style={{ color: colors.surface }}>English</Text>
-              </View>
-              <View style={styles.langChip}>
-                <Text variant="label" color={colors.slate}>తెలుగు</Text>
-              </View>
+              <Text variant="caption" color={colors.muted}>{t('Language:')}</Text>
+              {LANGUAGE_OPTIONS.map((code) => {
+                const isActive = code === language;
+                return (
+                  <TouchableOpacity
+                    key={code}
+                    style={[styles.langChip, isActive && styles.langChipActive]}
+                    onPress={() => {
+                      void setLanguage(code, { syncRemote: false });
+                    }}
+                  >
+                    <Text variant="label" color={isActive ? colors.surface : colors.slate}>
+                      {getLanguageName(code)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
 
-          {currentIndex < ONBOARDING_DATA.length - 1 && (
+          {currentIndex < onboardingData.length - 1 && (
             <TouchableOpacity 
               onPress={() => { void completeOnboarding(); }}
               style={styles.skipBtn}
             >
-              <Text style={styles.skipText}>Skip</Text>
+              <Text style={styles.skipText}>{t('Skip')}</Text>
             </TouchableOpacity>
           )}
         </View>

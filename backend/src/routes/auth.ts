@@ -19,6 +19,7 @@ const META_TOKEN = process.env.META_WHATSAPP_TOKEN;
 const META_PHONE_ID = process.env.META_PHONE_NUMBER_ID;
 const META_TEMPLATE = process.env.META_OTP_TEMPLATE_NAME || 'Sortt_OTP';
 const META_API_VERSION = process.env.META_API_VERSION || 'v22.0';
+const LOG_PLAINTEXT_OTP = process.env.LOG_PLAINTEXT_OTP === 'true';
 
 type AuthMode = 'login' | 'signup';
 
@@ -36,6 +37,12 @@ const normalizeIndianPhone = (raw: string): string | null => {
 };
 
 const isValidMode = (value: unknown): value is AuthMode => value === 'login' || value === 'signup';
+
+const isMetaTemplateParamMismatch = (error: any): boolean => {
+    const code = error?.response?.data?.error?.code;
+    const details = String(error?.response?.data?.error?.error_data?.details ?? '').toLowerCase();
+    return code === 132000 && details.includes('number of localizable_params');
+};
 
 const getOrCreateClerkUserId = async (phoneHmac: string): Promise<string> => {
     const existing = await clerkClient.users.getUserList({ externalId: [phoneHmac] });
@@ -118,46 +125,64 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         // your approved authentication template name.
         const whatsappConfigured = !!(META_TOKEN && META_PHONE_ID);
         if (whatsappConfigured) {
-            const templatePayload: any = {
-                name: META_TEMPLATE,
-                language: { code: 'en_US' },
-                // Always send the OTP as a body parameter + url-button suffix.
-                // The approved authentication template must have a {{1}} variable
-                // in the body and a url button with a {{1}} path suffix.
-                components: [
-                    { type: 'body', parameters: [{ type: 'text', text: otp }] },
-                    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }
-                ]
-            };
-
-            try {
+            const sendTemplateMessage = async (template: any) => {
                 await axios.post(
                     `https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_ID}/messages`,
                     {
                         messaging_product: 'whatsapp',
                         to: normalizedPhone.replace('+', ''),
                         type: 'template',
-                        template: templatePayload
+                        template
                     },
                     { headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' } }
                 );
-                console.log(`[OTP] WhatsApp OTP sent to ...${normalizedPhone.slice(-4)}`);
+            };
+
+            const templateWithOtpParams: any = {
+                name: META_TEMPLATE,
+                language: { code: 'en_US' },
+                components: [
+                    { type: 'body', parameters: [{ type: 'text', text: otp }] },
+                    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }
+                ]
+            };
+
+            const templateWithoutParams: any = {
+                name: META_TEMPLATE,
+                language: { code: 'en_US' },
+            };
+
+            try {
+                await sendTemplateMessage(templateWithOtpParams);
+                console.log(`[OTP] WhatsApp OTP sent to ...${normalizedPhone.slice(-4)} using parameterized template payload.`);
             } catch (metaErr: any) {
-                // Non-fatal: OTP is already stored in Redis.
-                // Common causes:
-                //   - Template not approved yet → change META_OTP_TEMPLATE_NAME
-                //   - Recipient number not whitelisted in Meta test sandbox
-                //   - hello_world template used (doesn't accept components)
-                console.warn('[OTP] WhatsApp send failed (non-fatal):', metaErr?.response?.data || metaErr?.message);
-                Sentry.captureException(metaErr, { level: 'warning' });
+                if (isMetaTemplateParamMismatch(metaErr)) {
+                    try {
+                        console.warn('[OTP] WhatsApp template parameter mismatch detected. Retrying without template components.');
+                        await sendTemplateMessage(templateWithoutParams);
+                        console.log(`[OTP] WhatsApp OTP sent to ...${normalizedPhone.slice(-4)} using zero-parameter template payload.`);
+                    } catch (retryErr: any) {
+                        console.warn('[OTP] WhatsApp send retry failed (non-fatal):', retryErr?.response?.data || retryErr?.message);
+                        Sentry.captureException(retryErr, { level: 'warning' });
+                    }
+                } else {
+                    // Non-fatal: OTP is already stored in Redis.
+                    // Common causes:
+                    //   - Template not approved yet → change META_OTP_TEMPLATE_NAME
+                    //   - Recipient number not whitelisted in Meta test sandbox
+                    //   - hello_world template used (doesn't accept components)
+                    console.warn('[OTP] WhatsApp send failed (non-fatal):', metaErr?.response?.data || metaErr?.message);
+                    Sentry.captureException(metaErr, { level: 'warning' });
+                }
             }
         } else {
             console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp delivery skipped. OTP is held in Redis only.');
         }
 
 
-        // Log OTP code to terminal for developer testing (Security: restricted to non-production)
-        if (process.env.NODE_ENV !== 'production') {
+        // Log OTP code to terminal for developer testing.
+        // In production, only log when explicitly enabled via LOG_PLAINTEXT_OTP=true.
+        if (process.env.NODE_ENV !== 'production' || LOG_PLAINTEXT_OTP) {
             console.log(`[OTP DEV] Testing Code for ${normalizedPhone.slice(-4)}: ${otp}`);
         }
         const expiresAt = new Date(Date.now() + 300 * 1000); // 5 min, matches Redis TTL

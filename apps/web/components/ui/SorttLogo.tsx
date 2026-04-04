@@ -29,7 +29,7 @@ export function SorttLogo({ variant, size }: SorttLogoProps) {
                 <svg width={width} height={height} viewBox="0 0 130 34" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="1" y="4" width="13" height="16" rx="2.5" fill="white" fillOpacity="0.9" />
                     <rect x="2.5" y="5.5" width="7.5" height="5.5" rx="1.2" fill={colors.navy} />
-                    <circle cx="12" cy="17" r="2" fill="#B7791F" />
+                    <circle cx="12" cy="17" r="2" fill={colors.amber} />
                     <rect x="14" y="1" width="22" height="19" rx="2" fill="#1A6B63" />
                     <rect x="16" y="7" width="5.5" height="5.5" rx="1" fill="white" fillOpacity="0.28" />
                     <rect x="24" y="7" width="5.5" height="5.5" rx="1" fill="white" fillOpacity="0.2" />
@@ -49,7 +49,7 @@ export function SorttLogo({ variant, size }: SorttLogoProps) {
                 <svg width={width} height={height} viewBox="0 0 130 34" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="1" y="4" width="13" height="16" rx="2.5" fill={colors.navy} />
                     <rect x="2.5" y="5.5" width="7.5" height="5.5" rx="1.2" fill="white" fillOpacity="0.85" />
-                    <circle cx="12" cy="17" r="2" fill="#B7791F" />
+                    <circle cx="12" cy="17" r="2" fill={colors.amber} />
                     <rect x="14" y="1" width="22" height="19" rx="2" fill="#1A6B63" />
                     <rect x="16" y="7" width="5.5" height="5.5" rx="1" fill="white" fillOpacity="0.3" />
                     <rect x="24" y="7" width="5.5" height="5.5" rx="1" fill="white" fillOpacity="0.22" />

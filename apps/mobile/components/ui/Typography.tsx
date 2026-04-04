@@ -25,6 +25,8 @@
 import React from 'react';
 import { Text as RNText, TextStyle, StyleProp, StyleSheet } from 'react-native';
 import { colors } from '../../constants/tokens';
+import { translate } from '../../lib/i18n';
+import { useLanguageStore } from '../../store/languageStore';
 
 // ── Font sizes (not in token set — Typography owns these) ─────────
 const FONT_SIZES = {
@@ -37,6 +39,15 @@ const FONT_SIZES = {
 } as const;
 
 type TextVariant = keyof typeof FONT_SIZES;
+
+const translateChildren = (children: React.ReactNode, language: 'en' | 'te' | 'hi') => {
+  return React.Children.map(children as any, (child) => {
+    if (typeof child === 'string') {
+      return translate(child, { language });
+    }
+    return child;
+  });
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // <Text> — DM Sans wrapper for all non-numeric UI text
@@ -67,6 +78,9 @@ export function Text({
   adjustsFontSizeToFit,
   minimumFontScale,
 }: TextProps) {
+  const language = useLanguageStore((state) => state.language);
+  const localizedChildren = React.useMemo(() => translateChildren(children, language), [children, language]);
+
   return (
     <RNText
       style={[styles[variant], color ? { color } : undefined, style]}
@@ -77,7 +91,7 @@ export function Text({
       adjustsFontSizeToFit={adjustsFontSizeToFit}
       minimumFontScale={minimumFontScale}
     >
-      {children}
+      {localizedChildren}
     </RNText>
   );
 }

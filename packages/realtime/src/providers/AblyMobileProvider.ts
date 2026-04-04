@@ -33,6 +33,7 @@ export class AblyMobileProvider implements IRealtimeProvider {
   private client: AblyClient | null = null;
   private channels: Map<string, AblyChannel> = new Map();
   private authUrl: string;
+  private disconnecting = false;
 
   constructor(tokenUrl: string = '/api/realtime/token') {
     this.authUrl = tokenUrl;
@@ -119,11 +120,38 @@ export class AblyMobileProvider implements IRealtimeProvider {
     }
   }
 
+  private isBenignDetachError(error: unknown): boolean {
+    const text = String((error as any)?.message ?? error ?? '').toLowerCase();
+    return (
+      text.includes('state = detached') ||
+      text.includes('unable to attach') ||
+      text.includes('channel detached') ||
+      text.includes('already detached')
+    );
+  }
+
+  private safeDetach(channel: AblyChannel, scope: string): void {
+    try {
+      const detachResult = channel.detach();
+      if (detachResult && typeof (detachResult as Promise<void>).catch === 'function') {
+        (detachResult as Promise<void>).catch((error) => {
+          if (!this.isBenignDetachError(error)) {
+            console.warn(`AblyMobileProvider.${scope} detach failed`, { error });
+          }
+        });
+      }
+    } catch (error) {
+      if (!this.isBenignDetachError(error)) {
+        console.warn(`AblyMobileProvider.${scope} detach threw`, { error });
+      }
+    }
+  }
+
   removeChannel(channel: string): void {
     try {
       const abblyChannel = this.channels.get(channel);
       if (abblyChannel) {
-        abblyChannel.detach();
+        this.safeDetach(abblyChannel, 'removeChannel()');
         this.channels.delete(channel);
       }
     } catch (error) {
@@ -132,17 +160,16 @@ export class AblyMobileProvider implements IRealtimeProvider {
   }
 
   removeAllChannels(): void {
-    try {
-      for (const [, channel] of this.channels) {
-        channel.detach();
-      }
-      this.channels.clear();
-    } catch (error) {
-      console.warn('AblyMobileProvider.removeAllChannels() failed', { error });
+    for (const [, channel] of this.channels) {
+      this.safeDetach(channel, 'removeAllChannels()');
     }
+    this.channels.clear();
   }
 
   async disconnect(): Promise<void> {
+    if (this.disconnecting) return;
+    this.disconnecting = true;
+
     try {
       this.removeAllChannels();
       if (this.client) {
@@ -151,6 +178,8 @@ export class AblyMobileProvider implements IRealtimeProvider {
       }
     } catch (error) {
       console.warn('AblyMobileProvider.disconnect() failed', { error });
+    } finally {
+      this.disconnecting = false;
     }
   }
 }

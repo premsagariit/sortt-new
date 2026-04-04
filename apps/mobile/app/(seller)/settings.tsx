@@ -5,10 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Bell, Globe, Moon, Article, ShieldCheck, CaretRight } from 'phosphor-react-native';
 
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
+import { useI18n } from '../../hooks/useI18n';
 import { safeBack } from '../../utils/navigation';
 import { Text } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { useAuthStore } from '../../store/authStore';
+import { useLanguageStore } from '../../store/languageStore';
 
 interface SettingRowProps {
   icon: React.ReactNode;
@@ -51,6 +53,8 @@ function SettingRow({ icon, title, subtitle, hasToggle, toggleState, onToggle, o
 }
 
 export default function SettingsScreen() {
+  const { getLanguageName } = useI18n();
+  const language = useLanguageStore((state) => state.language);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const signOut = useAuthStore((s) => s.signOut);
@@ -101,7 +105,7 @@ export default function SettingsScreen() {
           <SettingRow
             icon={<Globe size={20} color={colors.navy} />}
             title="Language"
-            subtitle="English"
+            subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <View style={styles.divider} />

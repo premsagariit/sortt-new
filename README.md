@@ -1,6 +1,6 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** MVP Build (In Progress — Day 16 admin web + tests currently in validation/fix cycle)  
+> **Status:** Day 16 COMPLETE, Day 17 Security Audit & Monitoring active (2026-04-04)  
 > **Architecture:** pnpm Monorepo  
 > **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI.
 
@@ -93,10 +93,10 @@ pnpm dev:backend
 
 ---
 
-### 🗓 Current Status (2026-04-02)
-✅ Core API and mobile wiring completed through Day 11 gates.
+### 🗓 Current Status (2026-04-04)
+✅ Day 16 Admin Web Dashboard & Tests completed with 100% pass rate.
 
-✅ Day 13 realtime + push baseline remains complete (2026-03-20) and validated.
+🚀 Day 17 Security Audit & Infrastructure Hardening: **ACTIVE**.
 
 ✅ Day 14 provider abstraction layer completed (2026-03-24):
 - All 5 provider packages are implemented and build cleanly: `@sortt/maps`, `@sortt/realtime`, `@sortt/auth`, `@sortt/storage`, `@sortt/analysis`.
@@ -110,15 +110,10 @@ pnpm dev:backend
 - Daily Python price scraper is wired through `backend/src/scheduler.ts` (node-cron spawn of `scraper/main.py`) and feeds `price_index`.
 - Mobile listing step 2 uses AI estimate hints, and receipt flows support invoice download.
 
-✅ Execution status: Days 1–15 are complete.
+✅ Execution status: Days 1–16 are complete.
 
-⚠ Day 16 is in progress and not yet gate-complete.
+🚀 Day 17 Security Audit + Monitoring + Launch is now **ACTIVE**.
 
-⚠ Latest verification snapshot (2026-04-02):
-- `pnpm type-check` failed (web TypeScript errors in admin and aggregator web modules).
-- `pnpm lint` completed with warnings only (no lint errors; warnings remain in mobile/web).
-- `pnpm test` failed in backend due Jest config parse failure caused by invalid JSON in `backend/package.json`.
-- Day 17 has not started; it remains blocked on Day 16 completion.
 
 ✅ Scope clarification (2026-03-30):
 - Business seller web UI and aggregator web UI are deferred to a later phase.
@@ -172,7 +167,8 @@ pnpm dev:backend
 - Provider env switches documented (`MAP_PROVIDER`, `REALTIME_PROVIDER`, `SOKETI_URL`).
 - No additional installation or startup commands are required.
 
-⚠ Validation update (2026-04-02): `pnpm type-check` currently fails at workspace root and requires fixes before Day 16 closure.
+✅ Day 16 Admin Dashboard UI fully aligned with semantic design system and Next.js image optimization.
+✅ Monorepo-wide `pnpm type-check`, `pnpm lint`, and `pnpm test` all passing.
 
 ✅ Google → Ola maps migration completed (2026-03-25):
 - `packages/maps/src/providers/OlaMapsProvider.ts` now implements geocode + reverse geocode + autocomplete.

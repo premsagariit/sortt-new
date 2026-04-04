@@ -27,15 +27,6 @@ export function useAggregatorFeedChannel() {
         } catch {
           // No-op: channel may already be disposed during fast navigation transitions.
         }
-
-        try {
-          const detachResult = channel.detach();
-          if (detachResult && typeof (detachResult as Promise<void>).catch === 'function') {
-            (detachResult as Promise<void>).catch(() => {});
-          }
-        } catch {
-          // No-op: detach can throw synchronously when channel is already detached.
-        }
       };
     }, [])
   );

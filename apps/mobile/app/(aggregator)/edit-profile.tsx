@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Briefcase, Camera, MapPin, User } from 'phosphor-react-native';
+import { Briefcase, Camera, EnvelopeSimple, MapPin, User } from 'phosphor-react-native';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -25,10 +25,11 @@ const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
 export default function AggregatorEditProfileScreen() {
     const router = useRouter();
-    const { name, locality, city, setName, setLocality } = useAuthStore();
+    const { name, email, locality, city, setName, setEmail, setLocality } = useAuthStore();
     const { profile, fetchAggregatorProfile } = useAggregatorStore();
 
     const [newFullName, setNewFullName] = useState(profile?.name || name);
+    const [newEmail, setNewEmail] = useState(profile?.email || email);
     const [newBusinessName, setNewBusinessName] = useState(profile?.businessName || '');
     const [newLocality, setNewLocality] = useState(profile?.operatingArea || locality);
     const [isSaving, setIsSaving] = useState(false);
@@ -41,12 +42,14 @@ export default function AggregatorEditProfileScreen() {
     React.useEffect(() => {
         // Correctly distinguish between user's name and business name
         setNewFullName(profile?.name || name);
+        setNewEmail(profile?.email || email);
         setNewBusinessName(profile?.businessName || '');
         setNewLocality(profile?.operatingArea || locality);
-    }, [profile, name, locality]);
+    }, [profile, name, email, locality]);
 
     const handleSave = async () => {
         const trimmedName = newFullName.trim();
+        const trimmedEmail = newEmail.trim();
         const trimmedLocality = newLocality.trim();
 
         if (trimmedName.length === 0) {
@@ -56,6 +59,11 @@ export default function AggregatorEditProfileScreen() {
 
         if (trimmedName.length > 50) {
             setError('Name is too long (max 50 chars)');
+            return;
+        }
+
+        if (trimmedEmail.length > 0 && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+            setError('Enter a valid email address');
             return;
         }
 
@@ -70,10 +78,12 @@ export default function AggregatorEditProfileScreen() {
         try {
             await useAggregatorStore.getState().updateProfile({
                 name: newFullName.trim(),
+                email: trimmedEmail || null,
                 business_name: newBusinessName.trim(),
                 operating_area: trimmedLocality,
             });
             setName(newFullName.trim());
+            setEmail(trimmedEmail);
             setLocality(trimmedLocality);
             setIsSaving(false);
             router.back();
@@ -128,6 +138,24 @@ export default function AggregatorEditProfileScreen() {
                                 placeholder="Enter your full name"
                                 placeholderTextColor={colors.muted}
                                 maxLength={60}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text variant="label" color={colors.muted} style={styles.inputLabel}>EMAIL ADDRESS</Text>
+                        <View style={styles.inputWrap}>
+                            <EnvelopeSimple size={20} color={colors.muted} />
+                            <TextInput
+                                style={styles.input}
+                                value={newEmail}
+                                onChangeText={setNewEmail}
+                                placeholder="Enter your email"
+                                placeholderTextColor={colors.muted}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                maxLength={120}
                             />
                         </View>
                     </View>

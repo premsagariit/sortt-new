@@ -1,34 +1,47 @@
 /**
- * app/(seller)/language.tsx
+ * app/(shared)/language.tsx
  * ──────────────────────────────────────────────────────────────────
  * Language Selection screen.
- * Allows switching between English and Telugu.
+ * Allows switching between English, Telugu, and Hindi.
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Info, CheckCircle } from 'phosphor-react-native';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { safeBack } from '../../utils/navigation';
+import { useI18n } from '../../hooks/useI18n';
+import { type SupportedLanguage } from '../../lib/i18n';
+import { useLanguageStore } from '../../store/languageStore';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 
-type LangCode = 'English' | 'Telugu';
+const LANGUAGE_OPTIONS: Array<{ code: SupportedLanguage; nativeLabel: string }> = [
+  { code: 'en', nativeLabel: 'English' },
+  { code: 'te', nativeLabel: 'తెలుగు' },
+  { code: 'hi', nativeLabel: 'हिंदी' },
+];
 
 export default function LanguageSelection() {
-  const router = useRouter();
-  const [selected, setSelected] = useState<LangCode>('English');
+  const { t, getLanguageName } = useI18n();
+  const language = useLanguageStore((state) => state.language);
+  const setLanguage = useLanguageStore((state) => state.setLanguage);
+  const syncing = useLanguageStore((state) => state.syncing);
+
+  const [selected, setSelected] = useState<SupportedLanguage>(language);
   const [isSaved, setIsSaved] = useState(false);
 
-  const handleApply = () => {
-    // Logic for applying language changes would go here
+  useEffect(() => {
+    setSelected(language);
+  }, [language]);
+
+  const handleApply = async () => {
+    await setLanguage(selected, { syncRemote: true });
     setIsSaved(true);
-    // Auto-back after a delay might be nice, but simple confirmation is safer
   };
 
   return (
@@ -44,22 +57,24 @@ export default function LanguageSelection() {
         <View style={styles.infoBanner}>
           <Info size={20} color={colors.navy} weight="fill" />
           <Text variant="caption" style={styles.infoText}>
-            We're currently translating Sortt into Telugu. Some parts of the app may still appear in English during this pilot phase.
+            {t("We're currently translating Sortt into Telugu. Some parts of the app may still appear in English during this pilot phase.")}
           </Text>
         </View>
 
         {/* Options */}
         <View style={styles.optionsWrap}>
-          <LanguageRow 
-            label="English" 
-            isSelected={selected === 'English'} 
-            onPress={() => { setSelected('English'); setIsSaved(false); }} 
-          />
-          <LanguageRow 
-            label="Telugu" 
-            isSelected={selected === 'Telugu'} 
-            onPress={() => { setSelected('Telugu'); setIsSaved(false); }} 
-          />
+          {LANGUAGE_OPTIONS.map((option) => (
+            <LanguageRow
+              key={option.code}
+              label={getLanguageName(option.code)}
+              nativeLabel={option.nativeLabel}
+              isSelected={selected === option.code}
+              onPress={() => {
+                setSelected(option.code);
+                setIsSaved(false);
+              }}
+            />
+          ))}
         </View>
 
         <View style={{ flex: 1 }} />
@@ -70,13 +85,14 @@ export default function LanguageSelection() {
             <View style={styles.successBanner}>
               <CheckCircle size={20} color={colors.teal} weight="fill" />
               <Text variant="body" color={colors.teal} style={{ fontWeight: '600' }}>
-                Language preferences updated
+                {t('Language preferences updated')}
               </Text>
             </View>
           ) : (
             <PrimaryButton 
-              label="Apply Language" 
+              label={syncing ? t('Applying language...') : t('Apply Language')}
               onPress={handleApply} 
+              loading={syncing}
             />
           )}
         </View>
@@ -85,15 +101,30 @@ export default function LanguageSelection() {
   );
 }
 
-function LanguageRow({ label, isSelected, onPress }: { label: string; isSelected: boolean; onPress: () => void }) {
+function LanguageRow({
+  label,
+  nativeLabel,
+  isSelected,
+  onPress,
+}: {
+  label: string;
+  nativeLabel: string;
+  isSelected: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable 
       style={[styles.row, isSelected && styles.rowSelected]} 
       onPress={onPress}
     >
-      <Text variant="body" color={isSelected ? colors.navy : colors.slate} style={isSelected ? { fontWeight: '600' } : undefined}>
-        {label}
-      </Text>
+      <View style={styles.rowLabelWrap}>
+        <Text variant="body" color={isSelected ? colors.navy : colors.slate} style={isSelected ? { fontWeight: '600' } : undefined}>
+          {label}
+        </Text>
+        <Text variant="caption" color={colors.muted}>
+          {nativeLabel}
+        </Text>
+      </View>
       <View style={[styles.radio, isSelected && styles.radioSelected]}>
         {isSelected && <View style={styles.radioInner} />}
       </View>
@@ -137,6 +168,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  rowLabelWrap: {
+    flex: 1,
+    gap: 2,
   },
   rowSelected: {
     borderColor: colors.navy,

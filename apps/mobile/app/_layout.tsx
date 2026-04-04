@@ -38,8 +38,9 @@ import {
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { setRealtimeTokenGetter } from '@sortt/realtime';
 import { tokenCache, clerkPublishableKey } from '../lib/clerk';
-import { api, setApiTokenGetter, setApiUnauthorizedHandler } from '../lib/api';
+import { api, setApiLanguageGetter, setApiTokenGetter, setApiUnauthorizedHandler } from '../lib/api';
 import { useAuthStore, type AuthState, setGlobalClerkSignOut } from '../store/authStore';
+import { useLanguageStore } from '../store/languageStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
 import { AuthNetworkErrorScreen } from '../components/ui/AuthNetworkErrorScreen';
@@ -51,11 +52,20 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
   const { getToken, signOut } = useAuth();
   const [isTokenReady, setIsTokenReady] = useState(false);
 
+  const getFreshToken = useCallback(async () => {
+    try {
+      return await getToken({ skipCache: true } as any);
+    } catch {
+      return await getToken();
+    }
+  }, [getToken]);
+
   useEffect(() => {
     // Set token getter IMMEDIATELY on first render with auth context available
-    setApiTokenGetter(getToken);
-    setRealtimeTokenGetter(getToken);
+    setApiTokenGetter(getFreshToken);
+    setRealtimeTokenGetter(getFreshToken);
     setApiUnauthorizedHandler(() => useAuthStore.getState().signOut());
+    setApiLanguageGetter(() => useLanguageStore.getState().language);
     setGlobalClerkSignOut(signOut);
     // Mark as ready so child routes can render
     setIsTokenReady(true);
@@ -63,8 +73,9 @@ function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
     return () => {
       setApiUnauthorizedHandler(null);
       setRealtimeTokenGetter(null);
+      setApiLanguageGetter(null);
     };
-  }, [getToken, signOut]);
+  }, [getFreshToken, signOut]);
 
   // ⚠️ CRITICAL: Do not render children until token is configured
   // This prevents race condition where API calls fire before Bearer token is attached
@@ -113,11 +124,14 @@ export default function RootLayout() {
   const pathname = usePathname();
   const segments = useSegments();
   const rootGroup = segments[0];
+  const languageInitialized = useLanguageStore((s) => s.initialized);
+  const initializeLanguage = useLanguageStore((s) => s.initializeLanguage);
   const storedUserType = useAuthStore((s: AuthState) => s.userType);
   const [isRetrying, setIsRetrying] = useState(false);
   const [lastRole, setLastRole] = useState<'seller' | 'aggregator'>('seller');
   const prevOnlineRef = useRef(isOnline);
   const offlineAuthPathRef = useRef<string | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // ── Load DM Sans (all weights used across the design system)
   const [sansLoaded, sansError] = useFonts({
@@ -142,6 +156,10 @@ export default function RootLayout() {
   });
 
   const fontsReady = (sansLoaded || !!sansError) && (monoLoaded || !!monoError);
+
+  useEffect(() => {
+    void initializeLanguage();
+  }, [initializeLanguage]);
 
   useEffect(() => {
     if (fontsReady) {
@@ -199,7 +217,11 @@ export default function RootLayout() {
   // WARN 3 + BLOCK: AppState listener for realtime cleanup on background
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state: AppStateStatus) => {
-      if (state === 'background' || state === 'inactive') {
+      const previousState = appStateRef.current;
+      appStateRef.current = state;
+
+      const leavingForeground = previousState === 'active' && (state === 'background' || state === 'inactive');
+      if (leavingForeground) {
         try {
           disconnectRealtime();
           console.log('[AppState] Disconnected Ably client on app background');
@@ -215,7 +237,7 @@ export default function RootLayout() {
   }, []);
 
   // Hold the tree until fonts are ready to prevent a flash of unstyled text.
-  if (!fontsReady) {
+  if (!fontsReady || !languageInitialized) {
     return null;
   }
 

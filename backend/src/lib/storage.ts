@@ -16,7 +16,8 @@ export class ProviderStorageAdapter implements IStorageProvider {
     async uploadFile(fileBuffer: Buffer, fileName: string, mimeType: string): Promise<string> {
         const safeMime = mimeType.replace('/', '-');
         const path = `${safeMime}-${Date.now()}-${fileName}`;
-        const uploaded = await this.provider.upload('kyc-media', path, fileBuffer);
+        const targetBucket = process.env.R2_BUCKET_NAME || 'kyc-media';
+        const uploaded = await this.provider.upload(targetBucket, path, fileBuffer);
         return uploaded.fileKey;
     }
 

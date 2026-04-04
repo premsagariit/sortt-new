@@ -1,13 +1,28 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { IAnalysisProvider, AnalysisResult } from '../types';
+import { IAnalysisProvider, AnalysisLanguage, AnalysisResult } from '../types';
 
-const ANALYZE_PROMPT = `Analyse this scrap/recyclable material image.
+const OUTPUT_LANGUAGE_NAME: Record<AnalysisLanguage, string> = {
+  en: 'English',
+  te: 'Telugu',
+  hi: 'Hindi',
+};
+
+const buildAnalyzePrompt = (language: AnalysisLanguage): string => {
+  const outputLanguage = OUTPUT_LANGUAGE_NAME[language] ?? 'English';
+
+  return `Analyse this scrap/recyclable material image.
 Identify all distinct types of scrap materials present. For each material type found, estimate its weight.
 Return ONLY a valid JSON object with this exact shape:
 { "items": [
-  { "material_code": "<one of: metal|plastic|paper|ewaste|fabric|glass>", "estimated_weight_kg": <positive number>, "confidence": <0.0 to 1.0> }
+  {
+    "material_code": "<one of: metal|plastic|paper|ewaste|fabric|glass>",
+    "material_label": "<short ${outputLanguage} label for the material>",
+    "estimated_weight_kg": <positive number>,
+    "confidence": <0.0 to 1.0>
+  }
 ] }
 No preamble, no explanation, no markdown formatting. JSON only.`;
+};
 
 const VALID_CODES = new Set(['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass']);
 
@@ -70,14 +85,14 @@ export class GeminiVisionProvider implements IAnalysisProvider {
     this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
-  async analyzeScrapImage(imageBuffer: Buffer): Promise<AnalysisResult[]> {
+  async analyzeScrapImage(imageBuffer: Buffer, language: AnalysisLanguage = 'en'): Promise<AnalysisResult[]> {
     const model = this.client.getGenerativeModel({ model: this.modelName });
     const response = await model.generateContent({
       contents: [
         {
           role: 'user',
           parts: [
-            { text: ANALYZE_PROMPT },
+            { text: buildAnalyzePrompt(language) },
             {
               inlineData: {
                 data: imageBuffer.toString('base64'),
@@ -110,9 +125,13 @@ export class GeminiVisionProvider implements IAnalysisProvider {
         ? estimatedWeightRaw
         : 0.001;
       const confidence = Number(item?.confidence);
+      const materialLabel = typeof item?.material_label === 'string'
+        ? item.material_label.trim()
+        : undefined;
 
       results.push({
         material_code: materialCode,
+        ...(materialLabel ? { material_label: materialLabel } : {}),
         estimated_weight_kg: estimatedWeight,
         confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0,
         is_ai_estimate: true,

@@ -24,6 +24,7 @@ export interface AggregatorEarnings {
 
 export interface AggregatorProfile {
   name: string | null;
+  email: string | null;
   businessName: string | null;
   operatingArea: string | null;
   operatingHours: any | null;
@@ -190,7 +191,7 @@ interface AggregatorStoreState {
   /** GET /api/aggregators/earnings?period=... */
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates name, business_name, operating_area */
-  updateProfile: (payload: { name?: string; business_name?: string; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
+  updateProfile: (payload: { name?: string; email?: string | null; business_name?: string; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
   updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -312,6 +313,11 @@ function mapFeedOrder(o: any): NewOrderRequest {
     }
   }
 
+  const sellerRatingRaw = Number(o.seller_rating);
+  const sellerRating = Number.isFinite(sellerRatingRaw) && sellerRatingRaw > 0
+    ? sellerRatingRaw
+    : 0;
+
   return {
     id: o.id,
     orderNumber:
@@ -327,7 +333,7 @@ function mapFeedOrder(o: any): NewOrderRequest {
     estimatedWeights: (o.estimated_weights && typeof o.estimated_weights === 'object') ? o.estimated_weights : {},
     window: windowLabel,
     sellerType: typeof o.seller_type === 'string' ? o.seller_type : 'Seller',
-    rating: typeof o.seller_rating === 'number' ? o.seller_rating : 4.5,
+    rating: sellerRating,
     isHighValue: (o.estimated_value ?? 0) > 500,
     createdAt: o.created_at ?? o.createdAt ?? new Date().toISOString(),
   };
@@ -667,6 +673,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
 
       const payload = profileRes.data ?? {};
       const name = payload.name ?? null;
+      const email = payload.email ?? null;
       const operatingHours = payload.operating_hours ?? payload.aggregator_operating_hours ?? null;
       const operatingArea = payload.operating_area ?? payload.aggregator_locality ?? null;
       const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
@@ -698,6 +705,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       set({
         profile: {
           name,
+          email,
           businessName,
           operatingArea: primaryAreaText,
           operatingHours: { ...operatingHours, days: parsedSchedule },
@@ -795,6 +803,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       // Reflect name and business_name in local state if provided
       if (payload.name !== undefined) {
         set({ fullName: payload.name });
+      }
+      if (payload.email !== undefined) {
+        set((state) => ({
+          profile: state.profile ? { ...state.profile, email: payload.email ?? null } : state.profile,
+        }));
       }
       if (payload.business_name !== undefined) {
         set({ businessName: payload.business_name });

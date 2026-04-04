@@ -29,6 +29,9 @@ router.post('/', async (req: Request, res: Response) => {
         if (typeof score !== 'number' || !Number.isInteger(score) || score < 1 || score > 5) {
             return res.status(400).json({ error: 'score must be an integer between 1 and 5' });
         }
+        if (review != null && typeof review !== 'string') {
+            return res.status(400).json({ error: 'review must be a string' });
+        }
 
         // Verify order is completed and rater is a party
         const orderRes = await query(
@@ -49,14 +52,30 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Forbidden: not a party to this order' });
         }
 
-        const cleanReview = review ? stripHtml(review) : null;
+        const isSellerRater = order.seller_id === raterId;
+        const expectedRateeId = isSellerRater ? order.aggregator_id : order.seller_id;
+        if (!expectedRateeId) {
+            return res.status(400).json({ error: 'Order does not have a valid counterparty to rate' });
+        }
+        if (ratee_id === raterId) {
+            return res.status(400).json({ error: 'Cannot rate yourself' });
+        }
+        if (ratee_id !== expectedRateeId) {
+            return res.status(400).json({ error: 'ratee_id must be the order counterparty' });
+        }
+
+        const cleanReview = review ? stripHtml(review).trim() : null;
+        if (cleanReview && cleanReview.length > 500) {
+            return res.status(400).json({ error: 'review must be at most 500 characters' });
+        }
+        const normalizedReview = cleanReview && cleanReview.length > 0 ? cleanReview : null;
 
         try {
             const result = await query(
                 `INSERT INTO ratings (order_id, rater_id, ratee_id, score, review)
                  VALUES ($1, $2, $3, $4, $5)
                  RETURNING id, created_at`,
-                [order_id, raterId, ratee_id, score, cleanReview]
+                [order_id, raterId, ratee_id, score, normalizedReview]
             );
             const rating = result.rows[0];
 

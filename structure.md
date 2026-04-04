@@ -1,19 +1,13 @@
 Sortt
-├── Recent implementation updates (2026-03-27)
-│   ├── Day 15 completion delivered:
-│   │   ├── Gemini Vision provider implemented in `packages/analysis/src/providers/GeminiVisionProvider.ts`
-│   │   ├── Scrap analysis route live in `backend/src/routes/scrap.ts` (`POST /api/scrap/analyze`) with EXIF stripping + Redis circuit breaker/cache
-│   │   ├── GST invoice generator implemented in `backend/src/utils/invoiceGenerator.ts`
-│   │   ├── Invoice download route live in `backend/src/routes/orders/index.ts` (`GET /api/orders/:id/invoice`)
-│   │   ├── Daily price scraper integrated via `backend/src/scheduler.ts` spawning `scraper/main.py`
-│   │   ├── Seller listing AI hint flow wired in `apps/mobile/app/(seller)/listing/step2.tsx`
-│   │   └── Receipt invoice download flow wired in `apps/mobile/app/(seller)/order/receipt/[id].tsx` and `apps/mobile/app/(aggregator)/execution/receipt/[id].tsx`
-│   ├── Invoice PDF engine migrated (2026-03-28): Reverted to `pdf-lib` for Azure compatibility
-│   │   ├── Lightweight vector rendering (DM Sans/Mono fonts) replacing Chromium/Puppeteer
-│   │   └── Removed `puppeteer-core` and `@sparticuz/chromium` from backend dependencies
-│   ├── Project execution state (updated 2026-04-02): implementation complete through Day 15; Day 16 (admin web pages + tests) is in progress and not yet closed
-│   ├── Verification snapshot (2026-04-02): `pnpm type-check` fails, `pnpm lint` passes with warnings, `pnpm test` fails (backend Jest config parse error caused by invalid JSON in `backend/package.json`)
-│   ├── Day 17 status: blocked until Day 16 verification gates are fully green
+├── Recent implementation updates (2026-04-04)
+│   ├── Day 16 completion delivered:
+│   │   ├── Admin Web Dashboard (`apps/web`) fully operational with live data.
+│   │   ├── Admin navigation, login, KYC queue, and Dispute management modules completed.
+│   │   ├── Design system tokens (`apps/web/constants/tokens.ts`) applied across all admin screens.
+│   │   ├── Next.js optimized `<Image />` components implemented for R2/Clerk assets.
+│   │   ├── Monorepo-wide verification: `pnpm type-check`, `pnpm lint`, and `pnpm test` all 100% green.
+│   │   └── Repository cleanup: removed all temp `.tmp` JWTs and standalone test scripts.
+│   ├── Day 17 status: **Active** — Security Audit + Monitoring + Launch phase underway.
 │   ├── Web scope clarification (2026-03-30): business seller + aggregator web UI deferred; admin web pages only in current phase
 │   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
 │   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff
@@ -55,19 +49,9 @@ Sortt
 ├── .npmrc # npm/pnpm behavior configuration for workspace
 ├── .antigravityignore # Internal tooling ignore rules
 ├── .antigravityrules # Internal tooling rule definitions
-├── r.txt # Local scratch/reference notes
-├── user_data_delete.sql # SQL helper for user-data cleanup workflows
 │
-├── Root utility scripts # Local schema/data checks and reseeding tools
-│   ├── check_aggregator_schema.js # Prints aggregator-related table schema details
-│   ├── check_cities_schema.js # Verifies cities table columns/types
-│   ├── check_material_types_schema.js # Verifies material_types table columns/types
-│   ├── check_schema.js # General schema inspection helper
-│   ├── fix.js # One-off local repair script for data/state issues
-│   ├── reseed_reference_tables.js # Re-seeds reference tables (cities/material types)
-│   ├── test_seed.js # Sanity-checks seeded reference data
-│   ├── verify_env.js # Validates required environment variables are present
-│   └── verify_seed_data.js # Verifies seeded records and expected counts
+│
+├── apps
 │
 ├── apps
 │   ├── mobile # React Native app (Expo + Expo Router + Zustand)
@@ -229,17 +213,22 @@ Sortt
 │   │       ├── error.ts # Error normalization/classification helpers
 │   │       └── navigation.tsx # Navigation safety helpers and route utilities
 │   │
-│   └── web # Next.js admin web app (current scope)
+│   └── web # Next.js admin web app (production scope)
 │       ├── package.json # Web app dependencies and scripts
 │       ├── tsconfig.json # Web app TypeScript config
-│       ├── next-env.d.ts # Next.js type declarations
-│       ├── tailwind.config.ts # Tailwind theme/config for web app
-│       ├── app
-│       │   ├── layout.tsx # Web app root layout
-│       │   ├── page.tsx # Web app landing page
-│       │   ├── globals.css # Global CSS styles for web app
-│       │   ├── admin # Admin route segment (active)
-│       │   └── aggregator # Deferred placeholder route segment (not in current scope)
+│       ├── next.config.ts # Next.js optimized remotePatterns for R2/Clerk
+│       ├── app # App Router layout and routes
+│       │   ├── layout.tsx # Root layout with Clerk + Next.js UI integration
+│       │   ├── page.tsx # Admin landing / redirect page
+│       │   ├── globals.css # Design system global overrides
+│       │   ├── admin # Admin Portal (Active)
+│       │   │   ├── layout.tsx # Admin SIDENAV + design system tokens
+│       │   │   ├── login # Clerk-integrated admin login
+│       │   │   ├── kyc # KYC queue for aggregator verification
+│       │   │   ├── disputes # Dispute resolution queue for order issues
+│       │   │   ├── prices # Price index management (stubbed)
+│       │   │   └── request-access # Admin access request flow
+│       │   └── aggregator # Deferred placeholder segment
 │       ├── components
 │       │   └── ui
 │       │       └── SorttLogo.tsx # Reusable web logo component

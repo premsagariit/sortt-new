@@ -1,0 +1,184 @@
+name: Sortt CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  # Use Node 24 to match Azure App Service target (WARN 2 — MEMORY.md §9 Day 6)
+  NODE_VERSION: '24'
+  # pnpm 10 to match lockfile (WARN 4)
+  PNPM_VERSION: '10'
+
+jobs:
+  # ─── A: Type check ──────────────────────────────────────────────
+  type-check:
+    name: TypeScript type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check backend
+        working-directory: backend
+        run: pnpm run type-check
+
+      - name: Type check web
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
+
+  # ─── B: Lint ────────────────────────────────────────────────────
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint backend
+        working-directory: backend
+        run: pnpm run lint
+
+  # ─── C: Unit tests ──────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests (no DB)
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      # DATABASE_URL must be set to prevent db.ts import crash
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder?sslmode=disable
+      CLERK_SECRET_KEY: sk_test_placeholder_for_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        working-directory: backend
+        run: pnpm test -- --testPathPattern="(routes|rls)\.test\.ts"
+
+  # ─── D: Integration tests ────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests (with DB)
+    runs-on: ubuntu-latest
+    # Only run on push to main (save minutes on PR branches)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sortt?sslmode=disable
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sortt_test?sslmode=disable
+      CLERK_SECRET_KEY: sk_test_placeholder_for_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sortt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Apply schema migrations so integration tests can check table existence
+      - name: Apply DB schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          if [ -d "backend/migrations" ]; then
+            for f in backend/migrations/*.sql; do
+              psql -h localhost -U postgres -d sortt_test -f "$f" || true
+            done
+          elif [ -f "backend/schema.sql" ]; then
+            psql -h localhost -U postgres -d sortt_test -f "backend/schema.sql" || true
+          fi
+
+      - name: Run integration tests
+        working-directory: backend
+        run: pnpm test -- --testPathPattern="integration\.test\.ts"
+
+  # ─── E: Build check ─────────────────────────────────────────────
+  build:
+    name: Build (backend + web)
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder?sslmode=disable
+      CLERK_SECRET_KEY: sk_test_placeholder_for_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
+      NEXT_PUBLIC_API_URL: https://placeholder.azurewebsites.net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend
+        working-directory: backend
+        run: pnpm run build
+
+      - name: Build web
+        working-directory: apps/web
+        run: pnpm run build

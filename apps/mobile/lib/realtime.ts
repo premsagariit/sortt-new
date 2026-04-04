@@ -21,6 +21,7 @@ type RealtimeClientCompat = {
 };
 
 let provider: IRealtimeProvider | null = null;
+let disconnectInFlight: Promise<void> | null = null;
 
 function getProvider(): IRealtimeProvider {
   if (!provider) {
@@ -85,9 +86,18 @@ export function getRealtimeClient(): RealtimeClientCompat {
 }
 
 export function disconnectRealtime(): void {
-  if (provider) {
-    provider.removeAllChannels();
-    void provider.disconnect();
-    provider = null;
-  }
+  if (!provider) return;
+  if (disconnectInFlight) return;
+
+  const activeProvider = provider;
+  provider = null;
+
+  disconnectInFlight = activeProvider
+    .disconnect()
+    .catch((error) => {
+      console.warn('[Realtime] disconnect failed (non-fatal)', error);
+    })
+    .finally(() => {
+      disconnectInFlight = null;
+    });
 }

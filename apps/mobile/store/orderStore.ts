@@ -46,6 +46,7 @@ export interface Order {
   liveDistanceKm?: number | null;
   rating?: number;
   sellerHasRated?: boolean;
+  aggregatorHasRated?: boolean;
   window?: string;
   estimatedWeights?: Record<string, number>;
   orderItems?: Array<{
@@ -132,6 +133,7 @@ export function mapApiOrder(o: any): Order {
   }
 
   const rawOrderId = o.id ?? o.orderId ?? '';
+  const parsedRating = toNumberOrNull(o.rating);
   const orderNumber =
     typeof o.order_display_id === 'string' && o.order_display_id.trim().length > 0
       ? o.order_display_id
@@ -191,8 +193,9 @@ export function mapApiOrder(o: any): Order {
     aggregatorLat: toNumberOrNull(o.aggregator_lat ?? o.aggregatorLat),
     aggregatorLng: toNumberOrNull(o.aggregator_lng ?? o.aggregatorLng),
     liveDistanceKm: toNumberOrNull(o.distance_km ?? o.liveDistanceKm),
-    rating: typeof o.rating === 'number' ? o.rating : undefined,
+    rating: parsedRating !== null && parsedRating > 0 ? parsedRating : undefined,
     sellerHasRated: typeof o.seller_has_rated === 'boolean' ? o.seller_has_rated : undefined,
+    aggregatorHasRated: typeof o.aggregator_has_rated === 'boolean' ? o.aggregator_has_rated : undefined,
     window: windowLabel,
     estimatedWeights: o.estimated_weights ?? o.estimatedWeights ?? {},
     orderItems: Array.isArray(o.order_items)

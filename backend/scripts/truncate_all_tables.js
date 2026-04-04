@@ -1,7 +1,7 @@
 const { Client } = require('pg');
 
 const connectionString = process.env.DATABASE_URL ||
-  'postgresql://sortt_admin:Sagar%40789364@sortt-db.postgres.database.azure.com:5432/sortt?sslmode=require';
+  'postgresql://sortt_admin:Sagar%40789364@sortt-db.postgres.database.azure.com:5432/sortt?sslmode=verify-full';
 
 async function run() {
   const client = new Client({ connectionString });

@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * app/aggregator/page.tsx
  * ─────────────────────────────────────────────────────────────────
@@ -6,19 +8,42 @@
  */
 
 import React from 'react';
-import { CurrencyInr, Package, TrendUp, Clock, CaretRight, Info } from 'phosphor-react';
+import { CurrencyInr, Package, TrendUp, Clock, CaretRight } from 'phosphor-react';
 
-const CurrencyInrIcon = CurrencyInr as any;
-const PackageIcon = Package as any;
-const TrendUpIcon = TrendUp as any;
-const ClockIcon = Clock as any;
-const CaretRightIcon = CaretRight as any;
-const InfoIcon = Info as any;
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+
+const CurrencyInrIcon = CurrencyInr as IconComponent;
+const PackageIcon = Package as IconComponent;
+const TrendUpIcon = TrendUp as IconComponent;
+const ClockIcon = Clock as IconComponent;
+const CaretRightIcon = CaretRight as IconComponent;
+
+type StatCardProps = {
+    title: string;
+    value: string;
+    delta: string;
+    icon: React.ReactNode;
+    color: string;
+};
+
+type OrderRowProps = {
+    id: string;
+    locality: string;
+    weight: string;
+    amount: string;
+    status: string;
+    time: string;
+};
+
+type MaterialProgressProps = {
+    label: string;
+    percentage: number;
+    color: string;
+};
 
 export default function AggregatorDashboard() {
     return (
         <div className="space-y-token-xl">
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-token-lg">
                 <StatCard title="Today's Earnings" value="₹14,250" delta="+12%" icon={<CurrencyInrIcon size={24} />} color="text-teal" />
                 <StatCard title="Active Orders" value="28" delta="+4" icon={<PackageIcon size={24} />} color="text-navy" />
@@ -26,9 +51,7 @@ export default function AggregatorDashboard() {
                 <StatCard title="Active Agents" value="12 / 15" delta="Stable" icon={<ClockIcon size={24} />} color="text-slate" />
             </div>
 
-            {/* Main Sections */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-token-xl">
-                {/* Recent Orders Feed */}
                 <div className="lg:col-span-2 space-y-token-md">
                     <div className="flex items-center justify-between">
                         <h3 className="text-navy font-bold text-lg">Recent Completions</h3>
@@ -45,7 +68,6 @@ export default function AggregatorDashboard() {
                     </div>
                 </div>
 
-                {/* Top Materials */}
                 <div className="space-y-token-md">
                     <h3 className="text-navy font-bold text-lg">Top Materials</h3>
                     <div className="bg-surface border border-border rounded-card p-token-md space-y-token-md">
@@ -60,22 +82,22 @@ export default function AggregatorDashboard() {
     );
 }
 
-function StatCard({ title, value, trend, up, icon }: any) {
+function StatCard({ title, value, delta, icon, color }: StatCardProps) {
     return (
         <div className="bg-surface border border-border rounded-card p-token-md shadow-sm">
             <div className="flex items-center justify-between mb-2">
                 <span className="text-muted text-xs font-bold uppercase tracking-wider">{title}</span>
-                <div className="p-2 bg-bg rounded-lg">{icon}</div>
+                <div className={`p-2 rounded-lg ${color}`}>{icon}</div>
             </div>
             <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-navy font-mono">{value}</span>
-                <span className={`text-xs font-bold ${up ? 'text-teal' : 'text-red'}`}>{trend}</span>
+                <span className="text-xs font-bold text-teal">{delta}</span>
             </div>
         </div>
     );
 }
 
-function OrderRow({ id, locality, weight, amount, status, time }: any) {
+function OrderRow({ id, locality, weight, amount, status, time }: OrderRowProps) {
     return (
         <div className="flex items-center justify-between p-token-md hover:bg-bg transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
@@ -90,21 +112,25 @@ function OrderRow({ id, locality, weight, amount, status, time }: any) {
             <div className="text-right">
                 <div className="text-sm font-bold text-navy font-mono">₹{amount}</div>
                 <div className="text-[10px] text-muted font-mono">{weight} kg</div>
+                <div className="mt-1 text-[10px] font-semibold text-teal">{status}</div>
             </div>
         </div>
     );
 }
 
-function MaterialProgress({ label, percentage, color }: any) {
+function MaterialProgress({ label, percentage, color }: MaterialProgressProps) {
+    const [backgroundClass, textClass] = color.split(' ');
+
     return (
         <div className="space-y-1.5">
             <div className="flex items-center gap-2 mb-2">
                 <PackageIcon size={20} className="text-navy" />
-                <span className="text-sm font-bold text-navy">Paper & Cardboard</span>
+                <span className="text-sm font-bold text-navy">{label}</span>
             </div>
             <div className="w-full h-1.5 bg-bg rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${color.split(' ')[0]}`} style={{ width: `${percentage}%` }} />
+                <div className={`h-full rounded-full ${backgroundClass}`} style={{ width: `${percentage}%` }} />
             </div>
+            <div className={`text-[10px] font-semibold ${textClass}`}>{percentage}%</div>
         </div>
     );
 }

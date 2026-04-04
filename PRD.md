@@ -24,17 +24,16 @@
 > - §10: Build tool reference updated. TRD reference updated to v4.1.
 > - §11: All 6 original open questions reviewed — 2 resolved (admin panel, GST template). 5 new TRD-derived open questions (OQ-1 to OQ-5) added.
 
-> ✅ **Implementation Sync Note (2026-03-16)**
+> ✅ **Implementation Sync Note (2026-04-04)**
 > - Human-readable order identifiers are now live via backend `order_display_id` (format `#000001`).
 > - Database migration `0018_order_number_per_seller.sql` has been applied for per-seller sequential numbering.
 > - Mobile execution flow now threads route `id` across navigate → weighing → OTP → confirm → receipt screens.
-> - Workspace gate check: `pnpm type-check` exits 0.
+> - Workspace gate check: `pnpm type-check`, `pnpm lint`, and `pnpm test` all pass with 0 errors.
 > - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow supports inline rating with post-submit refresh; notifications now deep-link to order detail via metadata payloads.
 > - ✅ **Maps migration (2026-03-25):** Google-based map integration has been replaced with Ola-backed provider implementation + MapLibre mobile rendering. Existing address pinning, reverse-geocode fallback, live tracking, and route planning behaviors are preserved with Expo Go fallback gating.
 > - ✅ **Day 15 completion (2026-03-27):** Gemini Vision analysis route (`POST /api/scrap/analyze`) is live with EXIF stripping + Redis circuit breaker; GST invoice generator + signed download route (`GET /api/orders/:id/invoice`) are live; daily Python price scraper (`scraper/main.py`) is scheduled through backend node-cron and writes to `price_index` with sanity checks.
-> - ⚠ **Execution state (updated 2026-04-02):** Project implementation is complete through Day 15. Day 16 (admin web pages + tests) is in progress and currently blocked by remaining verification failures.
-> - ⚠ **Latest verification snapshot:** `pnpm type-check` fails, `pnpm lint` passes with warnings, and `pnpm test` fails due backend Jest config parse failure caused by invalid JSON in `backend/package.json`.
-> - ⏳ **Day 17 status:** Not started; begins only after Day 16 gate closure.
+> - ✅ **Day 16 completion (2026-04-04):** Admin web dashboard is fully wired to live data. KYCs and Disputes queues are production-ready. Design system tokens applied across admin pages. monorepo-wide tests and linting verified.
+> - 🚀 **Day 17 status:** Active; Security Audit + Monitoring + Launch phase underway.
 
 ---
 
@@ -438,8 +437,8 @@ The MVP is built over 17 days in a sequential single-thread model. The exact day
 | **Phase 8: Realtime** | Day 13 | Ably + Push | Live chat, status updates without refresh, push notifications |
 | **Phase 9: Providers** | Day 14 | Provider abstractions | All 5 provider packages complete (maps, realtime, auth, storage, analysis) |
 | **Phase 10: Intelligence** | Day 15 | AI + Invoice + Scraper | Gemini image analysis, GST PDF invoices, daily price scraper |
-| **Phase 11: Admin Web + Tests** | Day 16 | Admin panel + tests | Admin dispute/KYC panel, live-data wiring, test suite |
-| **Phase 12: Launch** | Day 17 | Security + CI/CD | Security audit, monitoring (PostHog, Sentry), production deploy |
+| **Phase 11: Admin Web + Tests** | Day 16 | ✅ Complete | Admin panel + tests complete, live-data wired, 100% pass rate |
+| **Phase 12: Launch** | Day 17 | **Active** | Security audit, monitoring (PostHog, Sentry), production deploy |
 
 **Post-MVP roadmap (not in Days 4–17):**
 - Telugu (and other regional languages) localisation

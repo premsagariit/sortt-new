@@ -10,10 +10,11 @@
 import React, { useEffect } from 'react';
 import {
     View, StyleSheet, ScrollView, Pressable,
-    ActivityIndicator, Image,
+    ActivityIndicator, Image, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { Camera, Storefront, WarningCircle, CheckCircle, IconWeight, Truck } from 'phosphor-react-native';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { NavBar } from '../../../components/ui/NavBar';
@@ -25,6 +26,7 @@ import { safeBack } from '../../../utils/navigation';
 import { api } from '../../../lib/api';
 
 export default function KycScreen() {
+    const { getToken } = useAuth();
     const {
         aggregatorType,
         kycShopPhotoUri,
@@ -58,26 +60,85 @@ export default function KycScreen() {
     const handleSubmit = async () => {
         setIsSubmitting(true);
         try {
-            const formData = new FormData();
-            const fourthKey = aggregatorType === 'shop' ? 'shop_photo' : 'vehicle_photo';
-            
-            if (businessUri) {
-                formData.append(fourthKey, {
-                    uri: businessUri,
-                    name: `${fourthKey}.jpg`,
-                    type: 'image/jpeg',
-                } as any);
+            if (!businessUri || !businessUri.startsWith('file://')) {
+                Alert.alert('Photo Error', 'Please retake the photo and try again.');
+                return;
             }
 
-            await api.post('/api/aggregators/kyc', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+            const fourthKey = aggregatorType === 'shop' ? 'shop_photo' : 'vehicle_photo';
+
+            // Match the stable step1 upload style: fetch + FormData + Bearer token.
+            const maxAttempts = 3;
+            let lastError: any = null;
+            for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+                try {
+                    const formData = new FormData();
+                    formData.append(fourthKey, {
+                        uri: businessUri,
+                        name: `${fourthKey}_${Date.now()}.jpg`,
+                        type: 'image/jpeg',
+                    } as any);
+
+                    let authToken: string | null = null;
+                    try {
+                        authToken = await getToken({ skipCache: true } as any);
+                    } catch {
+                        authToken = await getToken();
+                    }
+
+                    const url = `${api.defaults.baseURL}/api/aggregators/kyc`;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                        },
+                        body: formData,
+                        signal: controller.signal,
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        const body = await response.json().catch(() => ({}));
+                        const err: any = new Error(body?.error || `KYC upload failed with status ${response.status}`);
+                        err.response = { status: response.status, data: body };
+                        throw err;
+                    }
+
+                    lastError = null;
+                    break;
+                } catch (err: any) {
+                    lastError = err;
+                    const status = err?.response?.status;
+                    const retryable = !status || status >= 500 || err?.code === 'ECONNABORTED' || err?.code === 'ERR_NETWORK';
+                    if (attempt < maxAttempts && retryable) {
+                        await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+
+            if (lastError) {
+                throw lastError;
+            }
             
             router.replace('/(aggregator)/home' as any);
-        } catch (error) {
-            console.error('KYC form submission failed:', error);
+        } catch (error: any) {
+            const status = error?.response?.status;
+            const body = error?.response?.data;
+            console.error('KYC form submission failed:', {
+                message: error?.message,
+                code: error?.code,
+                status,
+                body,
+            });
+
+            const serverMessage = typeof body?.error === 'string' ? body.error : null;
+            Alert.alert('KYC Upload Failed', serverMessage || 'Please check your connection and try again.');
         } finally {
             setIsSubmitting(false);
         }

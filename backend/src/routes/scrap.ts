@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import { createAnalysisProvider } from '@sortt/analysis';
 import { redis } from '../lib/redis';
 import { storageProvider } from '../lib/storage';
+import { resolveRequestLanguage } from '../utils/language';
 
 const router = Router();
 
@@ -36,6 +37,16 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
       return res.status(400).json({ status: 'analysis_failed' });
     }
 
+    const language = resolveRequestLanguage({
+      explicit: typeof req.query?.language === 'string'
+        ? req.query.language
+        : typeof req.body?.language === 'string'
+          ? req.body.language
+          : null,
+      header: typeof req.headers['accept-language'] === 'string' ? req.headers['accept-language'] : null,
+      userPreferred: req.user?.preferred_language ?? null,
+    });
+
     const dailyLimit = Number(process.env.GEMINI_DAILY_LIMIT || 1200);
     const dayKey = `gemini:daily:${new Date().toISOString().split('T')[0]}`;
     const legacyGlobalKey = 'globalGeminiCounter';
@@ -53,7 +64,7 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
     }
 
     const imageHash = createHash('sha256').update(req.file.buffer).digest('hex');
-    const cacheKey = `gemini:img:${imageHash}`;
+    const cacheKey = `gemini:img:${imageHash}:${language}`;
 
     if (redis) {
       const cached = await redis.get<string>(cacheKey);
@@ -61,7 +72,10 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
         const parsed = JSON.parse(cached);
         // parsed could be an array of items
         const items = Array.isArray(parsed) ? parsed : (parsed.items || []);
-        return res.json({ items: items.map((i: any) => ({ ...i, is_ai_estimate: true })) });
+        return res.json({
+          language,
+          items: items.map((i: any) => ({ ...i, is_ai_estimate: true })),
+        });
       }
     }
 
@@ -72,7 +86,7 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
       const provider = createAnalysisProvider();
       console.log('[Scrap] Provider created, calling analyzeScrapImage');
 
-      const resultsRaw = await provider.analyzeScrapImage(strippedBuffer);
+      const resultsRaw = await provider.analyzeScrapImage(strippedBuffer, language);
       const resultsArray = Array.isArray(resultsRaw) ? resultsRaw : (resultsRaw as any).items || [];
 
       console.log('[Scrap] Analysis complete, items mapped:', resultsArray.length);
@@ -107,6 +121,7 @@ router.post('/analyze', upload.single('image'), async (req: any, res: any) => {
       }
 
       return res.json({
+        language,
         items: validItems.map((i: any) => ({ ...i, is_ai_estimate: true })),
         image_key: imageUrl || null
       });

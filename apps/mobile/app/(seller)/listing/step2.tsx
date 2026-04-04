@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, Pressable, Modal, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Tray, Warning, ArrowRight, X } from 'phosphor-react-native';
@@ -8,7 +8,7 @@ import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
-import { MaterialChip, MaterialCode, MATERIAL_LABELS } from '../../../components/ui/MaterialChip';
+import { MaterialChip, MaterialCode } from '../../../components/ui/MaterialChip';
 import { MaterialCard } from '../../../components/ui/MaterialCard';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
@@ -61,28 +61,12 @@ export default function Step2Screen() {
           </View>
 
           <View style={styles.section}>
-            <Text variant="heading" style={{ marginBottom: spacing.md }}>Select Materials</Text>
-            <View style={styles.grid}>
-              {ALL_MATERIALS.map(code => {
-                const isSelected = selectedMaterials.includes(code);
-                return (
-                  <MaterialCard
-                    key={code}
-                    code={code}
-                    isSelected={isSelected}
-                    onPress={() => handleToggleMaterial(code)}
-                  />
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.section}>
+            <Text variant="heading" style={{ marginBottom: spacing.md }}>Estimated Weights</Text>
             {selectedMaterials.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Tray size={32} color={colors.muted} />
                 <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.sm }}>
-                  No materials selected. Tap above to add.
+                  No materials selected. Choose materials below to enter weights.
                 </Text>
               </View>
             ) : (
@@ -100,9 +84,6 @@ export default function Step2Screen() {
                     ) : (
                       <MaterialChip material={code} variant="chip" />
                     )}
-                    <Pressable onPress={() => handleToggleMaterial(code)} style={styles.removeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <X size={14} color={colors.slate} weight="bold" />
-                    </Pressable>
                   </View>
 
                   <View style={styles.inputContainer}>
@@ -117,6 +98,14 @@ export default function Step2Screen() {
                     />
                     <Text variant="caption" color={colors.slate} style={styles.unitText}>kg</Text>
                   </View>
+
+                  <Pressable
+                    onPress={() => handleToggleMaterial(code)}
+                    style={styles.removeBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <X size={14} color={colors.slate} weight="bold" />
+                  </Pressable>
                 </View>
               ))
             )}
@@ -128,6 +117,23 @@ export default function Step2Screen() {
               <Text variant="caption" style={styles.warnText}>
                 Approximate weight is fine here. Aggregator will weigh exactly during pickup.
               </Text>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text variant="heading" style={{ marginBottom: spacing.md }}>Select Materials</Text>
+            <View style={styles.grid}>
+              {ALL_MATERIALS.map(code => {
+                const isSelected = selectedMaterials.includes(code);
+                return (
+                  <MaterialCard
+                    key={code}
+                    code={code}
+                    isSelected={isSelected}
+                    onPress={() => handleToggleMaterial(code)}
+                  />
+                );
+              })}
             </View>
           </View>
         </ScrollView>
@@ -157,10 +163,37 @@ const styles = StyleSheet.create({
     alignItems: 'center', backgroundColor: colors.surface, marginBottom: spacing.md
   },
   weightRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md, backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    position: 'relative',
+    overflow: 'visible',
   },
-  chipContainer: { flex: 1, alignItems: 'flex-start' },
-  removeBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 10 },
+  chipContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
+    paddingRight: spacing.lg,
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: -11,
+    right: -11,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 20,
+  },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: spacing.sm, width: 100 },
   customNameInput: { flex: 1, fontSize: 14, color: colors.navy, fontWeight: '600', paddingVertical: 4 },
   input: { flex: 1, height: 40, fontSize: 16, fontFamily: 'DMMono-Regular', color: colors.navy, textAlign: 'right' },

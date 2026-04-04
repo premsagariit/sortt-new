@@ -367,7 +367,28 @@ router.get('/', async (req, res) => {
                ) as line_items,
                COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
                COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
-               COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg
+                 COALESCE(SUM(COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg, 0)), 0) AS total_weight_kg,
+                 EXISTS (
+                   SELECT 1 FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.seller_id
+                     AND r.ratee_id = o.aggregator_id
+                 ) AS seller_has_rated,
+                 EXISTS (
+                   SELECT 1 FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.aggregator_id
+                     AND r.ratee_id = o.seller_id
+                 ) AS aggregator_has_rated,
+                 (
+                   SELECT r.score
+                   FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.seller_id
+                     AND r.ratee_id = o.aggregator_id
+                   ORDER BY r.created_at DESC
+                   LIMIT 1
+                 ) AS rating
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN material_types mt ON oi.material_code = mt.code
@@ -423,7 +444,28 @@ router.get('/', async (req, res) => {
                  '[]'
                ) as line_items,
                COALESCE(SUM(CASE WHEN oi.estimated_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.estimated_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS estimated_total,
-               COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total
+                 COALESCE(SUM(CASE WHEN oi.confirmed_weight_kg IS NOT NULL AND oi.rate_per_kg IS NOT NULL THEN oi.confirmed_weight_kg * oi.rate_per_kg ELSE 0 END), 0) AS confirmed_total,
+                 EXISTS (
+                   SELECT 1 FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.seller_id
+                     AND r.ratee_id = o.aggregator_id
+                 ) AS seller_has_rated,
+                 EXISTS (
+                   SELECT 1 FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.aggregator_id
+                     AND r.ratee_id = o.seller_id
+                 ) AS aggregator_has_rated,
+                 (
+                   SELECT r.score
+                   FROM ratings r
+                   WHERE r.order_id = o.id
+                     AND r.rater_id = o.aggregator_id
+                     AND r.ratee_id = o.seller_id
+                   ORDER BY r.created_at DESC
+                   LIMIT 1
+                 ) AS rating
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN material_types mt ON oi.material_code = mt.code
@@ -542,7 +584,25 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
                    COALESCE(
                 jsonb_object_agg(oi.material_code, oi.estimated_weight_kg) FILTER (WHERE oi.material_code IS NOT NULL),
                 '{}'::jsonb
-                   ) as estimated_weights
+                   ) as estimated_weights,
+                   (
+                     SELECT ROUND(AVG(rr.score)::numeric, 2)
+                     FROM ratings rr
+                     JOIN orders ro ON ro.id = rr.order_id
+                     WHERE rr.ratee_id = o.seller_id
+                       AND rr.rater_id = ro.aggregator_id
+                       AND ro.seller_id = o.seller_id
+                       AND ro.status = 'completed'
+                   ) AS seller_rating,
+                   (
+                     SELECT COUNT(*)::int
+                     FROM ratings rr
+                     JOIN orders ro ON ro.id = rr.order_id
+                     WHERE rr.ratee_id = o.seller_id
+                       AND rr.rater_id = ro.aggregator_id
+                       AND ro.seller_id = o.seller_id
+                       AND ro.status = 'completed'
+                   ) AS seller_rating_count
             FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
             LEFT JOIN aggregator_material_rates r
@@ -638,7 +698,31 @@ router.get('/earnings', verifyUserRole('seller'), async (req, res) => {
     const totals = await query(
       `SELECT COALESCE(SUM(order_totals.order_total), 0) AS total_earned,
               COUNT(order_totals.order_id)::int AS orders_completed,
-              COALESCE(SUM(order_totals.total_weight_kg), 0) AS total_weight_kg
+              COALESCE(SUM(order_totals.total_weight_kg), 0) AS total_weight_kg,
+              COALESCE(
+                (
+                  SELECT ROUND(AVG(r.score)::numeric, 2)
+                  FROM ratings r
+                  JOIN orders ro ON ro.id = r.order_id
+                  WHERE r.ratee_id = $1
+                    AND r.rater_id = ro.aggregator_id
+                    AND ro.seller_id = $1
+                    AND ro.status = 'completed'
+                ),
+                0
+              )::float8 AS avg_rating,
+              COALESCE(
+                (
+                  SELECT COUNT(*)::int
+                  FROM ratings r
+                  JOIN orders ro ON ro.id = r.order_id
+                  WHERE r.ratee_id = $1
+                    AND r.rater_id = ro.aggregator_id
+                    AND ro.seller_id = $1
+                    AND ro.status = 'completed'
+                ),
+                0
+              )::int AS ratings_count
          FROM (
            SELECT o.id AS order_id,
                   COALESCE(
@@ -660,6 +744,8 @@ router.get('/earnings', verifyUserRole('seller'), async (req, res) => {
       total_earned: Number(totals.rows[0]?.total_earned ?? 0),
       orders_completed: Number(totals.rows[0]?.orders_completed ?? 0),
       total_weight_kg: Number(totals.rows[0]?.total_weight_kg ?? 0),
+      avg_rating: Number(totals.rows[0]?.avg_rating ?? 0),
+      ratings_count: Number(totals.rows[0]?.ratings_count ?? 0),
     });
   } catch (e) {
     console.error('GET /api/orders/earnings error:', e);
@@ -968,7 +1054,14 @@ router.get('/:id', async (req, res) => {
                SELECT 1 FROM ratings r
                WHERE r.order_id = o.id
                  AND r.rater_id = o.seller_id
+                 AND r.ratee_id = o.aggregator_id
              ) AS seller_has_rated,
+             EXISTS (
+               SELECT 1 FROM ratings r
+               WHERE r.order_id = o.id
+                 AND r.rater_id = o.aggregator_id
+                 AND r.ratee_id = o.seller_id
+             ) AS aggregator_has_rated,
              (
                SELECT json_agg(h ORDER BY h.created_at ASC)
                FROM order_status_history h
@@ -1134,7 +1227,14 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
                 SELECT 1 FROM ratings r
                 WHERE r.order_id = o.id
                   AND r.rater_id = o.seller_id
+                  AND r.ratee_id = o.aggregator_id
               ) AS seller_has_rated
+              , EXISTS (
+                SELECT 1 FROM ratings r
+                WHERE r.order_id = o.id
+                  AND r.rater_id = o.aggregator_id
+                  AND r.ratee_id = o.seller_id
+              ) AS aggregator_has_rated
        FROM orders o
        LEFT JOIN users u ON u.id = o.seller_id
        LEFT JOIN users agg ON agg.id = o.aggregator_id
@@ -1781,7 +1881,14 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
              SELECT 1 FROM ratings r
              WHERE r.order_id = o.id
                AND r.rater_id = o.seller_id
+               AND r.ratee_id = o.aggregator_id
            ) AS seller_has_rated
+           , EXISTS (
+             SELECT 1 FROM ratings r
+             WHERE r.order_id = o.id
+               AND r.rater_id = o.aggregator_id
+               AND r.ratee_id = o.seller_id
+           ) AS aggregator_has_rated
     FROM orders o
     LEFT JOIN users u ON u.id = o.seller_id
     LEFT JOIN users agg ON agg.id = o.aggregator_id

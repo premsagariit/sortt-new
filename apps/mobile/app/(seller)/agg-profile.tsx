@@ -5,8 +5,8 @@
  * ──────────────────────────────────────────────────────────────────
  */
 import React from 'react';
-import { StyleSheet, View, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { ActivityIndicator, StyleSheet, View, ScrollView } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Star } from 'phosphor-react-native';
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
@@ -15,10 +15,101 @@ import { PrimaryButton } from '../../components/ui/Button';
 import { StatusBar } from 'expo-status-bar';
 import { safeBack } from '../../utils/navigation';
 import { useListingStore } from '../../store/listingStore';
+import { api } from '../../lib/api';
+
+type AggregatorRate = {
+  materialCode: string;
+  ratePerKg: number;
+};
+
+type AggregatorReview = {
+  reviewerName: string;
+  score: number;
+  review: string;
+  createdAt: string;
+};
+
+type AggregatorProfileResponse = {
+  id: string;
+  name: string;
+  aggregatorTypeLabel: string;
+  isOnline: boolean;
+  isVerified: boolean;
+  rating: number;
+  reviewsCount: number;
+  stats: {
+    pickups: number;
+    completionRate: number;
+    avgPickupMinutes: number;
+  };
+  rates: AggregatorRate[];
+  operatingAreas: string[];
+  operatingHoursSummary: string;
+  reviews: AggregatorReview[];
+};
+
+const MATERIAL_LABEL: Record<string, string> = {
+  metal: '⚙️ Metal (Iron)',
+  paper: '📄 Paper',
+  plastic: '🧴 Plastic',
+  ewaste: '💻 E-Waste',
+  fabric: '👗 Fabric',
+  glass: '🍶 Glass',
+};
+
+const formatReviewDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
 export default function AggregatorProfileScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const resetListing = useListingStore((s) => s.resetListing);
+
+  const [profile, setProfile] = React.useState<AggregatorProfileResponse | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      if (!id) {
+        setError('Aggregator not found');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const res = await api.get(`/api/aggregators/${id}/public-profile`);
+        if (!active) return;
+        setProfile(res.data as AggregatorProfileResponse);
+        setError(null);
+      } catch (err: any) {
+        if (!active) return;
+        setError(err?.response?.data?.error ?? err?.message ?? 'Failed to load profile');
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  const displayName = profile?.name ?? 'Aggregator';
+  const avatarInitial = displayName.charAt(0).toUpperCase() || 'A';
+  const heroSubtitle = profile?.aggregatorTypeLabel ?? 'Aggregator';
+  const ratingValue = Number(profile?.rating ?? 0);
+  const ratingStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
 
   return (
     <View style={styles.container}>
@@ -41,41 +132,65 @@ export default function AggregatorProfileScreen() {
         <View style={styles.heroSection}>
           <View style={styles.heroHeader}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>K</Text>
+              <Text style={styles.avatarText}>{avatarInitial}</Text>
             </View>
             <View style={styles.heroInfo}>
-              <Text style={styles.aggName}>Kumar Scrap Co.</Text>
-              <Text style={styles.aggType}>Mobile Aggregator · Since 2021</Text>
+              <Text style={styles.aggName}>{displayName}</Text>
+              <Text style={styles.aggType}>{heroSubtitle}</Text>
               <View style={styles.ratingRow}>
                 <View style={styles.stars}>
-                  <Star size={16} weight="fill" color={colors.amber} />
-                  <Star size={16} weight="fill" color={colors.amber} />
-                  <Star size={16} weight="fill" color={colors.amber} />
-                  <Star size={16} weight="fill" color={colors.amber} />
-                  <Star size={16} weight="fill" color={colors.amber} />
+                  {[0, 1, 2, 3, 4].map((index) => (
+                    <Star
+                      key={`hero-star-${index}`}
+                      size={16}
+                      weight={index < ratingStars ? 'fill' : 'regular'}
+                      color={index < ratingStars ? colors.amber : colors.muted}
+                    />
+                  ))}
                 </View>
-                <Numeric style={styles.ratingText}>4.8 · 142 pickups</Numeric>
+                <Numeric style={styles.ratingText}>
+                  {ratingValue.toFixed(1)} · {profile?.stats?.pickups ?? 0} pickups
+                </Numeric>
               </View>
             </View>
             <View style={styles.kycBadge}>
-              <Text style={styles.kycText}>✓ Verified</Text>
+              <Text style={styles.kycText}>{profile?.isVerified ? '✓ Verified' : 'Pending'}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.pageContent}>
+          {isLoading && (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={colors.navy} />
+              <Text variant="caption" color={colors.muted}>Loading aggregator profile...</Text>
+            </View>
+          )}
+
+          {!isLoading && error && (
+            <View style={styles.errorWrap}>
+              <Text variant="caption" color={colors.red}>{error}</Text>
+            </View>
+          )}
+
+          {!isLoading && !error && profile && (
+            <>
           {/* Stats Strip */}
           <View style={styles.statsStrip}>
             <View style={styles.statCard}>
-              <Numeric style={styles.statValue}>142</Numeric>
+              <Numeric style={styles.statValue}>{profile.stats.pickups}</Numeric>
               <Text variant="caption" color={colors.muted}>Pickups</Text>
             </View>
             <View style={styles.statCard}>
-              <Numeric style={[styles.statValue, { color: colors.teal }]}>98%</Numeric>
+              <Numeric style={[styles.statValue, { color: colors.teal }]}>
+                {Math.round(profile.stats.completionRate)}%
+              </Numeric>
               <Text variant="caption" color={colors.muted}>Completion</Text>
             </View>
             <View style={styles.statCard}>
-              <Numeric style={[styles.statValue, { fontSize: 16 }]}>22 min</Numeric>
+              <Numeric style={[styles.statValue, { fontSize: 16 }]}> 
+                {Math.round(profile.stats.avgPickupMinutes || 0)} min
+              </Numeric>
               <Text variant="caption" color={colors.muted}>Avg. pickup</Text>
             </View>
           </View>
@@ -88,22 +203,22 @@ export default function AggregatorProfileScreen() {
                 <Text variant="caption" color={colors.muted} style={styles.thLeft}>Material</Text>
                 <Text variant="caption" color={colors.muted} style={styles.thRight}>Rate/kg</Text>
               </View>
-              <View style={styles.tableRow}>
-                <Text variant="body">⚙️ Metal (Iron)</Text>
-                <Numeric style={styles.rateValue}>₹29</Numeric>
-              </View>
-              <View style={styles.tableRow}>
-                <Text variant="body">📄 Paper</Text>
-                <Numeric style={styles.rateValue}>₹12</Numeric>
-              </View>
-              <View style={styles.tableRow}>
-                <Text variant="body">🧴 Plastic</Text>
-                <Numeric style={styles.rateValue}>₹8</Numeric>
-              </View>
-              <View style={[styles.tableRow, styles.tableRowLast]}>
-                <Text variant="body">👗 Fabric</Text>
-                <Numeric style={styles.rateValue}>₹6</Numeric>
-              </View>
+              {profile.rates.length === 0 ? (
+                <View style={[styles.tableRow, styles.tableRowLast]}>
+                  <Text variant="caption" color={colors.muted}>No rates configured yet.</Text>
+                </View>
+              ) : (
+                profile.rates.map((rate, index) => {
+                  const isLast = index === profile.rates.length - 1;
+                  const label = MATERIAL_LABEL[rate.materialCode] ?? rate.materialCode;
+                  return (
+                    <View key={`${rate.materialCode}-${index}`} style={[styles.tableRow, isLast && styles.tableRowLast]}>
+                      <Text variant="body">{label}</Text>
+                      <Numeric style={styles.rateValue}>₹{Math.round(rate.ratePerKg)}</Numeric>
+                    </View>
+                  );
+                })
+              )}
             </View>
           </View>
 
@@ -113,14 +228,18 @@ export default function AggregatorProfileScreen() {
             <View style={styles.listRow}>
               <Text variant="body" style={styles.iconEmoji}>📍</Text>
               <View style={styles.listContent}>
-                <Text variant="body" style={styles.listTitle}>Banjara Hills, Jubilee Hills, Panjagutta</Text>
+                <Text variant="body" style={styles.listTitle}>
+                  {profile.operatingAreas.length > 0
+                    ? profile.operatingAreas.join(', ')
+                    : 'Not configured'}
+                </Text>
                 <Text variant="caption" color={colors.muted}>Operating area</Text>
               </View>
             </View>
             <View style={[styles.listRow, styles.tableRowLast]}>
               <Text variant="body" style={styles.iconEmoji}>🕐</Text>
               <View style={styles.listContent}>
-                <Text variant="body" style={styles.listTitle}>Mon–Sat · 8 AM – 7 PM</Text>
+                <Text variant="body" style={styles.listTitle}>{profile.operatingHoursSummary || 'Not set'}</Text>
                 <Text variant="caption" color={colors.muted}>Operating hours</Text>
               </View>
             </View>
@@ -130,42 +249,44 @@ export default function AggregatorProfileScreen() {
           <View style={styles.reviewsSection}>
             <Text variant="body" style={styles.cardTitle}>Recent Reviews</Text>
 
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewerInfo}>
-                  <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>R</Text></View>
-                  <Text variant="body" style={styles.reviewerName}>Rahul S.</Text>
-                </View>
-                <View style={styles.stars}>
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                </View>
+            {profile.reviews.length === 0 ? (
+              <View style={styles.reviewCard}>
+                <Text variant="caption" style={styles.reviewText}>No reviews yet.</Text>
               </View>
-              <Text variant="caption" style={styles.reviewText}>Quick pickup, fair weighing. Very professional.</Text>
-              <Numeric style={styles.reviewDate}>Feb 24, 2026</Numeric>
-            </View>
+            ) : (
+              profile.reviews.map((review, index) => {
+                const reviewerInitial = review.reviewerName.charAt(0).toUpperCase() || 'U';
+                const filledStars = Math.max(0, Math.min(5, Math.round(review.score)));
 
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewerInfo}>
-                  <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>P</Text></View>
-                  <Text variant="body" style={styles.reviewerName}>Priya K.</Text>
-                </View>
-                <View style={styles.stars}>
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="fill" color={colors.amber} />
-                  <Star size={14} weight="regular" color={colors.muted} />
-                </View>
-              </View>
-              <Text variant="caption" style={styles.reviewText}>Good experience. Arrived 10 mins early.</Text>
-              <Numeric style={styles.reviewDate}>Feb 18, 2026</Numeric>
-            </View>
+                return (
+                  <View key={`review-${index}`} style={styles.reviewCard}>
+                    <View style={styles.reviewHeader}>
+                      <View style={styles.reviewerInfo}>
+                        <View style={styles.reviewerAvatar}><Text style={styles.reviewerInit}>{reviewerInitial}</Text></View>
+                        <Text variant="body" style={styles.reviewerName}>{review.reviewerName}</Text>
+                      </View>
+                      <View style={styles.stars}>
+                        {[0, 1, 2, 3, 4].map((starIndex) => (
+                          <Star
+                            key={`review-${index}-star-${starIndex}`}
+                            size={14}
+                            weight={starIndex < filledStars ? 'fill' : 'regular'}
+                            color={starIndex < filledStars ? colors.amber : colors.muted}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                    <Text variant="caption" style={styles.reviewText}>
+                      {review.review || 'No written feedback.'}
+                    </Text>
+                    <Numeric style={styles.reviewDate}>{formatReviewDate(review.createdAt)}</Numeric>
+                  </View>
+                );
+              })
+            )}
           </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -402,5 +523,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingBottom: 32,
-  }
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  errorWrap: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.red,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
 });

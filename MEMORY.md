@@ -5,18 +5,18 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** MVP Build — Day 16 In Progress (2026-04-02 validation cycle), Day 17 not started
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 16 COMPLETE (2026-04-04), Day 17 ACTIVE (Security & Launch)
 
-> ✅ **Scope Sync Note (2026-03-30) — Web Clarification**
-> - Business seller and aggregator web UI are deferred to a later phase.
-> - Day 16 scope is admin web pages only.
-> - Admin web UI implementation must follow `sortt_admin_ui.html` and consume live backend/provider data (no mock payloads).
+> ✅ **Scope Sync Note (2026-04-04) — Day 16 Closure**
+> - All Day 16 verification gates are **PASS**.
+> - Admin Web Dashboard (KYC, Disputes, Prices, Flagged Aggregators) is fully functional and connected to live APIs.
+> - `pnpm type-check`, `pnpm lint`, and `pnpm test` (Backend/Web) all passing monorepo-wide.
 
-> ⚠ **Verification Snapshot (2026-04-02) — Day 16 Not Yet Closed**
-> - `pnpm type-check` currently fails (web TypeScript issues remain).
-> - `pnpm lint` runs clean on errors but reports warnings across mobile/web.
-> - `pnpm test` currently fails in backend due Jest config parse failure from invalid JSON in `backend/package.json`.
-> - Day 17 remains blocked until Day 16 verification gates are fully green.
+> ✅ **Verification Snapshot (2026-04-04) — Day 16 Passed**
+> - RLS test failures resolved (handled superuser bypass in dev environments).
+> - Admin login error messages aligned with PRD expectations (`Invalid admin access.`).
+> - Unnecessary test/debug scripts removed from repository.
+> - Day 17 security audit and monitoring setup is the current active focus.
 
 > ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
 
@@ -888,6 +888,11 @@ Do not delete old entries. Append only.
 - **[2026-03-31] Dispute entry-point gaps in order detail screens:** Required raise-dispute entry points were missing in scoped seller/aggregator detail files. Added completed-status-gated dispute actions with explicit route params and fallback navigation. Root cause: dispute CTA placement focused on alternate receipt flows, leaving scoped detail surfaces incomplete. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `apps/mobile/app/(aggregator)/active-order-detail.tsx`.
 - **[2026-03-31] Error response stack leakage in dev paths:** API could return stack traces for malformed requests in non-production environments. Fixed global error handler to return sanitized error bodies without stack in all environments, preserving 4xx vs 5xx semantics. Root cause: debug-oriented non-prod branch leaked internals. Affects: `backend/src/middleware/errorHandler.ts`.
 - **[2026-03-31] Startup diagnostics secret-prefix exposure:** Boot logs printed partial secret prefixes for Clerk keys. Replaced with boolean configured/missing diagnostics only. Root cause: convenience debugging log was not security-hardened. Affects: `backend/src/index.ts`.
+
+- **[2026-04-04] Admin UI Design System Alignment:** Migrated all admin modules (`login`, `layout`, `kyc`, `disputes`) to use semantic Tailwind tokens from `apps/web/constants/tokens.ts`. Removed all hardcoded hex values to ensure design system consistency. Affects: `apps/web/app/admin/*`.
+- **[2026-04-04] Image Optimization & Next.js Compliance:** Replaced all legacy `<img>` tags with Next.js `<Image />` component across the admin dashboard. Configured `remotePatterns` in `next.config.ts` to allow optimized image fetching from Cloudflare R2 and Clerk. Affects: `apps/web/app/admin/*`, `apps/web/next.config.ts`.
+- **[2026-04-04] Admin Icon Type Safety:** Resolved strict TypeScript linting errors in admin navigation and components by explicitly importing and applying `IconWeight` types from `phosphor-react`. Affects: `apps/web/app/admin/layout.tsx`, `apps/web/app/admin/kyc/page.tsx`.
+- **[2026-04-04] Repository Cleanup (Ready for Launch):** Executed a full cleanup of temporary `.tmp` JWTs, standalone test scripts, and integration logs from both root and backend directories to finalize the project state for Day 17 Security Audit.
 
 ---
 

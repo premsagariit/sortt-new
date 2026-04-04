@@ -14,11 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaretRight } from 'phosphor-react-native';
 
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
+import { useI18n } from '../../hooks/useI18n';
 import { Text } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { useAuthStore } from '../../store/authStore';
+import { useLanguageStore } from '../../store/languageStore';
 
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
@@ -68,6 +70,8 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 }
 
 export default function AggregatorSettingsScreen() {
+    const { getLanguageName } = useI18n();
+    const language = useLanguageStore((state) => state.language);
     const router = useRouter();
     const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus, fetchAggregatorProfile, profile } = useAggregatorStore();
     const accountName = useAuthStore((s) => s.name);
@@ -174,7 +178,7 @@ export default function AggregatorSettingsScreen() {
                 <View style={styles.card}>
                     <SettingLink
                         title="Language"
-                        subtitle="English"
+                        subtitle={getLanguageName(language)}
                         onPress={() => router.push('/(shared)/language' as any)}
                     />
                     <SettingLink

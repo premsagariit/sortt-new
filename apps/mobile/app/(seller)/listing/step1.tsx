@@ -1,21 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Camera, CheckCircle, ArrowRight, WarningCircle, Sparkle, Warning } from 'phosphor-react-native';
+import { Camera, CheckCircle, ArrowRight, WarningCircle, Sparkle, Plus, Minus, PencilSimple } from 'phosphor-react-native';
 import { useAuth } from '@clerk/clerk-expo';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
-import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
+import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
+import { useLanguageStore } from '../../../store/languageStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { MaterialCard } from '../../../components/ui/MaterialCard';
 import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
 import { api } from '../../../lib/api';
-import { MATERIAL_LABELS, MaterialCode } from '../../../components/ui/MaterialChip';
+import { MaterialCode } from '../../../components/ui/MaterialChip';
 
 export default function Step1Screen() {
   const { fresh } = useLocalSearchParams<{ fresh?: string }>();
@@ -23,6 +24,7 @@ export default function Step1Screen() {
   const [analysisError, setAnalysisError] = useState<'manual' | null>(null);
 
   const { getToken } = useAuth();
+  const language = useLanguageStore((state) => state.language);
   const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
 
   React.useEffect(() => {
@@ -42,8 +44,13 @@ export default function Step1Screen() {
         name: 'scrap.jpg',
       } as any);
 
-      const authToken = await getToken();
-      const url = `${api.defaults.baseURL}/api/scrap/analyze`;
+      let authToken: string | null = null;
+      try {
+        authToken = await getToken({ skipCache: true } as any);
+      } catch {
+        authToken = await getToken();
+      }
+      const url = `${api.defaults.baseURL}/api/scrap/analyze?language=${encodeURIComponent(language)}`;
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -163,20 +170,53 @@ export default function Step1Screen() {
               </Pressable>
             ) : (
               <View style={styles.photoBoxFilled}>
-                <ImageCarouselViewer images={photoUris} height={180} autoScrollIntervalMs={4000} />
-                <View style={styles.photoHeaderRow}>
-                  <View style={styles.photoStatus}>
-                    <CheckCircle size={14} color={colors.teal} weight="fill" />
-                    <Text variant="label" color={colors.teal}>{photoUris.length} photo{photoUris.length > 1 ? 's' : ''} added</Text>
-                  </View>
-                  <View style={styles.photoActionsRow}>
-                    <View style={styles.photoActionBtnWrap}>
-                      <SecondaryButton label="+" onPress={handleAddPhoto} />
+                <View style={styles.previewShell}>
+                  <ImageCarouselViewer images={photoUris} height={182} autoScrollIntervalMs={4000} />
+
+                  <View style={styles.previewTopRow}>
+                    <View style={styles.photoStatus}>
+                      <CheckCircle size={14} color={colors.teal} weight="fill" />
+                      <Text variant="label" color={colors.teal}>{photoUris.length} photo{photoUris.length > 1 ? 's' : ''} added</Text>
                     </View>
-                    <View style={styles.photoActionBtnWrap}>
-                      <SecondaryButton label="-" onPress={handleRemoveLast} />
+
+                    <Pressable style={styles.editBtn} onPress={handleAddPhoto}>
+                      <PencilSimple size={14} color={colors.navy} weight="bold" />
+                      <Text variant="caption" color={colors.navy} style={styles.editBtnText}>Edit</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.previewBottomRow}>
+                    <View style={styles.previewCountPill}>
+                      <Text variant="caption" color={colors.surface}>
+                        {photoUris.length} photo{photoUris.length > 1 ? 's' : ''}
+                      </Text>
                     </View>
                   </View>
+                </View>
+
+                <View style={styles.captureTray}>
+                  <View style={styles.thumbnailWrap}>
+                    <Image
+                      source={{ uri: photoUris[photoUris.length - 1] }}
+                      style={styles.thumbnailImage}
+                    />
+                  </View>
+
+                  <Pressable style={styles.trayActionBtn} onPress={handleAddPhoto}>
+                    <Plus size={18} color={colors.navy} weight="bold" />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.trayActionBtn}
+                    onPress={handleRemoveLast}
+                    disabled={photoUris.length === 0}
+                  >
+                    <Minus size={18} color={colors.navy} weight="bold" />
+                  </Pressable>
+
+                  <Text variant="caption" color={colors.muted} style={styles.captureTrayMeta}>
+                    {photoUris.length} photos
+                  </Text>
                 </View>
 
                 {/* AI Box */}
@@ -248,12 +288,104 @@ const styles = StyleSheet.create({
     padding: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface,
   },
   photoBoxFilled: {
-    borderWidth: 1.5, borderColor: colors.teal, borderRadius: radius.card, padding: spacing.md, backgroundColor: colors.surface, gap: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.teal,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    gap: spacing.md,
   },
-  photoHeaderRow: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.sm },
-  photoStatus: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colorExtended.tealLight, borderRadius: 8 },
-  photoActionsRow: { flexDirection: 'row', width: '100%', gap: spacing.xs },
-  photoActionBtnWrap: { flex: 1 },
+  previewShell: {
+    borderRadius: radius.card,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.navy,
+    position: 'relative',
+  },
+  previewTopRow: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewBottomRow: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  previewCountPill: {
+    backgroundColor: 'rgba(16, 28, 50, 0.84)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  photoStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: colorExtended.tealLight,
+    borderRadius: 8,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  editBtnText: {
+    fontFamily: 'DMSans-SemiBold',
+  },
+  captureTray: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colorExtended.surface2,
+    borderRadius: radius.btn,
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  thumbnailWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.teal,
+    backgroundColor: colors.navy,
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  trayActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  captureTrayMeta: {
+    marginLeft: 'auto',
+    fontFamily: 'DMMono-Medium',
+  },
   permissionBanner: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.amber, borderRadius: radius.btn, padding: spacing.sm, marginBottom: spacing.sm, gap: spacing.xs,
   },

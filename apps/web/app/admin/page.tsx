@@ -1,89 +1,196 @@
+'use client';
+
 /**
  * app/admin/page.tsx
  * ─────────────────────────────────────────────────────────────────
- * Admin Dashboard - Global KPIs and Marketplace Health.
+ * Admin Dashboard — Global KPIs from live backend data.
+ * Fetches GET /api/admin/stats on mount.
+ * Five exact counters (WARN 1): no GMV.
  * ─────────────────────────────────────────────────────────────────
  */
 
-import React from 'react';
-import { Users, Buildings, Package, CurrencyInr } from 'phosphor-react';
+import { useEffect, useState } from 'react';
+import { adminApi, type AdminStats } from '../../lib/adminApi';
+import {
+  CheckCircle,
+  ShieldCheck,
+  Warning,
+  Package,
+  Buildings,
+} from 'phosphor-react';
 
-const UsersIcon = Users as any;
-const BuildingsIcon = Buildings as any;
-const PackageIcon = Package as any;
-const CurrencyInrIcon = CurrencyInr as any;
+type IconComponent = React.ComponentType<{ size?: number | string }>;
+
+const CheckCircleIcon: IconComponent = CheckCircle;
+const ShieldCheckIcon: IconComponent = ShieldCheck;
+const WarningIcon: IconComponent = Warning;
+const PackageIcon: IconComponent = Package;
+const BuildingsIcon: IconComponent = Buildings;
 
 export default function AdminDashboard() {
-    return (
-        <div className="space-y-token-xl">
-            {/* Global Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-token-lg">
-                <GlobalStatCard title="Total GMV" value="₹12.4M" target="₹10M" color="text-teal" icon={<CurrencyInrIcon size={24} />} />
-                <GlobalStatCard title="Active Sellers" value="1,842" target="1,500" color="text-navy" icon={<UsersIcon size={24} />} />
-                <GlobalStatCard title="Active Aggregators" value="84" target="100" color="text-amber" icon={<BuildingsIcon size={24} />} />
-                <GlobalStatCard title="Orders (MTD)" value="4,210" target="5,000" color="text-slate" icon={<PackageIcon size={24} />} />
-            </div>
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-token-xl">
-                {/* Marketplace Health */}
-                <div className="bg-surface border border-border rounded-card p-token-xl">
-                    <h3 className="text-navy font-bold text-lg mb-token-lg">Marketplace Health</h3>
-                    <div className="space-y-token-xl">
-                        <HealthMetric label="Order Fulfillment Rate" value="94.2%" status="Excelling" />
-                        <HealthMetric label="Avg. Pickup Time" value="28 min" status="Optimal" />
-                        <HealthMetric label="Payment Success Rate" value="99.8%" status="Excelling" />
-                        <HealthMetric label="Dispute Rate" value="0.4%" status="Healthy" />
-                    </div>
-                </div>
+  useEffect(() => {
+    adminApi.getStats()
+      .then(setStats)
+      .catch((err) => setError(err.message ?? 'Failed to load stats'))
+      .finally(() => setLoading(false));
+  }, []);
 
-                {/* Flagged Activities */}
-                <div className="bg-surface border border-border rounded-card p-token-xl">
-                    <h3 className="text-navy font-bold text-lg mb-token-lg text-red">Critical Alerts</h3>
-                    <div className="space-y-token-md">
-                        <AlertRow title="Unusual Weight Variance" detail="Aggregator SM-12 highlighted 14% delta on ORD-2901" type="Warning" />
-                        <AlertRow title="Payment Gateway Latency" detail="Razorpay reporting 4s delay in North region" type="Error" />
-                        <AlertRow title="New Aggregator Onboarding" detail="Hitech Metals awaiting KYC verification" type="Normal" />
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-[22px] font-bold text-navy tracking-tight">Platform Overview</h2>
+        <p className="text-[13px] text-muted mt-0.5">Live counters — no page refresh needed</p>
+      </div>
+
+      {error && (
+        <div className="px-4 py-3 bg-red/5 border border-red/20 rounded-xl text-[13px] text-red font-medium">
+          {error}
         </div>
-    );
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          title="Pending KYC"
+          value={stats?.total_pending_kyc}
+          loading={loading}
+          color="text-amber"
+          icon={<ShieldCheckIcon size={22} />}
+          href="/admin/kyc"
+        />
+        <StatCard
+          title="Open Disputes"
+          value={stats?.total_open_disputes}
+          loading={loading}
+          color="text-red"
+          icon={<WarningIcon size={22} />}
+          href="/admin/disputes"
+        />
+        <StatCard
+          title="Orders Today"
+          value={stats?.total_orders_today}
+          loading={loading}
+          color="text-navy"
+          icon={<PackageIcon size={22} />}
+        />
+        <StatCard
+          title="Completed Orders"
+          value={stats?.total_completed_orders}
+          loading={loading}
+          color="text-teal"
+          icon={<CheckCircleIcon size={22} />}
+        />
+        <StatCard
+          title="Active Aggregators"
+          value={stats?.total_active_aggregators}
+          loading={loading}
+          color="text-navySoft"
+          icon={<BuildingsIcon size={22} />}
+          href="/admin/flagged"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <QuickActionCard
+          title="KYC Queue"
+          description="Review pending aggregator verification documents"
+          href="/admin/kyc"
+          count={stats?.total_pending_kyc}
+          urgent={!!stats && stats.total_pending_kyc > 0}
+        />
+        <QuickActionCard
+          title="Open Disputes"
+          description="Resolve disputes within 72-hour SLA"
+          href="/admin/disputes"
+          count={stats?.total_open_disputes}
+          urgent={!!stats && stats.total_open_disputes > 0}
+        />
+        <QuickActionCard
+          title="Price Override"
+          description="Set manual scrap rates for any material"
+          href="/admin/prices"
+        />
+        <QuickActionCard
+          title="Flagged Aggregators"
+          description="Aggregators with avg rating below 3.0 after 10+ orders"
+          href="/admin/flagged"
+        />
+      </div>
+    </div>
+  );
 }
 
-function GlobalStatCard({ title, value, target, color, icon }: any) {
-    return (
-        <div className="bg-surface border border-border rounded-card p-token-md shadow-sm overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-4 opacity-10">{icon}</div>
-            <span className="text-[10px] font-bold text-muted uppercase tracking-widest">{title}</span>
-            <div className={`text-2xl font-bold mt-1 ${color} font-mono`}>{value}</div>
-            <div className="flex items-center gap-1.5 mt-2">
-                <div className="w-full h-1 bg-bg rounded-full overflow-hidden">
-                    <div className={`h-full ${color.replace('text', 'bg')}`} style={{ width: '70%' }} />
-                </div>
-                <span className="text-[10px] text-muted font-bold whitespace-nowrap">Target: {target}</span>
-            </div>
+function StatCard({
+  title,
+  value,
+  loading,
+  color,
+  icon,
+  href,
+}: {
+  title: string;
+  value?: number;
+  loading: boolean;
+  color: string;
+  icon: React.ReactNode;
+  href?: string;
+}) {
+  const content = (
+    <div className="bg-white border border-border rounded-xl p-4 shadow-sm relative overflow-hidden hover:shadow-md transition-shadow">
+      <div className="absolute top-3 right-3 opacity-10">{icon}</div>
+      <div className="text-[11px] font-bold text-muted uppercase tracking-widest mb-1">
+        {title}
+      </div>
+      {loading ? (
+        <div className="h-8 w-16 bg-bg rounded animate-pulse mt-1" />
+      ) : (
+        <div className={`text-[28px] font-bold font-mono leading-none ${color}`}>
+          {value ?? '—'}
         </div>
-    );
+      )}
+    </div>
+  );
+
+  return href ? <a href={href} className="block">{content}</a> : content;
 }
 
-function HealthMetric({ label, value, status }: any) {
-    return (
-        <div className="flex items-center justify-between">
-            <div>
-                <div className="text-sm font-bold text-navy">{label}</div>
-                <div className="text-[10px] text-teal font-bold uppercase tracking-wider">{status}</div>
-            </div>
-            <div className="text-xl font-bold text-navy font-mono">{value}</div>
+function QuickActionCard({
+  title,
+  description,
+  href,
+  count,
+  urgent,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  count?: number;
+  urgent?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      className={`block bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer ${
+        urgent ? 'border-amber/20' : 'border-border'
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-[14px] font-bold text-navy">{title}</h3>
+          <p className="text-[12px] text-muted mt-0.5">{description}</p>
         </div>
-    );
-}
-
-function AlertRow({ title, detail, type }: any) {
-    const borderColor = type === 'Error' ? 'border-red-500' : type === 'Warning' ? 'border-amber-500' : 'border-border';
-    return (
-        <div className={`p-token-md bg-bg rounded-card border-l-4 ${borderColor}`}>
-            <div className="text-xs font-bold text-navy">{title}</div>
-            <div className="text-[10px] text-muted mt-0.5">{detail}</div>
-        </div>
-    );
+        {count !== undefined && count > 0 && (
+          <span className="ml-3 flex-shrink-0 bg-red text-white text-[11px] font-bold px-2 py-0.5 rounded-full font-mono">
+            {count}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 text-[12px] text-navy font-semibold flex items-center gap-1">
+        Open →
+      </div>
+    </a>
+  );
 }

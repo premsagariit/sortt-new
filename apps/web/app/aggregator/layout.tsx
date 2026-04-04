@@ -9,13 +9,15 @@ import React from 'react';
 import { House, Package, ChartLine, Users, Gear, SignOut, Bell } from 'phosphor-react';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 
-const HouseIcon = House as any;
-const PackageIcon = Package as any;
-const ChartLineIcon = ChartLine as any;
-const UsersIcon = Users as any;
-const GearIcon = Gear as any;
-const SignOutIcon = SignOut as any;
-const BellIcon = Bell as any;
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+
+const HouseIcon = House as IconComponent;
+const PackageIcon = Package as IconComponent;
+const ChartLineIcon = ChartLine as IconComponent;
+const UsersIcon = Users as IconComponent;
+const GearIcon = Gear as IconComponent;
+const SignOutIcon = SignOut as IconComponent;
+const BellIcon = Bell as IconComponent;
 
 export default function AggregatorLayout({
     children,
@@ -71,7 +73,6 @@ export default function AggregatorLayout({
 }
 
 function NavItem({ icon, label, active = false, danger = false }: { icon: React.ReactNode, label: string, active?: boolean, danger?: boolean }) {
-    const IconComponent = icon as any;
     return (
         <button className={`
       w-full flex items-center gap-3 px-3 py-2.5 rounded-btn text-sm font-medium transition-all

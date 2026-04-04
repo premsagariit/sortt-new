@@ -7,7 +7,9 @@ import { MapPin, ClipboardText, CurrencyInr, Gear, Receipt, Bell, Globe, Questio
 import { Text, Numeric } from '../../components/ui/Typography';
 import { Avatar } from '../../components/ui/Avatar';
 import { PrimaryButton, SecondaryButton } from '../../components/ui/Button';
+import { useI18n } from '../../hooks/useI18n';
 import { useAuthStore } from '../../store/authStore';
+import { useLanguageStore } from '../../store/languageStore';
 import { useOrderStore } from '../../store/orderStore';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { useNotificationStore } from '../../store/notificationStore';
@@ -50,12 +52,15 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast, badge }: Info
 import { useFocusEffect } from 'expo-router';
 
 export default function SellerProfileScreen() {
+  const { getLanguageName } = useI18n();
+  const language = useLanguageStore((state) => state.language);
   const router = useRouter();
   const authStore = useAuthStore();
   const fetchMe = useAuthStore((s) => s.fetchMe);
   const orders = useOrderStore((s) => s.orders);
   const fetchOrders = useOrderStore((s) => s.fetchOrders);
   const [lifetimeEarnings, setLifetimeEarnings] = useState<number | null>(null);
+  const [sellerAvgRating, setSellerAvgRating] = useState<number>(0);
   
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [heroHeight, setHeroHeight] = useState(300);
@@ -70,9 +75,13 @@ export default function SellerProfileScreen() {
       void (async () => {
         try {
           const res = await api.get('/api/orders/earnings');
-          setLifetimeEarnings(Number(res.data?.total_earned ?? 0));
+          const fetchedEarnings = Number(res.data?.total_earned ?? 0);
+          const fetchedAvgRating = Number(res.data?.avg_rating ?? 0);
+          setLifetimeEarnings(Number.isFinite(fetchedEarnings) ? fetchedEarnings : 0);
+          setSellerAvgRating(Number.isFinite(fetchedAvgRating) && fetchedAvgRating > 0 ? fetchedAvgRating : 0);
         } catch {
           setLifetimeEarnings(null);
+          setSellerAvgRating(0);
         }
       })();
     }, [fetchMe, fetchOrders])
@@ -83,6 +92,7 @@ export default function SellerProfileScreen() {
   // Computed stats from real store data
   const totalPickups = orders.filter(o => o.status === 'completed').length;
   const totalEarned = lifetimeEarnings ?? 0;
+  const ratingLabel = sellerAvgRating > 0 ? sellerAvgRating.toFixed(1) : '0.0';
 
   const liveName = authStore.name || 'Sortt User';
   const liveLocation = authStore.locality && authStore.city 
@@ -180,6 +190,14 @@ export default function SellerProfileScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
+                <Text variant="caption" style={styles.statLabelHero}>Rating</Text>
+                <View style={styles.ratingBox}>
+                  <Star size={16} color="#FFD700" weight="fill" />
+                  <Numeric size={20} color={colors.surface}>{ratingLabel}</Numeric>
+                </View>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Total Orders</Text>
                 <Numeric size={20} color={colors.surface}>
                   {totalPickups || 0}
@@ -247,7 +265,7 @@ export default function SellerProfileScreen() {
             onPress={() => router.push('/(shared)/notifications')}
           />
           <InfoRow
-            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle="English"
+            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <InfoRow
@@ -389,6 +407,11 @@ const styles = StyleSheet.create({
   statLabelHero: {
     color: 'rgba(255,255,255,0.6)',
     marginBottom: 4,
+  },
+  ratingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   scrollContent: {
     paddingBottom: spacing.xxl,

@@ -21,6 +21,7 @@
     },
     "android": {
       "package": "com.sagar.sortt",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1C2E4A"

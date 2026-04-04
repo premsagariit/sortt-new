@@ -48,6 +48,39 @@ const calculateDistanceKm = (
     return Number((earthRadiusKm * c).toFixed(2));
 };
 
+const normalizeText = (value: unknown): string =>
+    String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const formatDistanceLabel = (distanceKm: number | null, isAreaMatch: boolean): string => {
+    if (distanceKm != null && Number.isFinite(distanceKm)) {
+        return `${distanceKm.toFixed(1)} km`;
+    }
+    return isAreaMatch ? 'Nearby' : 'City-wide';
+};
+
+const formatOperatingHoursSummary = (rawHours: unknown): string => {
+    const schedule = parseOperatingHoursSchedule(rawHours);
+    if (!schedule.length) return 'Not set';
+
+    const openDays = schedule.filter((entry) => Boolean(entry?.isOpen));
+    if (!openDays.length) return 'Closed';
+
+    const dayNames = openDays.map((entry) => String(entry.day || ''));
+    const hasMonSat = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        .every((day) => dayNames.includes(day));
+    const hasSunday = dayNames.includes('Sunday');
+
+    const dayLabel =
+        openDays.length === 7
+            ? 'Daily'
+            : (hasMonSat && !hasSunday)
+                ? 'Mon-Sat'
+                : `${dayNames[0].slice(0, 3)}-${dayNames[dayNames.length - 1].slice(0, 3)}`;
+
+    const firstRange = `${openDays[0].start} - ${openDays[0].end}`;
+    return `${dayLabel} · ${firstRange}`;
+};
+
 // Multer memory storage configuration
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -62,10 +95,244 @@ const upload = multer({
     }
 });
 
+const kycUploadFields = upload.fields([
+    { name: 'aadhaar_front', maxCount: 1 },
+    { name: 'aadhaar_back', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 },
+    { name: 'shop_photo', maxCount: 1 },
+    { name: 'vehicle_photo', maxCount: 1 }
+]);
+
+const handleKycUpload = (req: Request, res: Response, next: any) => {
+    kycUploadFields(req, res, (err: any) => {
+        if (!err) return next();
+
+        if (err?.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: 'Photo is too large (max 5MB).' });
+        }
+
+        if (err?.message === 'Invalid file type') {
+            return res.status(400).json({ error: 'Invalid file type. Use JPEG, PNG, or HEIC.' });
+        }
+
+        if (err?.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ error: `Unexpected file field: ${err?.field || 'unknown'}` });
+        }
+
+        console.error('KYC Multer Error:', err);
+        return res.status(400).json({ error: 'Invalid KYC upload payload.' });
+    });
+};
+
+// Seller browse list of aggregators in seller city, sorted online-nearest first.
+router.get('/browse', verifyRole('seller'), async (req: Request, res: Response) => {
+    const sellerId = (req as any).user.id;
+
+    try {
+        const sellerCtxRes = await query(
+            `SELECT sp.city_code AS profile_city_code,
+                    sp.locality AS profile_locality,
+                    sa.city_code AS address_city_code,
+                    sa.pickup_locality AS address_locality,
+                    sa.latitude::float8 AS latitude,
+                    sa.longitude::float8 AS longitude
+               FROM users u
+               LEFT JOIN seller_profiles sp ON sp.user_id = u.id
+               LEFT JOIN LATERAL (
+                   SELECT city_code, pickup_locality, latitude, longitude
+                     FROM seller_addresses
+                    WHERE seller_id = u.id
+                    ORDER BY is_default DESC, created_at DESC
+                    LIMIT 1
+               ) sa ON true
+              WHERE u.id = $1`,
+            [sellerId]
+        );
+
+        const sellerCtx = sellerCtxRes.rows[0] ?? {};
+        const cityCode = String(
+            sellerCtx.address_city_code ?? sellerCtx.profile_city_code ?? req.user?.city_code ?? ''
+        ).trim();
+        const sellerLocality = String(
+            sellerCtx.address_locality ?? sellerCtx.profile_locality ?? req.user?.locality ?? ''
+        ).trim();
+        const sellerLat = toNumberOrNull(sellerCtx.latitude);
+        const sellerLng = toNumberOrNull(sellerCtx.longitude);
+
+        if (!cityCode) {
+            return res.status(400).json({ error: 'seller_city_not_set' });
+        }
+
+        const browseBaseSelect = `
+            SELECT u.id,
+                   COALESCE(NULLIF(a.business_name, ''), NULLIF(u.name, ''), 'Aggregator') AS display_name,
+                   a.business_name,
+                   a.operating_area,
+                   a.operating_hours,
+                   COALESCE(a.kyc_status, 'pending') AS kyc_status,
+                   a.created_at,
+                   COALESCE(av.is_online, false) AS is_online,
+                   av.last_ping_at,
+                   COALESCE(rate_stats.material_codes, '[]'::json) AS material_codes,
+                   rate_stats.best_rate_material,
+                   rate_stats.best_rate,
+                   COALESCE(rating_stats.avg_rating, 0)::float8 AS avg_rating,
+                   COALESCE(rating_stats.total_reviews, 0)::int AS total_reviews,
+                   COALESCE(order_stats.completed_pickups, 0)::int AS completed_pickups,
+                   COALESCE(order_stats.completion_rate, 0)::float8 AS completion_rate,
+                   __REP_LAT__,
+                   __REP_LNG__
+              FROM users u
+              JOIN aggregator_profiles a ON a.user_id = u.id
+              LEFT JOIN aggregator_availability av ON av.user_id = u.id
+              LEFT JOIN LATERAL (
+                  SELECT COALESCE(
+                             json_agg(DISTINCT r.material_code) FILTER (WHERE r.material_code IS NOT NULL),
+                             '[]'::json
+                         ) AS material_codes,
+                         (array_agg(r.material_code ORDER BY r.rate_per_kg DESC)
+                             FILTER (WHERE r.material_code IS NOT NULL))[1] AS best_rate_material,
+                         MAX(r.rate_per_kg) FILTER (WHERE r.material_code IS NOT NULL) AS best_rate
+                    FROM aggregator_material_rates r
+                   WHERE r.aggregator_id = u.id
+              ) rate_stats ON true
+              LEFT JOIN LATERAL (
+                  SELECT ROUND(AVG(rr.score)::numeric, 2) AS avg_rating,
+                         COUNT(*)::int AS total_reviews
+                    FROM ratings rr
+                   WHERE rr.ratee_id = u.id
+              ) rating_stats ON true
+              LEFT JOIN LATERAL (
+                  SELECT COUNT(*) FILTER (WHERE o.status = 'completed')::int AS completed_pickups,
+                         CASE
+                           WHEN COUNT(*) FILTER (
+                             WHERE o.status IN ('accepted','en_route','arrived','weighing_in_progress','completed','cancelled','disputed')
+                           ) = 0 THEN 0
+                           ELSE ROUND(
+                             (COUNT(*) FILTER (WHERE o.status = 'completed')::numeric * 100.0) /
+                             COUNT(*) FILTER (
+                               WHERE o.status IN ('accepted','en_route','arrived','weighing_in_progress','completed','cancelled','disputed')
+                             ),
+                             2
+                           )
+                         END AS completion_rate
+                    FROM orders o
+                   WHERE o.aggregator_id = u.id
+                     AND o.deleted_at IS NULL
+              ) order_stats ON true
+              __LOCATION_JOIN__
+             WHERE u.user_type = 'aggregator'
+               AND u.is_active = true
+               AND LOWER(TRIM(COALESCE(a.city_code, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+        `;
+
+        let aggregatorRows: any[] = [];
+        try {
+            const withLocationQuery = browseBaseSelect
+                .replace('__REP_LAT__', 'loc.rep_lat::float8 AS rep_lat')
+                .replace('__REP_LNG__', 'loc.rep_lng::float8 AS rep_lng')
+                .replace(
+                    '__LOCATION_JOIN__',
+                    `LEFT JOIN LATERAL (
+                        SELECT AVG(o.pickup_lat::float8) AS rep_lat,
+                               AVG(o.pickup_lng::float8) AS rep_lng
+                          FROM orders o
+                         WHERE o.aggregator_id = u.id
+                           AND o.deleted_at IS NULL
+                           AND o.pickup_lat IS NOT NULL
+                           AND o.pickup_lng IS NOT NULL
+                    ) loc ON true`
+                );
+
+            aggregatorRows = (await query(withLocationQuery, [cityCode])).rows;
+        } catch (locationErr: any) {
+            if (locationErr?.code !== '42703') {
+                throw locationErr;
+            }
+
+            const withoutLocationQuery = browseBaseSelect
+                .replace('__REP_LAT__', 'NULL::float8 AS rep_lat')
+                .replace('__REP_LNG__', 'NULL::float8 AS rep_lng')
+                .replace('__LOCATION_JOIN__', '');
+            aggregatorRows = (await query(withoutLocationQuery, [cityCode])).rows;
+        }
+
+        const normalizedSellerLocality = normalizeText(sellerLocality);
+
+        const mapped = aggregatorRows.map((row: any) => {
+            const operatingAreas = parseOperatingAreas(row.operating_area);
+            const isAreaMatch =
+                normalizedSellerLocality.length > 0 &&
+                operatingAreas.some((area) => {
+                    const normalizedArea = normalizeText(area);
+                    return (
+                        normalizedArea.length > 0 &&
+                        (normalizedArea.includes(normalizedSellerLocality) ||
+                            normalizedSellerLocality.includes(normalizedArea))
+                    );
+                });
+
+            const repLat = toNumberOrNull(row.rep_lat);
+            const repLng = toNumberOrNull(row.rep_lng);
+            const distanceKm =
+                sellerLat != null && sellerLng != null && repLat != null && repLng != null
+                    ? calculateDistanceKm(sellerLat, sellerLng, repLat, repLng)
+                    : null;
+
+            const rawMaterials = Array.isArray(row.material_codes) ? row.material_codes : [];
+            const materialCodes = [...new Set(rawMaterials.map((code: unknown) => String(code).toLowerCase()).filter(Boolean))];
+
+            return {
+                id: row.id,
+                name: row.display_name,
+                initial: String(row.display_name || 'A').charAt(0).toUpperCase(),
+                distance: formatDistanceLabel(distanceKm, isAreaMatch),
+                distanceKm,
+                latitude: repLat,
+                longitude: repLng,
+                isOnline: Boolean(row.is_online),
+                localities: operatingAreas.length > 0 ? operatingAreas.slice(0, 2).join(' · ') : 'City-wide service',
+                rating: Number(row.avg_rating ?? 0),
+                reviews: Number(row.total_reviews ?? 0),
+                materials: materialCodes,
+                bestRateMaterial: row.best_rate_material ? String(row.best_rate_material) : null,
+                bestRate: row.best_rate != null ? `₹${Number(row.best_rate).toFixed(0)}/kg` : null,
+                lastPingAt: row.last_ping_at,
+                areaRank: isAreaMatch ? 0 : 1,
+            };
+        });
+
+        mapped.sort((a, b) => {
+            if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+            if (a.areaRank !== b.areaRank) return a.areaRank - b.areaRank;
+
+            if (a.distanceKm == null && b.distanceKm != null) return 1;
+            if (a.distanceKm != null && b.distanceKm == null) return -1;
+            if (a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) {
+                return a.distanceKm - b.distanceKm;
+            }
+
+            const aPing = a.lastPingAt ? new Date(a.lastPingAt).getTime() : 0;
+            const bPing = b.lastPingAt ? new Date(b.lastPingAt).getTime() : 0;
+            return bPing - aPing;
+        });
+
+        return res.json({
+            cityCode,
+            sellerLocality,
+            aggregators: mapped.map(({ lastPingAt, areaRank, ...rest }) => rest),
+        });
+    } catch (error: any) {
+        console.error('GET /api/aggregators/browse error:', error);
+        Sentry.captureException(error);
+        return res.status(500).json({ error: 'Failed to load aggregators' });
+    }
+});
+
 // Creates or updates initial profile
 router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { name, business_name, city_code } = req.body;
+    const { name, business_name, city_code, email } = req.body;
     console.log('[DIAG] POST /api/aggregators/profile', { userId, body: req.body });
 
     try {
@@ -73,6 +340,18 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
 
         if (name) {
             await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+        }
+
+        if (typeof email === 'string' && email.trim().length > 0) {
+            const normalizedEmail = email.trim().toLowerCase();
+            await query(
+                `UPDATE users
+                 SET email = $1,
+                     email_normalized = $2,
+                     email_verified_at = NULL
+                 WHERE id = $3`,
+                [email.trim(), normalizedEmail, userId]
+            );
         }
 
         await query(
@@ -105,12 +384,13 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         return res.status(400).json({ error: 'invalid_fields', fields: blockedPresent });
     }
 
-    const { name, operating_area, operating_hours, business_name } = req.body;
+    const { name, operating_area, operating_hours, business_name, email } = req.body;
 
     const diagPayload: Record<string, any> = { userId };
     if (name !== undefined) diagPayload.name = name;
     if (operating_area !== undefined) diagPayload.operating_area = operating_area;
     if (business_name !== undefined) diagPayload.business_name = business_name;
+    if (email !== undefined) diagPayload.email = email;
     if (operating_hours !== undefined) diagPayload.operating_hours = JSON.stringify(operating_hours);
     console.log('[DIAG] PATCH /api/aggregators/profile', diagPayload);
 
@@ -121,6 +401,18 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 
         if (name !== undefined) {
             await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+        }
+
+        if (typeof email === 'string' && email.trim().length > 0) {
+            const normalizedEmail = email.trim().toLowerCase();
+            await query(
+                `UPDATE users
+                 SET email = $1,
+                     email_normalized = $2,
+                     email_verified_at = NULL
+                 WHERE id = $3`,
+                [email.trim(), normalizedEmail, userId]
+            );
         }
 
         if (operating_area !== undefined) {
@@ -168,8 +460,9 @@ router.get('/me', verifyRole('aggregator'), async (req: Request, res: Response) 
 
     try {
         const result = await query(
-            `SELECT u.id,
+                `SELECT u.id,
                     u.name,
+                    u.email,
                     a.business_name,
                     a.city_code,
                     a.operating_area,
@@ -604,13 +897,7 @@ router.patch('/rates', verifyRole('aggregator'), async (req: Request, res: Respo
     }
 });
 
-router.post('/kyc', verifyRole('aggregator'), upload.fields([
-    { name: 'aadhaar_front', maxCount: 1 },
-    { name: 'aadhaar_back', maxCount: 1 },
-    { name: 'selfie', maxCount: 1 },
-    { name: 'shop_photo', maxCount: 1 },
-    { name: 'vehicle_photo', maxCount: 1 }
-]), async (req: Request, res: Response) => {
+router.post('/kyc', verifyRole('aggregator'), handleKycUpload, async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     console.log('[DIAG] POST /api/aggregators/kyc', { userId, files: Object.keys(req.files || {}) });
 
@@ -697,6 +984,142 @@ router.get('/kyc/status', verifyRole('aggregator'), async (req: Request, res: Re
         Sentry.captureException(error);
         res.status(500).json({ error: 'Failed to fetch KYC status' });
     }
+});
+
+// Seller view: public aggregator profile details
+router.get('/:id/public-profile', verifyRole('seller'), async (req: Request, res: Response) => {
+        const aggregatorId = String(req.params.id || '').trim();
+        if (!aggregatorId) {
+                return res.status(400).json({ error: 'aggregator_id_required' });
+        }
+
+        try {
+                const profileRes = await query(
+                        `SELECT u.id,
+                                        COALESCE(NULLIF(a.business_name, ''), NULLIF(u.name, ''), 'Aggregator') AS display_name,
+                                        a.business_name,
+                                        a.operating_area,
+                                        a.operating_hours,
+                                        a.kyc_status,
+                                        a.created_at,
+                                        COALESCE(av.is_online, false) AS is_online,
+                                        COALESCE(rating_stats.avg_rating, 0)::float8 AS avg_rating,
+                                        COALESCE(rating_stats.total_reviews, 0)::int AS total_reviews,
+                                        COALESCE(order_stats.completed_pickups, 0)::int AS completed_pickups,
+                                        COALESCE(order_stats.completion_rate, 0)::float8 AS completion_rate,
+                                        COALESCE(order_stats.avg_pickup_mins, 0)::float8 AS avg_pickup_mins
+                             FROM users u
+                             JOIN aggregator_profiles a ON a.user_id = u.id
+                             LEFT JOIN aggregator_availability av ON av.user_id = u.id
+                             LEFT JOIN LATERAL (
+                                     SELECT ROUND(AVG(rr.score)::numeric, 2) AS avg_rating,
+                                                    COUNT(*)::int AS total_reviews
+                                         FROM ratings rr
+                                        WHERE rr.ratee_id = u.id
+                             ) rating_stats ON true
+                             LEFT JOIN LATERAL (
+                                     WITH per_order AS (
+                                             SELECT o.id,
+                                                            o.status,
+                                                            MAX(CASE WHEN h.new_status = 'accepted' THEN h.created_at END) AS accepted_at,
+                                                            MAX(CASE WHEN h.new_status = 'completed' THEN h.created_at END) AS completed_at
+                                                 FROM orders o
+                                                 LEFT JOIN order_status_history h ON h.order_id = o.id
+                                                WHERE o.aggregator_id = u.id
+                                                    AND o.deleted_at IS NULL
+                                                GROUP BY o.id, o.status
+                                     )
+                                     SELECT COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_pickups,
+                                                    CASE
+                                                        WHEN COUNT(*) FILTER (
+                                                            WHERE status IN ('accepted','en_route','arrived','weighing_in_progress','completed','cancelled','disputed')
+                                                        ) = 0 THEN 0
+                                                        ELSE ROUND(
+                                                            (COUNT(*) FILTER (WHERE status = 'completed')::numeric * 100.0) /
+                                                            COUNT(*) FILTER (
+                                                                WHERE status IN ('accepted','en_route','arrived','weighing_in_progress','completed','cancelled','disputed')
+                                                            ),
+                                                            2
+                                                        )
+                                                    END AS completion_rate,
+                                                    ROUND(
+                                                            AVG(EXTRACT(EPOCH FROM (completed_at - accepted_at)) / 60.0)
+                                                                    FILTER (
+                                                                            WHERE accepted_at IS NOT NULL
+                                                                                AND completed_at IS NOT NULL
+                                                                                AND completed_at >= accepted_at
+                                                                    )::numeric,
+                                                            0
+                                                    ) AS avg_pickup_mins
+                                         FROM per_order
+                             ) order_stats ON true
+                            WHERE u.id = $1
+                                AND u.user_type = 'aggregator'
+                                AND u.is_active = true`,
+                        [aggregatorId]
+                );
+
+                if (profileRes.rows.length === 0) {
+                        return res.status(404).json({ error: 'Aggregator not found' });
+                }
+
+                const ratesRes = await query(
+                        `SELECT material_code, rate_per_kg
+                             FROM aggregator_material_rates
+                            WHERE aggregator_id = $1
+                                AND material_code IS NOT NULL
+                            ORDER BY rate_per_kg DESC, material_code ASC`,
+                        [aggregatorId]
+                );
+
+                const reviewsRes = await query(
+                        `SELECT r.score,
+                                        r.review,
+                                        r.created_at,
+                                        COALESCE(NULLIF(u.name, ''), 'User') AS reviewer_name
+                             FROM ratings r
+                             LEFT JOIN users u ON u.id = r.rater_id
+                            WHERE r.ratee_id = $1
+                            ORDER BY r.created_at DESC
+                            LIMIT 5`,
+                        [aggregatorId]
+                );
+
+                const row = profileRes.rows[0];
+                const operatingAreas = parseOperatingAreas(row.operating_area);
+                const memberSinceYear = row.created_at ? new Date(row.created_at).getFullYear() : new Date().getFullYear();
+
+                return res.json({
+                        id: row.id,
+                        name: row.display_name,
+                        aggregatorTypeLabel: `Aggregator · Since ${memberSinceYear}`,
+                        isOnline: Boolean(row.is_online),
+                        isVerified: String(row.kyc_status || '').toLowerCase() === 'verified',
+                        rating: Number(row.avg_rating ?? 0),
+                        reviewsCount: Number(row.total_reviews ?? 0),
+                        stats: {
+                                pickups: Number(row.completed_pickups ?? 0),
+                                completionRate: Number(row.completion_rate ?? 0),
+                                avgPickupMinutes: Number(row.avg_pickup_mins ?? 0),
+                        },
+                        rates: ratesRes.rows.map((rate: any) => ({
+                                materialCode: String(rate.material_code),
+                                ratePerKg: Number(rate.rate_per_kg ?? 0),
+                        })),
+                        operatingAreas,
+                        operatingHoursSummary: formatOperatingHoursSummary(row.operating_hours),
+                        reviews: reviewsRes.rows.map((review: any) => ({
+                                reviewerName: String(review.reviewer_name || 'User'),
+                                score: Number(review.score ?? 0),
+                                review: typeof review.review === 'string' ? review.review : '',
+                                createdAt: review.created_at,
+                        })),
+                });
+        } catch (error: any) {
+                console.error('GET /api/aggregators/:id/public-profile error:', error);
+                Sentry.captureException(error);
+                return res.status(500).json({ error: 'Failed to load aggregator profile' });
+        }
 });
 
 export default router;

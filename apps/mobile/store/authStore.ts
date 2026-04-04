@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { normalizeLanguage, type SupportedLanguage } from '../lib/i18n';
+import { useLanguageStore } from './languageStore';
 
 let globalClerkSignOut: (() => Promise<void>) | null = null;
 
@@ -33,8 +35,10 @@ export interface AuthState {
   userType: UserType;
   accountType: 'individual' | 'business' | null;
   name: string;
+  email: string;
   locality: string;
   city: string;
+  preferredLanguage: SupportedLanguage;
   createdAt: string | null;
   meLoaded: boolean;
 
@@ -52,8 +56,10 @@ export interface AuthState {
   setUserType: (type: UserType) => void;
   setAccountType: (type: 'individual' | 'business' | null) => void;
   setName: (name: string) => void;
+  setEmail: (email: string) => void;
   setLocality: (locality: string) => void;
   setCity: (city: string) => void;
+  setPreferredLanguage: (language: SupportedLanguage) => void;
 
   reset: () => void;
   signOut: () => Promise<void>;
@@ -73,8 +79,10 @@ const initialState = {
   userType: null,
   accountType: null,
   name: '',
+  email: '',
   locality: '',
   city: '',
+  preferredLanguage: 'en' as SupportedLanguage,
   createdAt: null,
   meLoaded: false,
 };
@@ -135,8 +143,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUserType: (type) => set({ userType: type }),
   setAccountType: (type) => set({ accountType: type }),
   setName: (name) => set({ name }),
+  setEmail: (email) => set({ email }),
   setLocality: (locality) => set({ locality }),
   setCity: (city) => set({ city }),
+  setPreferredLanguage: (preferredLanguage) => set({ preferredLanguage }),
 
   reset: () => set(initialState),
 
@@ -159,6 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const accountType = u.seller_profile_type || u.profile_type || (u.user_type === 'aggregator' ? 'business' : 'individual');
       const locality = u.user_type === 'seller' ? u.seller_locality : u.aggregator_locality;
       const city = u.user_type === 'seller' ? u.seller_city_code : u.aggregator_city_code;
+      const preferredLanguage = normalizeLanguage(u.preferred_language);
 
       set({
         userId: u.id ?? null,
@@ -166,11 +177,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: u.id ? { id: u.id, user_type: u.user_type ?? null } : null,
         accountType: accountType as any,
         name: u.name ?? '',
+        email: u.email ?? '',
         locality: locality ?? '',
         city: city ?? '',
+        preferredLanguage,
         createdAt: u.created_at ?? null,
         meLoaded: true,
       });
+
+      void useLanguageStore.getState().hydrateFromProfile(u.preferred_language);
     } catch {
     }
   },

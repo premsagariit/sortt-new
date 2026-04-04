@@ -22,54 +22,26 @@ interface Aggregator {
   name: string;
   initial: string;
   distance: string;
+  latitude: number | null;
+  longitude: number | null;
   localities: string;
   rating: number;
   reviews: number;
   materials: MaterialCode[];
-  bestRateMaterial: string;
-  bestRate: string;
+  bestRateMaterial: string | null;
+  bestRate: string | null;
+  isOnline: boolean;
 }
 
-const MOCK_AGGREGATORS: Aggregator[] = [
-  {
-    id: '1',
-    name: 'Kumar Scrap Co.',
-    initial: 'K',
-    distance: '1.2 km',
-    localities: 'Banjara Hills · Jubilee Hills',
-    rating: 4.8,
-    reviews: 142,
-    materials: ['metal', 'paper', 'plastic'],
-    bestRateMaterial: 'Metal',
-    bestRate: '₹29/kg',
-  },
-  {
-    id: '2',
-    name: 'Ravi Scrap Shop',
-    initial: 'R',
-    distance: '2.7 km',
-    localities: 'Himayatnagar · Basheerbagh',
-    rating: 4.5,
-    reviews: 89,
-    materials: ['ewaste', 'metal'],
-    bestRateMaterial: 'E-Waste',
-    bestRate: '₹65/kg',
-  },
-  {
-    id: '3',
-    name: 'Green Collect',
-    initial: 'G',
-    distance: '3.4 km',
-    localities: 'Ameerpet · SR Nagar',
-    rating: 4.6,
-    reviews: 210,
-    materials: ['paper', 'fabric'],
-    bestRateMaterial: 'Paper',
-    bestRate: '₹13/kg',
-  },
+const MATERIAL_FILTERS: Array<{ key: 'all' | MaterialCode; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'metal', label: 'Metal' },
+  { key: 'paper', label: 'Paper' },
+  { key: 'plastic', label: 'Plastic' },
+  { key: 'ewaste', label: 'E-Waste' },
+  { key: 'fabric', label: 'Fabric' },
+  { key: 'glass', label: 'Glass' },
 ];
-
-const FILTERS = ['All (14)', 'Metal', 'Paper', 'Plastic', 'E-Waste'];
 
 const MATERIAL_LABEL: Record<MaterialCode, string> = {
   metal: '⚙ Metal',
@@ -81,31 +53,84 @@ const MATERIAL_LABEL: Record<MaterialCode, string> = {
   custom: '📦 Other',
 };
 
+const toNumberOrNull = (value: unknown): number | null => {
+  if (value == null) return null;
+  if (typeof value === 'string' && value.trim().length === 0) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 // ── Component ──────────────────────────────────────────────────────
 
 export default function SellerBrowseScreen() {
   const router = useRouter();
-  const [activeFilter, setActiveFilter] = useState('All (14)');
+  const [activeFilter, setActiveFilter] = useState<'all' | MaterialCode>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveRates, setLiveRates] = useState<Record<string, number> | null>(null);
-  const [isLoadingRates, setIsLoadingRates] = useState(true);
+  const [aggregators, setAggregators] = useState<Aggregator[]>([]);
+  const [isLoadingAggregators, setIsLoadingAggregators] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<{ rates: Record<string, number> }>('/api/rates')
+    let active = true;
+
+    api.get('/api/aggregators/browse')
       .then((res: any) => {
-        setLiveRates(res.data.rates);
-        setIsLoadingRates(false);
+        if (!active) return;
+        const rows = Array.isArray(res.data?.aggregators) ? res.data.aggregators : [];
+
+        const materialCodes = new Set<MaterialCode>(['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom']);
+        const mapped: Aggregator[] = rows.map((item: any) => {
+          const materials: MaterialCode[] = Array.isArray(item.materials)
+            ? item.materials
+                .map((mat: unknown) => String(mat).toLowerCase())
+                .filter((mat: string): mat is MaterialCode => materialCodes.has(mat as MaterialCode))
+            : [];
+
+          return {
+            id: String(item.id),
+            name: String(item.name ?? 'Aggregator'),
+            initial: String(item.initial ?? 'A').charAt(0).toUpperCase(),
+            distance: String(item.distance ?? 'City-wide'),
+            latitude: toNumberOrNull(item.latitude),
+            longitude: toNumberOrNull(item.longitude),
+            localities: String(item.localities ?? 'City-wide service'),
+            rating: Number(item.rating ?? 0),
+            reviews: Number(item.reviews ?? 0),
+            materials,
+            bestRateMaterial: item.bestRateMaterial ? String(item.bestRateMaterial) : null,
+            bestRate: item.bestRate ? String(item.bestRate) : null,
+            isOnline: Boolean(item.isOnline),
+          };
+        });
+
+        setAggregators(mapped);
+        setLoadError(null);
+        setIsLoadingAggregators(false);
       })
       .catch((err: any) => {
-        console.error('Failed to fetch rates', err);
-        setIsLoadingRates(false);
+        if (!active) return;
+        console.error('Failed to fetch aggregators', err);
+        setLoadError(err?.response?.data?.error ?? err?.message ?? 'Failed to load aggregators');
+        setAggregators([]);
+        setIsLoadingAggregators(false);
       });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const getRateKey = (label: string) => {
-    if (label === 'E-Waste') return 'ewaste';
-    return label.toLowerCase();
-  };
+  const filteredAggregators = aggregators.filter((agg) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      q.length === 0 ||
+      agg.name.toLowerCase().includes(q) ||
+      agg.localities.toLowerCase().includes(q) ||
+      agg.materials.some((material) => material.toLowerCase().includes(q));
+
+    const matchesFilter = activeFilter === 'all' || agg.materials.includes(activeFilter as MaterialCode);
+    return matchesSearch && matchesFilter;
+  });
 
   const renderHeader = () => (
     <View>
@@ -131,29 +156,35 @@ export default function SellerBrowseScreen() {
           )}
         </View>
       </View>
-      {/* Filters (Mock - not active in filtering logic yet per plan) */}
+      {/* Filters */}
       <View style={styles.filtersContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
-          {FILTERS.map((filter) => (
+          {MATERIAL_FILTERS.map((filter) => {
+            const isActive = activeFilter === filter.key;
+            const label = filter.key === 'all'
+              ? `${filter.label} (${aggregators.length})`
+              : filter.label;
+
+            return (
             <Pressable
-              key={filter}
+              key={filter.key}
               style={[
                 styles.filterChip,
-                activeFilter === filter && styles.filterChipActive,
+                isActive && styles.filterChipActive,
               ]}
-              onPress={() => setActiveFilter(filter)}
+              onPress={() => setActiveFilter(filter.key)}
             >
               <Text
                 variant="caption"
                 style={[
                   styles.filterChipText,
-                  activeFilter === filter && styles.filterChipTextActive,
+                  isActive && styles.filterChipTextActive,
                 ]}
               >
-                {filter}
+                {label}
               </Text>
             </Pressable>
-          ))}
+          )})}
         </ScrollView>
       </View>
     </View>
@@ -162,7 +193,12 @@ export default function SellerBrowseScreen() {
   const renderAggregator = ({ item }: { item: Aggregator }) => (
     <Pressable
       style={styles.aggCard}
-      onPress={() => router.push('/(seller)/agg-profile')}
+      onPress={() =>
+        router.push({
+          pathname: '/(seller)/agg-profile',
+          params: { id: item.id },
+        } as any)
+      }
     >
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>{item.initial}</Text>
@@ -204,19 +240,10 @@ export default function SellerBrowseScreen() {
           ))}
         </View>
         <View style={styles.bestRateContainer}>
-          <Text variant="caption" style={styles.bestRateLabel}>Best rate: {item.bestRateMaterial}</Text>
-          {isLoadingRates ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <ActivityIndicator size="small" color={colors.amber} />
-              <Text variant="caption" style={styles.bestRateValue}>Loading...</Text>
-            </View>
-          ) : (
-            <Numeric style={styles.bestRateValue}>
-              {liveRates && liveRates[getRateKey(item.bestRateMaterial)] 
-                ? `₹${liveRates[getRateKey(item.bestRateMaterial)]}/kg` 
-                : item.bestRate}
-            </Numeric>
-          )}
+          <Text variant="caption" style={styles.bestRateLabel}>
+            Best rate: {item.bestRateMaterial ? item.bestRateMaterial : 'N/A'}
+          </Text>
+          <Numeric style={styles.bestRateValue}>{item.bestRate ? item.bestRate : '--'}</Numeric>
         </View>
       </View>
     </Pressable>
@@ -228,28 +255,35 @@ export default function SellerBrowseScreen() {
         variant="light"
         title="Nearby Aggregators"
         rightAction={
-          <Pressable style={styles.mapButton}>
+          <Pressable
+            style={styles.mapButton}
+            onPress={() => router.push('/(seller)/browse-map' as any)}
+          >
             <Text variant="caption" style={styles.mapButtonText}>🗺 Map</Text>
           </Pressable>
         }
       />
 
       <FlatList
-        data={MOCK_AGGREGATORS.filter(agg => {
-          if (!searchQuery) return true;
-          const q = searchQuery.toLowerCase();
-          return agg.name.toLowerCase().includes(q) || agg.materials.some(m => m.toLowerCase().includes(q));
-        })}
+        data={filteredAggregators}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
         renderItem={renderAggregator}
+        ListFooterComponent={
+          isLoadingAggregators ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.navy} />
+              <Text variant="caption" color={colors.muted}>Loading nearby aggregators...</Text>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <EmptyState
             icon={<MagnifyingGlass size={48} />}
-            heading="No aggregators found"
-            body="Try adjusting your filters."
+            heading={loadError ? 'Unable to load aggregators' : 'No aggregators found'}
+            body={loadError ? 'Please try again in a moment.' : 'Try adjusting your filters.'}
           />
         }
       />
@@ -421,5 +455,10 @@ const styles = StyleSheet.create({
     color: colors.amber,
     fontWeight: '700',
     fontSize: 16,
-  }
+  },
+  loadingContainer: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
 });

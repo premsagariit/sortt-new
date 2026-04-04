@@ -64,10 +64,14 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // In dev mode, allow all local networks/localhost dynamically, or explicitly whitelisted ones
+    const isLocalhost = origin?.startsWith('http://localhost') || origin?.startsWith('http://127.0.0.1') || origin?.startsWith('http://192.168.');
+    
+    if (!origin || allowedOrigins.includes(origin) || (process.env.NODE_ENV === 'development' && isLocalhost)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Returning false instead of new Error() prevents Express from crashing the Node process
+      callback(null, false);
     }
   },
   credentials: true,

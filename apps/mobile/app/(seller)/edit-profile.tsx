@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera, MapPin, User, CheckCircle } from 'phosphor-react-native';
+import { Camera, EnvelopeSimple, MapPin, User, CheckCircle } from 'phosphor-react-native';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -19,14 +19,16 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { PrimaryButton } from '../../components/ui/Button';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore } from '../../store/authStore';
+import { api } from '../../lib/api';
 
 const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
 export default function EditProfile() {
   const router = useRouter();
-  const { name, locality, city, setName, setLocality } = useAuthStore();
+  const { name, email, locality, city, accountType, setName, setEmail, setLocality } = useAuthStore();
 
   const [newName, setNewName] = useState(name);
+  const [newEmail, setNewEmail] = useState(email);
   const [newLocality, setNewLocality] = useState(locality);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function EditProfile() {
   const handleSave = () => {
     // 🛡️ BSE Security Finding 1: Input Validation / Trimming
     const trimmedName = newName.trim();
+    const trimmedEmail = newEmail.trim();
     const trimmedLocality = newLocality.trim();
 
     if (trimmedName.length === 0) {
@@ -46,6 +49,11 @@ export default function EditProfile() {
       return;
     }
 
+    if (trimmedEmail.length > 0 && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setError('Enter a valid email address');
+      return;
+    }
+
     if (trimmedLocality.length > 80) {
       setError('Locality is too long (max 80 chars)');
       return;
@@ -54,13 +62,26 @@ export default function EditProfile() {
     setIsSaving(true);
     setError(null);
 
-    // Simulate small delay for UX feedback
-    setTimeout(() => {
-      setName(trimmedName);
-      setLocality(trimmedLocality);
-      setIsSaving(false);
-      router.back();
-    }, 600);
+    void (async () => {
+      try {
+        await api.post('/api/users/profile', {
+          name: trimmedName,
+          email: trimmedEmail || null,
+          locality: trimmedLocality,
+          city_code: city,
+          profile_type: accountType ?? 'individual',
+        });
+
+        setName(trimmedName);
+        setEmail(trimmedEmail);
+        setLocality(trimmedLocality);
+        setIsSaving(false);
+        router.back();
+      } catch (saveError: any) {
+        setIsSaving(false);
+        setError(saveError?.response?.data?.error || saveError?.message || 'Failed to update profile');
+      }
+    })();
   };
 
   return (
@@ -108,6 +129,24 @@ export default function EditProfile() {
                 placeholder="Enter your name"
                 placeholderTextColor={colors.muted}
                 maxLength={60} // Slightly above 50 for better UX during typing
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text variant="label" color={colors.muted} style={styles.inputLabel}>EMAIL ADDRESS</Text>
+            <View style={styles.inputWrap}>
+              <EnvelopeSimple size={20} color={colors.muted} />
+              <TextInput
+                style={styles.input}
+                value={newEmail}
+                onChangeText={setNewEmail}
+                placeholder="Enter your email"
+                placeholderTextColor={colors.muted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={120}
               />
             </View>
           </View>

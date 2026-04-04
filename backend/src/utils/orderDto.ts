@@ -35,6 +35,7 @@ export interface DbOrder {
   confirmed_total?: number | null;
   total_weight_kg?: number | null;
   seller_has_rated?: boolean;
+  aggregator_has_rated?: boolean;
   [key: string]: any;
 }
 
@@ -75,13 +76,13 @@ export function buildOrderDto(
   const estimatedTotal =
     typeof order.estimated_total === 'number'
       ? order.estimated_total
-      : (typeof order.estimated_value === 'number' ? order.estimated_value : 0);
+      : (order.estimated_total ? Number(order.estimated_total) : (typeof order.estimated_value === 'number' ? order.estimated_value : Number(order.estimated_value || 0)));
   const confirmedTotal =
     typeof order.confirmed_total === 'number'
       ? order.confirmed_total
-      : (typeof order.confirmed_value === 'number' ? order.confirmed_value : 0);
+      : (order.confirmed_total ? Number(order.confirmed_total) : (typeof order.confirmed_value === 'number' ? order.confirmed_value : Number(order.confirmed_value || 0)));
   const estimatedValue = estimatedTotal;
-  const confirmedValue = confirmedTotal > 0 ? confirmedTotal : (typeof order.confirmed_value === 'number' ? order.confirmed_value : null);
+  const confirmedValue = confirmedTotal > 0 ? confirmedTotal : (order.confirmed_value ? Number(order.confirmed_value) : null);
 
   const normalizedOrderItems = Array.isArray(order.order_items)
     ? order.order_items
@@ -107,7 +108,7 @@ export function buildOrderDto(
       }));
 
   const lineItemAmount = normalizedLineItems.reduce((sum, item) => {
-    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : 0;
+    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : Number(item.amount || 0);
     if (amount > 0) return sum + amount;
     const weight = Number(item.weight_kg ?? 0);
     const rate = Number(item.rate_per_kg ?? 0);
@@ -115,7 +116,7 @@ export function buildOrderDto(
   }, 0);
 
   const orderItemAmount = normalizedOrderItems.reduce((sum, item) => {
-    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : 0;
+    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? item.amount : Number(item.amount || 0);
     if (amount > 0) return sum + amount;
     const weight = Number(item.confirmed_weight_kg ?? item.estimated_weight_kg ?? 0);
     const rate = Number(item.rate_per_kg ?? 0);
@@ -157,7 +158,8 @@ export function buildOrderDto(
     order_items: normalizedOrderItems,
     line_items: normalizedLineItems,
     history: order.history || [],
-    seller_has_rated: Boolean(order.seller_has_rated),
+    seller_has_rated: typeof order.seller_has_rated === 'boolean' ? order.seller_has_rated : undefined,
+    aggregator_has_rated: typeof order.aggregator_has_rated === 'boolean' ? order.aggregator_has_rated : undefined,
     otp: canSeeOrderOtp ? (order.otp ?? '') : '',
     order_number: undefined,
     phone_hash: undefined,

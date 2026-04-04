@@ -135,7 +135,7 @@ export default function AggregatorOrdersScreen() {
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
       materials: (o.materials || o.material_codes || []) as MaterialCode[],
       sellerType: o.sellerType ?? o.seller_name ?? 'Seller',
-      rating: o.rating ?? 4.5,
+      rating: Number.isFinite(Number(o.rating)) && Number(o.rating) > 0 ? Number(o.rating) : 0,
       status: o.status as OrderStatus,
       createdAt: String(o.createdAt ?? o.created_at ?? ''),
       updatedAt: String(o.updatedAt ?? o.updated_at ?? ''),

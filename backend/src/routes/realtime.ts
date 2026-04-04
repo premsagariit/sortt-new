@@ -44,7 +44,12 @@ router.get('/ably-token', async (req, res) => {
         authorizedParties: []
       });
     } catch (e: any) {
-      return res.status(401).json({ error: 'Invalid token' });
+      const message = String(e?.message ?? 'invalid token');
+      const isExpired = /expired/i.test(message);
+      return res.status(401).json({
+        error: isExpired ? 'token_expired' : 'invalid_token',
+        message: isExpired ? 'Session expired. Please sign in again.' : 'Invalid token',
+      });
     }
 
     const clerkUserId = verified.sub;
