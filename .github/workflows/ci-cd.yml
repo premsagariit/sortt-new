@@ -20,14 +20,10 @@ jobs:
     name: Build & Package
     runs-on: ubuntu-latest
     env:
-      # These two NEXT_PUBLIC_ vars are baked into the Next.js JS bundle at build
-      # time — they must be present on the GitHub runner during `next build`.
-      # All other backend secrets (DB, Clerk secret key, R2, Ably, etc.) are
-      # runtime-only and are already configured in Azure App Service settings.
-
-      # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is a *publishable* key — safe to hardcode.
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+      # These are public build-time values, not secrets. The real secrets stay in
+      # Azure App Service settings and are never copied into GitHub Actions.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlYXItZHJhZ29uLTgwLmNsZXJrLmFjY291bnRzLmRldiQ
+      NEXT_PUBLIC_API_URL: https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net
 
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +52,7 @@ jobs:
         run: pnpm run build
 
       - name: Prepare deploy folder
-        run: pnpm --filter backend deploy --prod deploy_folder
+        run: pnpm --filter backend deploy --legacy --prod deploy_folder
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
