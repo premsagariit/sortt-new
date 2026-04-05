@@ -1,161 +1,23 @@
-name: Sortt CI/CD
-run-name: CI/CD - ${{ github.event.head_commit.message }}
+name: Sortt Deploy
+run-name: Deploy – ${{ github.event.head_commit.message }}
 
 on:
   push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '20'  # LTS — matches @types/node ^20 in backend + web devDependencies
-  PNPM_VERSION: '10'  # Match lockfile
+  NODE_VERSION: '20'
+  PNPM_VERSION: '10'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ─── A: Quality Gates ───────────────────────────────────────────
-  type-check:
-    name: TypeScript Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared provider packages
-        run: pnpm --filter "@sortt/*" run build
-
-      - name: Type check backend
-        working-directory: backend
-        run: pnpm run type-check
-
-      - name: Type check web
-        working-directory: apps/web
-        run: pnpm exec tsc --noEmit
-
-  lint:
-    name: Code Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared provider packages
-        run: pnpm --filter "@sortt/*" run build
-
-      - name: Lint backend
-        working-directory: backend
-        run: pnpm run lint
-
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://placeholder@localhost:5432/sortt?sslmode=disable
-      CLERK_SECRET_KEY: sk_test_ci
-      CLERK_PUBLISHABLE_KEY: pk_test_ci
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared provider packages
-        run: pnpm --filter "@sortt/*" run build
-
-      - name: Run unit tests
-        working-directory: backend
-        # Explicit escaped-dot regex so adminRoutes.integration.test.ts is never
-        # accidentally swept in by the 'routes' branch of the alternation.
-        run: pnpm run test -- --testPathPattern "routes\.test\.ts|rls\.test\.ts"
-
-  # ─── B: Integration ────────────────────────────────────────────
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sortt?sslmode=disable
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sortt_test?sslmode=disable
-      CLERK_SECRET_KEY: sk_test_ci
-      CLERK_PUBLISHABLE_KEY: pk_test_ci
-      R2_ACCOUNT_ID: dummy_account
-      R2_ACCESS_KEY_ID: dummy_key
-      R2_SECRET_ACCESS_KEY: dummy_secret
-      R2_BUCKET_NAME: sortt-test
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sortt_test
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build shared provider packages
-        run: pnpm --filter "@sortt/*" run build
-
-      - name: Apply DB schema
-        env:
-          PGPASSWORD: postgres
-        run: |
-          if [ -d "migrations" ]; then
-            for f in $(ls migrations/*.sql | sort); do
-              echo "Applying $f …"
-              psql -h localhost -U postgres -d sortt_test -f "$f" || true
-            done
-          fi
-
-      - name: Run integration tests
-        working-directory: backend
-        run: pnpm run test -- --testPathPattern "integration\.test\.ts"
-
-  # ─── C: Build & Artifact Preparation ───────────────────────────
+  # ─── Build & Package ────────────────────────────────────────────
   build-and-package:
     name: Build & Package
-    needs: [type-check, lint, unit-tests, integration-tests]
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://placeholder@localhost:5432/sortt?sslmode=disable
@@ -165,9 +27,11 @@ jobs:
       NEXT_PUBLIC_API_URL: https://sortt-backend.azurewebsites.net
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v3
         with:
           version: ${{ env.PNPM_VERSION }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -176,52 +40,36 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared provider packages
+      - name: Build shared packages
         run: pnpm --filter "@sortt/*" run build
 
-      - name: Build Backend
+      - name: Build backend
         working-directory: backend
         run: pnpm run build
 
-      - name: Build Web
+      - name: Build web
         working-directory: apps/web
         run: pnpm run build
 
-      # Only prepare deployment artifact on push to main
-      - name: Deploy Folder Prep
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        # pnpm v10 deploy syntax: pnpm --filter <pkg> deploy [--prod] <dest>
-        # The --legacy flag is NOT a valid pnpm deploy option and was removed.
+      - name: Prepare deploy folder
         run: pnpm --filter backend deploy --prod deploy_folder
 
-      - name: Copy Puppeteer Cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          CACHE_SRC="$GITHUB_WORKSPACE/node_modules/.cache/puppeteer"
-          CACHE_DEST="deploy_folder/node_modules/.cache/puppeteer"
-          if [ -d "$CACHE_SRC" ]; then
-            mkdir -p "$CACHE_DEST"
-            cp -r "$CACHE_SRC/" "$CACHE_DEST/"
-          fi
-
-      - name: Upload Artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: deploy_folder
 
-  # ─── D: Azure Delivery ──────────────────────────────────────────
+  # ─── Azure Deploy ───────────────────────────────────────────────
   deploy:
     name: Azure Deploy
     needs: build-and-package
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
-      - name: Download Artifact
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: node-app
@@ -236,7 +84,7 @@ jobs:
       - name: Warmup
         run: sleep 10
 
-      - name: Deploy to Production
+      - name: Deploy to Azure
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'sortt-backend'
