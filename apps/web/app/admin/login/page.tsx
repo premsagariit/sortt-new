@@ -8,7 +8,7 @@
  * ─────────────────────────────────────────────────────────────────
  */
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import NextImage from 'next/image';
@@ -20,6 +20,18 @@ function setFallbackAdminToken(token: string) {
 }
 
 export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={
+       <div className="min-h-screen bg-navy flex items-center justify-center">
+         <div className="text-white font-bold animate-pulse">Loading secure portal...</div>
+       </div>
+    }>
+      <AdminLoginContent />
+    </Suspense>
+  );
+}
+
+function AdminLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

@@ -635,28 +635,40 @@ Result: PASS
 
 ---
 
-## Final Day 16 Closure Status
+---
 
-Overall: PASS (Ready for Day 17 Security Audit)
+## Post-Cleanup CI Restoration (Day 16 Fixes)
 
-PASS gates:
-- Pre-flight type-check
-- Server startup
-- G16.7
-- G16.9
-- G16.1 A/B/C
-- G16.2 auth guards
-- Security data rules
-- KYC queue/docs/audit
-- KYC status update + V35 block
-- Dispute resolve + audit
-- Price override checks
-- V13 immutable checks
-- G16.3 full backend tests (RLS Fix included)
-- G16.4 and G16.5 integration tests
-- G16.6 CI (Lint/Type-check)
-- No raw hex colors rule
-- All browser tests (1-9)
+Date: 2026-04-05
+Status: **PASSED**
 
-QUEUED gates:
-- G16.8 build completion (EAS queue independent of repository state)
+### Bug 1: Next.js build-time context error
+- **Issue**: `apps/web/app/aggregator/layout.tsx` (a Server Component) was importing client-side Phosphor Icons, causing build scripts to hang/crash.
+- **Fix**: Added `'use client'` directive to `aggregator/layout.tsx`.
+- **Result**: PASSED
+
+### Bug 2: Suspense boundaries for `useSearchParams()`
+- **Issue**: Admin subpages (`/admin/login`, `/admin/create-password`, `/admin/reset-password`) used `useSearchParams()` without a `<Suspense>` boundary, which is a build-time requirement in Next.js 15 for static generation.
+- **Fix**: Wrapped affected components in `<Suspense>` boundaries.
+- **Result**: PASSED
+
+### Bug 3: CI integration test detection
+- **Issue**: Backend integration tests were not being detected by `ci.yml` due to naming mismatch (`*.test.ts` instead of `*.integration.test.ts`).
+- **Fix**: Renamed integration tests to match the `integration\.test\.ts` pattern.
+- **Result**: PASSED
+
+### Final Build Verification
+Command:
+```bash
+pnpm -C apps/web build
+```
+Output:
+```text
+✓ Linting and checking validity of types
+✓ Collecting page data
+✓ Generating static pages (15/15)
+✓ Collecting build traces
+✓ Finalizing page optimization
+Exit code: 0
+```
+Result: **PASS** (Ready for deployment)

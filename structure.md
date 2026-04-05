@@ -223,11 +223,19 @@ Sortt
 │       │   ├── globals.css # Design system global overrides
 │       │   ├── admin # Admin Portal (Active)
 │       │   │   ├── layout.tsx # Admin SIDENAV + design system tokens
-│       │   │   ├── login # Clerk-integrated admin login
+│       │   │   ├── login
+│       │   │   │   └── page.tsx # Clerk-integrated admin login (Suspense wrapped)
+│       │   │   ├── create-password
+│       │   │   │   └── page.tsx # Admin password creation (Suspense wrapped)
+│       │   │   ├── reset-password
+│       │   │   │   └── page.tsx # Admin password reset (Suspense wrapped)
 │       │   │   ├── kyc # KYC queue for aggregator verification
 │       │   │   ├── disputes # Dispute resolution queue for order issues
 │       │   │   ├── prices # Price index management (stubbed)
 │       │   │   └── request-access # Admin access request flow
+│       │   ├── aggregator # Aggregator Portal
+│       │   │   ├── layout.tsx # Aggregator layout with client icons (use client)
+│       │   │   └── page.tsx # Aggregator dashboard entry
 │       │   └── aggregator # Deferred placeholder segment
 │       ├── components
 │       │   └── ui
@@ -295,7 +303,14 @@ Sortt
 │   │       ├── orderDto.ts # Order response normalization/sanitization helpers
 │   │       ├── orderStateMachine.ts # Allowed order state transition rules
 │   │       ├── pushHelper.ts # Legacy push helper (superseded by pushNotifications.ts)
-│   │       └── pushNotifications.ts # Chunked expo-server-sdk push notifications utility
+│   │       ├── pushNotifications.ts # Chunked expo-server-sdk push notifications utility
+│   │       ├── __tests__ # Backend test suite
+│   │       │   └── integration # Integration tests detected by CI
+│   │       │       ├── auth.integration.test.ts # Auth flow integration tests
+│   │       │       ├── orders.integration.test.ts # Order lifecycle integration tests
+│   │       │       ├── profiles.integration.test.ts # Profile management integration tests
+│   │       │       ├── rls.integration.test.ts # Row-level security integration tests
+│   │       │       └── setup.ts # Shared integration test setup
 │   └── uploads # Runtime uploaded media directory (gitignored)
 │
 ├── packages # Shared workspace libraries

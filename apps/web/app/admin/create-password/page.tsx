@@ -8,7 +8,7 @@
  * ─────────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { adminFetch } from '../../../lib/adminApi';
 
@@ -23,6 +23,18 @@ const getErrorMessage = (err: unknown): string => {
 };
 
 export default function CreatePasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-bg flex flex-col items-center justify-center py-12 px-4">
+        <div className="text-navy font-bold animate-pulse">Loading setup...</div>
+      </div>
+    }>
+      <CreatePasswordContent />
+    </Suspense>
+  );
+}
+
+function CreatePasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');

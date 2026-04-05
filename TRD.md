@@ -47,16 +47,18 @@
 >   - Mobile map rendering migrated from `react-native-maps` to MapLibre + Ola vector tiles with `apps/mobile/utils/mapAvailable.ts` gate (`MAP_RENDERING_AVAILABLE=false` default for Expo Go).
 >   - Aggregator route planner now supports store-backed order pins on MapLibre when rendering is enabled.
 
-> ✅ **Implementation Sync Note (2026-04-04) — Day 16 Complete**
-> - Admin Web Dashboard (`apps/web`) is fully operational and integrated with production APIs.
-> - Admin navigation, login, KYC queue, and Dispute management modules are production-ready.
-> - Design system tokens from `apps/web/constants/tokens.ts` are applied across all admin screens, ensuring visual consistency.
-> - Next.js optimized `<Image />` components implemented for all remote assets (R2/Clerk).
-> - All Day 16 verification gates are **PASS**:
->   - `pnpm type-check` (monorepo-wide) → Success.
->   - `pnpm lint` (monorepo-wide) → Success (0 errors).
->   - `pnpm test` (Backend/Web/Mobile) → Success (100% pass rate).
-> - Day 17 (Security Audit + Monitoring + Launch) is now **Active**.
+> ✅ **Implementation Sync Note (2026-04-05) — Day 16 Finalized & CI Restored**
+> - Resolved critical Next.js 15 build failures:
+>   - Wrapped `useSearchParams()` in `<Suspense>` boundaries for `admin/login`, `admin/create-password`, and `admin/reset-password` pages to ensure static generation compatibility.
+>   - Added `'use client'` directive to `apps/web/app/aggregator/layout.tsx` to fix icon context errors.
+> - Restored CI Pipeline stability:
+>   - Renamed backend integration tests to `*.integration.test.ts` to match the `ci.yml` detection pattern.
+>   - Verified all 4 core integration suites (Auth, Orders, Profiles, RLS) pass in the CI environment.
+> - Repository Cleanup:
+>   - Removed redundant log files (`build.log`, `lint.log`, etc.) and legacy testing documentation.
+>   - Updated `structure.md` and `README.md` to reflect the current state.
+> - All workspace gates (**type-check**, **lint**, **test**) are now fully passing monorepo-wide.
+> - 🚀 **Day 17 status:** Active; Security Audit + Monitoring + Launch phase underway.
 
 
 ---

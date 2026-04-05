@@ -7,10 +7,13 @@
 
 **Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 16 COMPLETE (2026-04-04), Day 17 ACTIVE (Security & Launch)
 
-> ✅ **Scope Sync Note (2026-04-04) — Day 16 Closure**
+> ✅ **Scope Sync Note (2026-04-05) — CI Restoration**
 > - All Day 16 verification gates are **PASS**.
-> - Admin Web Dashboard (KYC, Disputes, Prices, Flagged Aggregators) is fully functional and connected to live APIs.
-> - `pnpm type-check`, `pnpm lint`, and `pnpm test` (Backend/Web) all passing monorepo-wide.
+> - Next.js 15 build failure resolved by wrapping `useSearchParams()` pages in `<Suspense>`.
+> - Aggregator layout context error fixed by adding `'use client'` to `aggregator/layout.tsx`.
+> - Backend integration tests renamed to `*.integration.test.ts` to match `ci.yml` patterns.
+> - Monorepo-wide `pnpm build`, `pnpm type-check`, and `pnpm lint` are confirmed green.
+> - Day 17 (Security & Launch) is now fully unblocked.
 
 > ✅ **Verification Snapshot (2026-04-04) — Day 16 Passed**
 > - RLS test failures resolved (handled superuser bypass in dev environments).
@@ -71,6 +74,14 @@
 > - `pdf-lib` has been re-implemented. To resolve previous typography limitations, `@pdf-lib/fontkit` is strictly required for embedding DM Sans/Mono.
 > - The JSONB `invoices.invoice_data` column remains the legal GST record; the PDF is a rendering artifact and may be regenerated from the JSONB at any time.
 > - Always sanitise every user-supplied string with `sanitize-html` before embedding in the PDF (I3 rule, also prevents malformed draw buffers).
+
+> ✅ **Learned Lesson (Next.js 15 Suspense Requirements)**
+> - In Next.js 15, any client component or page that consumes `useSearchParams()` must be wrapped in a `<Suspense>` boundary if the page is being statically generated. Failure to do so will crash the production `next build` scripts with an `ExportPageError`.
+> - Affected routes in this repo: `/admin/login`, `/admin/create-password`, `/admin/reset-password`.
+
+> ✅ **Learned Lesson (CI Test Pattern Matching)**
+> - The `ci.yml` pipeline uses a specific regex `integration\.test\.ts` to filter integration tests.
+> - All integration tests must follow the `*.integration.test.ts` naming convention to be executed by the CI runner. Standard `*.test.ts` files are treated as unit tests or ignored by the specific integration gate.
 
 > Agents: Read this file in full at the start of every session. Never violate the rules below. Append to "Learned Lessons" when you discover new codebase patterns.
 

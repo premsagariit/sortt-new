@@ -32,7 +32,11 @@
 > - ✅ **Order data integrity overhaul (2026-03-18):** aggregator acceptance now snapshots per-material buy-rates into order items; seller and aggregator order detail screens consume canonical item/totals fields; seller completed flow supports inline rating with post-submit refresh; notifications now deep-link to order detail via metadata payloads.
 > - ✅ **Maps migration (2026-03-25):** Google-based map integration has been replaced with Ola-backed provider implementation + MapLibre mobile rendering. Existing address pinning, reverse-geocode fallback, live tracking, and route planning behaviors are preserved with Expo Go fallback gating.
 > - ✅ **Day 15 completion (2026-03-27):** Gemini Vision analysis route (`POST /api/scrap/analyze`) is live with EXIF stripping + Redis circuit breaker; GST invoice generator + signed download route (`GET /api/orders/:id/invoice`) are live; daily Python price scraper (`scraper/main.py`) is scheduled through backend node-cron and writes to `price_index` with sanity checks.
-> - ✅ **Day 16 completion (2026-04-04):** Admin web dashboard is fully wired to live data. KYCs and Disputes queues are production-ready. Design system tokens applied across admin pages. monorepo-wide tests and linting verified.
+> - ✅ **Implementation Sync Note (2026-04-05) — Day 16 Finalized & CI Restored**
+> - Admin Dashboard build issues (Suspense, layout directives) fully resolved.
+> - Backend integration tests detecting correctly in CI (`*.integration.test.ts`).
+> - Day 16 verification gates (**type-check**, **lint**, **test**) all PASS monorepo-wide.
+> - Repository cleaned of all legacy test artifacts and log files.
 > - 🚀 **Day 17 status:** Active; Security Audit + Monitoring + Launch phase underway.
 
 ---

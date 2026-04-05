@@ -49,13 +49,19 @@
 
 ---
 
-## ✅ DAY 16 LIVE VALIDATION SNAPSHOT (2026-04-04)
+---
+
+## ✅ DAY 16 LIVE VALIDATION SNAPSHOT (2026-04-05)
 
 - [x] `pnpm type-check` passed (monorepo-wide).
 - [x] `pnpm lint` passed with 0 errors/warnings.
-- [x] `pnpm test` (backend) passed with 100% success rate.
-- [x] Day 16 verification gate GA-16 PASSED.
+- [x] `pnpm build` (apps/web) passed Next.js 15 static generation gates.
+- [x] `pnpm test` (backend) passed 100% success rate (Integration + Unit).
+- [x] Day 16 verification gate GA-16 PASSED with CI restoration fixes.
+- [x] Post-cleanup build crashes (Suspense/use client) resolved.
 - [x] Day 17 UNBLOCKED for final audit and launch.
+
+---
 
 ---
 
