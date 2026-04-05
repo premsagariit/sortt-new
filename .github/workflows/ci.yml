@@ -99,7 +99,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: backend
-        run: pnpm run test -- (routes|rls).test.ts
+        run: pnpm run test -- "(routes|rls).test.ts"
 
   # ─── D: Integration tests ────────────────────────────────────────
   integration-tests:
@@ -113,6 +113,10 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sortt_test?sslmode=disable
       CLERK_SECRET_KEY: sk_test_placeholder_for_ci
       CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
+      R2_ACCOUNT_ID: dummy_account_id
+      R2_ACCESS_KEY_ID: dummy_access_key
+      R2_SECRET_ACCESS_KEY: dummy_secret_key
+      R2_BUCKET_NAME: sortt-test-bucket
 
     services:
       postgres:
@@ -151,12 +155,10 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          if [ -d "backend/migrations" ]; then
-            for f in backend/migrations/*.sql; do
+          if [ -d "migrations" ]; then
+            for f in migrations/*.sql; do
               psql -h localhost -U postgres -d sortt_test -f "$f" || true
             done
-          elif [ -f "backend/schema.sql" ]; then
-            psql -h localhost -U postgres -d sortt_test -f "backend/schema.sql" || true
           fi
 
       - name: Run integration tests
@@ -171,6 +173,7 @@ jobs:
       DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder?sslmode=disable
       CLERK_SECRET_KEY: sk_test_placeholder_for_ci
       CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder_for_ci
       NEXT_PUBLIC_API_URL: https://placeholder.azurewebsites.net
     steps:
       - uses: actions/checkout@v4
