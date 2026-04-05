@@ -20,10 +20,10 @@ jobs:
     name: Build & Package
     runs-on: ubuntu-latest
     env:
-      # These are public build-time values, not secrets. The real secrets stay in
-      # Azure App Service settings and are never copied into GitHub Actions.
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlYXItZHJhZ29uLTgwLmNsZXJrLmFjY291bnRzLmRldiQ
-      NEXT_PUBLIC_API_URL: https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net
+      # These build-time values are injected from GitHub Secrets.
+      # Backend runtime secrets remain in Azure App Service settings.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
 
     steps:
       - uses: actions/checkout@v4

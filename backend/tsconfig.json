@@ -8,15 +8,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "src",
-    "baseUrl": ".",
-    "paths": {
-      "@sortt/maps": ["../packages/maps/dist/index.d.ts"],
-      "@sortt/realtime": ["../packages/realtime/dist/index.d.ts"],
-      "@sortt/auth": ["../packages/auth/dist/index.d.ts"],
-      "@sortt/storage": ["../packages/storage/dist/index.d.ts"],
-      "@sortt/analysis": ["../packages/analysis/dist/index.d.ts"]
-    }
+    "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "src/__tests__/**/*.ts", "src/__tests__"]
