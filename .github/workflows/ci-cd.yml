@@ -20,11 +20,65 @@ jobs:
     name: Build & Package
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://placeholder@localhost:5432/sortt?sslmode=disable
-      CLERK_SECRET_KEY: sk_test_ci
-      CLERK_PUBLISHABLE_KEY: pk_test_ci
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
-      NEXT_PUBLIC_API_URL: https://sortt-backend.azurewebsites.net
+      # ── Database ──────────────────────────────────────────────────
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # ── Clerk Auth ────────────────────────────────────────────────
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+      # Required by Next.js web build (NEXT_PUBLIC_ vars are inlined at build time)
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+
+      # ── API URLs ──────────────────────────────────────────────────
+      NEXT_PUBLIC_API_URL: https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net
+
+      # ── Cloudflare R2 ─────────────────────────────────────────────
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      STORAGE_PROVIDER: r2
+
+      # ── Ably Realtime ─────────────────────────────────────────────
+      ABLY_API_KEY: ${{ secrets.ABLY_API_KEY }}
+      REALTIME_PROVIDER: ably
+
+      # ── Maps ──────────────────────────────────────────────────────
+      OLA_MAPS_API_KEY: ${{ secrets.OLA_MAPS_API_KEY }}
+      MAP_PROVIDER: ola
+
+      # ── Gemini AI ─────────────────────────────────────────────────
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-2.5-flash
+      GEMINI_DAILY_LIMIT: '1200'
+
+      # ── Meta WhatsApp ─────────────────────────────────────────────
+      META_WHATSAPP_TOKEN: ${{ secrets.META_WHATSAPP_TOKEN }}
+      META_PHONE_NUMBER_ID: ${{ secrets.META_PHONE_NUMBER_ID }}
+      META_WABA_ID: ${{ secrets.META_WABA_ID }}
+      META_OTP_TEMPLATE_NAME: hello_world
+      META_API_VERSION: v22.0
+
+      # ── Upstash Redis ─────────────────────────────────────────────
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+
+      # ── HMAC Secrets ──────────────────────────────────────────────
+      OTP_HMAC_SECRET: ${{ secrets.OTP_HMAC_SECRET }}
+      PHONE_HASH_SECRET: ${{ secrets.PHONE_HASH_SECRET }}
+
+      # ── Expo Push ─────────────────────────────────────────────────
+      EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+
+      # ── Admin ─────────────────────────────────────────────────────
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+      # ── Server ────────────────────────────────────────────────────
+      PORT: '8080'
+      NODE_ENV: production
+      LOG_PLAINTEXT_OTP: 'false'
+      ALLOWED_ORIGINS: https://sortt-backend-fpe6c8bdbnd0fpg2.centralindia-01.azurewebsites.net
+
     steps:
       - uses: actions/checkout@v4
 
