@@ -672,3 +672,45 @@ Output:
 Exit code: 0
 ```
 Result: **PASS** (Ready for deployment)
+
+---
+
+## Re-Run Check for Failed Tests (Requested)
+
+Date: 2026-04-05
+
+### Failed Test Scan
+Scan result from this report: **No test with `Result: FAIL` found**.
+
+- All listed verification gates are `PASS`.
+- `G16.8 - EAS Build (Mobile)` is `BLOCKED` due to queue wait time, not a test assertion failure.
+
+### Re-Run Command
+Command:
+```bash
+pnpm --filter backend test
+```
+
+Output (latest run):
+```text
+PASS src/__tests__/integration/orderLifecycle.integration.test.ts
+PASS src/__tests__/integration/otp.integration.test.ts
+PASS src/__tests__/integration/raceCondition.integration.test.ts
+PASS src/__tests__/routes.test.ts
+PASS src/__tests__/rls.test.ts
+PASS src/__tests__/adminRoutes.integration.test.ts
+
+Test Suites: 6 passed, 6 total
+Tests:       44 passed, 44 total
+Time:        41.244 s
+Ran all test suites.
+```
+
+### Important Log Warnings (Non-fatal)
+Observed during the same run (tests still passed):
+
+- `Cannot log after tests are done` from async invoice/OTP logs in `src/utils/invoiceGenerator.ts` and `src/routes/orders/index.ts`.
+- `ReferenceError: You are trying to import a file after the Jest environment has been torn down` originating from asynchronous WhatsApp send flow in `src/routes/orders/index.ts` (inside delayed async execution path).
+- Jest exit note: `Force exiting Jest` suggests open async handles are still alive after test completion.
+
+Assessment: **No failed tests in this re-run**. Remaining items are asynchronous teardown/logging warnings and should be treated as test hygiene/flakiness risk, not current pass/fail regressions.

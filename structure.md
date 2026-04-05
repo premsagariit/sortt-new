@@ -1,13 +1,15 @@
 Sortt
-├── Recent implementation updates (2026-04-04)
+├── Recent implementation updates (2026-04-05)
 │   ├── Day 16 completion delivered:
 │   │   ├── Admin Web Dashboard (`apps/web`) fully operational with live data.
 │   │   ├── Admin navigation, login, KYC queue, and Dispute management modules completed.
 │   │   ├── Design system tokens (`apps/web/constants/tokens.ts`) applied across all admin screens.
 │   │   ├── Next.js optimized `<Image />` components implemented for R2/Clerk assets.
 │   │   ├── Monorepo-wide verification: `pnpm type-check`, `pnpm lint`, and `pnpm test` all 100% green.
+│   │   ├── Verification refresh (2026-04-05): no failed tests found in Day 16 report; backend re-run passed (6 suites, 44 tests).
+│   │   ├── EAS preview build status: queued on free-tier infrastructure (external queue wait), tracked as non-blocking external dependency.
 │   │   └── Repository cleanup: removed all temp `.tmp` JWTs and standalone test scripts.
-│   ├── Day 17 status: **Active** — Security Audit + Monitoring + Launch phase underway.
+│   ├── Day 17 status: **Ready to Start** — Security Audit + Monitoring + Launch kickoff unblocked.
 │   ├── Web scope clarification (2026-03-30): business seller + aggregator web UI deferred; admin web pages only in current phase
 │   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
 │   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff

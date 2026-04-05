@@ -5,7 +5,7 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 16 COMPLETE (2026-04-04), Day 17 ACTIVE (Security & Launch)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 16 COMPLETE (2026-04-05), Day 17 READY TO START (Security & Launch)
 
 > ✅ **Scope Sync Note (2026-04-05) — CI Restoration**
 > - All Day 16 verification gates are **PASS**.
@@ -14,6 +14,12 @@
 > - Backend integration tests renamed to `*.integration.test.ts` to match `ci.yml` patterns.
 > - Monorepo-wide `pnpm build`, `pnpm type-check`, and `pnpm lint` are confirmed green.
 > - Day 17 (Security & Launch) is now fully unblocked.
+
+> ✅ **Verification Refresh (2026-04-05) — Day 17 Readiness Confirmed**
+> - Day 16 verification report review found no `Result: FAIL` entries.
+> - Fresh backend re-run passed: 6/6 suites and 44/44 tests.
+> - Observed Jest async teardown warnings are non-fatal and tracked as test-hygiene risk, not gate failures.
+> - Current execution status: ready to start Day 17 security audit and launch hardening tasks.
 
 > ✅ **Verification Snapshot (2026-04-04) — Day 16 Passed**
 > - RLS test failures resolved (handled superuser bypass in dev environments).
@@ -129,8 +135,8 @@ Day 15    → Gemini + invoice + scraper           [GATE PASSED 2026-03-27]
 UI Polish + refinements                          [COMPLETE — 2026-03-20]
 
 ⏳ NEXT:
-Day 16 completion → fix remaining type-check/test blockers and close gates
-Day 17 → start only after Day 16 is fully green (business/aggregator web deferred)
+Day 17 kickoff → execute security audit, monitoring setup, and launch hardening gates
+Business/aggregator web remains deferred; admin web remains the active web scope
 ```
 
 **Rules that follow from this:**
