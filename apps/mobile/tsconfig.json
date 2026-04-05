@@ -13,7 +13,6 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
       "@sortt/maps": ["../../packages/maps/src/index.ts"],
       "@sortt/realtime": ["../../packages/realtime/src/index.ts"],
