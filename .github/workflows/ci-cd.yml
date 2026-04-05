@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '24' # Match Azure target
+  NODE_VERSION: '20'  # LTS — matches @types/node ^20 in backend + web devDependencies
   PNPM_VERSION: '10'  # Match lockfile
 
 concurrency:
@@ -94,7 +94,9 @@ jobs:
 
       - name: Run unit tests
         working-directory: backend
-        run: pnpm run test -- "(routes|rls).test.ts"
+        # Explicit escaped-dot regex so adminRoutes.integration.test.ts is never
+        # accidentally swept in by the 'routes' branch of the alternation.
+        run: pnpm run test -- --testPathPattern "routes\.test\.ts|rls\.test\.ts"
 
   # ─── B: Integration ────────────────────────────────────────────
   integration-tests:
@@ -140,14 +142,15 @@ jobs:
           PGPASSWORD: postgres
         run: |
           if [ -d "migrations" ]; then
-            for f in migrations/*.sql; do
+            for f in $(ls migrations/*.sql | sort); do
+              echo "Applying $f …"
               psql -h localhost -U postgres -d sortt_test -f "$f" || true
             done
           fi
 
       - name: Run integration tests
         working-directory: backend
-        run: pnpm run test -- integration.test.ts
+        run: pnpm run test -- --testPathPattern "integration\.test\.ts"
 
   # ─── C: Build & Artifact Preparation ───────────────────────────
   build-and-package:
@@ -160,7 +163,6 @@ jobs:
       CLERK_PUBLISHABLE_KEY: pk_test_ci
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
       NEXT_PUBLIC_API_URL: https://sortt-backend.azurewebsites.net
-      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/node_modules/.cache/puppeteer
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -188,7 +190,9 @@ jobs:
       # Only prepare deployment artifact on push to main
       - name: Deploy Folder Prep
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: pnpm --filter backend deploy --prod --legacy deploy_folder
+        # pnpm v10 deploy syntax: pnpm --filter <pkg> deploy [--prod] <dest>
+        # The --legacy flag is NOT a valid pnpm deploy option and was removed.
+        run: pnpm --filter backend deploy --prod deploy_folder
 
       - name: Copy Puppeteer Cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

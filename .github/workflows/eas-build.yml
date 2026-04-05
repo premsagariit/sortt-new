@@ -1,6 +1,7 @@
 name: EAS Build (Mobile)
 
 on:
+  # Uncomment to also trigger on mobile-related pushes to main:
   # push:
   #   branches:
   #     - main
@@ -72,7 +73,10 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
-          # token: ${{ secrets.EXPO_TOKEN }}
+          # EXPO_TOKEN must be set as a GitHub Actions secret.
+          # Go to: Settings → Secrets → Actions → New repository secret
+          # Name: EXPO_TOKEN  Value: your Expo access token (expo.dev → Account → Access Tokens)
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 🚀 Build on EAS
         run: |
