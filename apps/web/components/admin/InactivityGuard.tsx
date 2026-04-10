@@ -11,7 +11,6 @@
  */
 
 import { useEffect } from 'react';
-import { useClerk } from '@clerk/nextjs';
 
 const DEFAULT_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 const TIMEOUT_MS = parseInt(process.env.NEXT_PUBLIC_ADMIN_INACTIVITY_TIMEOUT_MS || String(DEFAULT_TIMEOUT), 10);
@@ -19,8 +18,6 @@ const POLL_INTERVAL_MS = Math.min(30 * 1000, Math.floor(TIMEOUT_MS / 2)); // Dyn
 const ACTIVITY_KEY = 'lastActivity';
 
 export function InactivityGuard({ onTick }: { onTick?: (remainingMs: number) => void }) {
-  const { signOut } = useClerk();
-
   useEffect(() => {
     // Update timestamp on any user interaction
     const updateActivity = () =>
@@ -45,12 +42,8 @@ export function InactivityGuard({ onTick }: { onTick?: (remainingMs: number) => 
         sessionStorage.removeItem('admin_token');
         document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
         sessionStorage.removeItem(ACTIVITY_KEY);
-        try {
-          void signOut({ redirectUrl: '/admin/login?reason=timeout' });
-        } catch (e) {
-          console.error('[InactivityGuard] Clerk signOut failed:', e);
-        }
-        // Force manual redirect in case Clerk is not used or signOut is slow
+
+        // Force manual redirect in case frontend is slow
         setTimeout(() => {
           if (typeof window !== 'undefined') {
             window.location.href = '/admin/login?reason=timeout';
@@ -65,7 +58,7 @@ export function InactivityGuard({ onTick }: { onTick?: (remainingMs: number) => 
       events.forEach((evt) => window.removeEventListener(evt, updateActivity));
       clearInterval(interval);
     };
-  }, [onTick, signOut]);
+  }, [onTick]);
 
   return null;
 }

@@ -8,21 +8,17 @@
  *   3. Hides the splash screen once fonts are ready
  *   4. Renders <Slot /> — the Expo Router root slot for all child routes
  *
- * Splash sequence reference: sortt_logo_splash_v2.html
- *   Phase 1 (0–900ms):  truck parts assemble from screen edges
- *   Phase 2 (1220ms+): scrap items fall into cargo bed
- *   Phase 3 (2000ms):  truck drives left with spinning wheels
- *   Phase 4 (2300ms):  app name wordmark rises in
- *   Total: ~4800ms → splash is hidden AFTER fonts load (not mid-animation)
- *
- * Splash screen configuration lives in app.json:
- *   { "expo": { "splash": { "backgroundColor": "#1C2E4A" } } }
+ * Auth strategy (Clerk-free):
+ *   - JWT stored in Zustand `token` field (persisted via SecureStore in
+ *     the OTP verify handler in apps/mobile/app/(auth)/phone.tsx).
+ *   - ApiClientConfigurator reads token from authStore and injects it
+ *     into every axios request via setApiTokenGetter.
  * ──────────────────────────────────────────────────────────────────
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
-import { AppState, AppStateStatus, Text, View } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,
@@ -35,11 +31,9 @@ import {
   DMMono_400Regular,
   DMMono_500Medium,
 } from '@expo-google-fonts/dm-mono';
-import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { setRealtimeTokenGetter } from '@sortt/realtime';
-import { tokenCache, clerkPublishableKey } from '../lib/clerk';
 import { api, setApiLanguageGetter, setApiTokenGetter, setApiUnauthorizedHandler } from '../lib/api';
-import { useAuthStore, type AuthState, setGlobalClerkSignOut } from '../store/authStore';
+import { useAuthStore, type AuthState } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { NetworkErrorScreen } from '../components/ui/NetworkErrorScreen';
@@ -48,40 +42,38 @@ import { NotificationWatcher } from '../components/ui/NotificationWatcher';
 import { PushTokenRegistrar } from '../components/ui/PushTokenRegistrar';
 import { disconnectRealtime } from '../lib/realtime';
 
+/**
+ * ApiClientConfigurator — wires the JWT token from Zustand authStore
+ * into the axios request interceptor so every API call is authenticated.
+ * No Clerk dependency required.
+ */
 function ApiClientConfigurator({ children }: { children: React.ReactNode }) {
-  const { getToken, signOut } = useAuth();
-  const [isTokenReady, setIsTokenReady] = useState(false);
-
-  const getFreshToken = useCallback(async () => {
-    try {
-      return await getToken({ skipCache: true } as any);
-    } catch {
-      return await getToken();
-    }
-  }, [getToken]);
+  const token = useAuthStore((s: AuthState) => s.token);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Set token getter IMMEDIATELY on first render with auth context available
-    setApiTokenGetter(getFreshToken);
-    setRealtimeTokenGetter(getFreshToken);
+    // Provide a token getter that reads directly from Zustand state
+    setApiTokenGetter(async () => useAuthStore.getState().token);
+    setRealtimeTokenGetter(async () => useAuthStore.getState().token);
     setApiUnauthorizedHandler(() => useAuthStore.getState().signOut());
     setApiLanguageGetter(() => useLanguageStore.getState().language);
-    setGlobalClerkSignOut(signOut);
-    // Mark as ready so child routes can render
-    setIsTokenReady(true);
+    setIsReady(true);
 
     return () => {
       setApiUnauthorizedHandler(null);
       setRealtimeTokenGetter(null);
       setApiLanguageGetter(null);
     };
-  }, [getFreshToken, signOut]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ⚠️ CRITICAL: Do not render children until token is configured
-  // This prevents race condition where API calls fire before Bearer token is attached
-  if (!isTokenReady) {
-    return null; // Clerk is initializing, children will render as soon as token is ready
-  }
+  // ⚠️ CRITICAL: Do not render children until interceptors are configured.
+  // This prevents a race where API calls fire without a Bearer token.
+  if (!isReady) return null;
+
+  // Suppress unused-variable lint warning — token is read above but
+  // subscribing here ensures re-renders when the token changes.
+  void token;
 
   return <>{children}</>;
 }
@@ -99,9 +91,9 @@ function OfflineAwareNavigator({
   role: 'seller' | 'aggregator';
   segments: string[];
 }) {
-  const { isSignedIn } = useAuth();
+  const token = useAuthStore((s: AuthState) => s.token);
   const rootGroup = segments[0];
-  const isAuthPage = rootGroup === '(auth)' || (segments.length === 0 && !isSignedIn);
+  const isAuthPage = rootGroup === '(auth)' || (segments.length === 0 && !token);
 
   if (isOnline) {
     return <Stack screenOptions={{ headerShown: false }} />;
@@ -115,7 +107,6 @@ function OfflineAwareNavigator({
 }
 
 // ── Prevent the splash screen from auto-hiding before fonts are ready.
-// This must be called before the component tree renders.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -137,18 +128,11 @@ export default function RootLayout() {
   const [sansLoaded, sansError] = useFonts({
     'DMSans-Regular':  DMSans_400Regular,
     'DMSans-Medium':   DMSans_500Medium,
-    // DMSans 600 SemiBold not available in this package version.
-    // DMSans-SemiBold and DMSans-Bold both map to 700Bold.
-    // Typography.tsx uses DMSans-SemiBold for subheadings/buttons.
     'DMSans-SemiBold': DMSans_700Bold,
     'DMSans-Bold':     DMSans_700Bold,
   });
 
-  // ── Load DM Mono (used ONLY for numeric data — amounts, weights, OTPs,
-  //    order IDs, timestamps)
-  // DM Mono only ships Regular (400) and Medium (500) — no Bold weight.
-  // DMMono-Bold maps to 500Medium (heaviest available) so screens
-  // referencing fontFamily: 'DMMono-Bold' render correctly.
+  // ── Load DM Mono (used ONLY for numeric data)
   const [monoLoaded, monoError] = useFontsMono({
     'DMMono-Regular': DMMono_400Regular,
     'DMMono-Medium':  DMMono_500Medium,
@@ -163,10 +147,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsReady) {
-      // Hide the splash screen once both font families are available.
-      // If a font fails to load (sansError / monoError), we still proceed
-      // rather than blocking forever — the UI will fall back to system fonts
-      // for that weight only.
       SplashScreen.hideAsync();
     }
   }, [fontsReady]);
@@ -208,7 +188,7 @@ export default function RootLayout() {
     try {
       await api.get('/api/rates');
     } catch {
-      // Keep takeover active while offline or backend unreachable.
+      // Keep takeover active while offline.
     } finally {
       setIsRetrying(false);
     }
@@ -236,25 +216,8 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Hold the tree until fonts are ready to prevent a flash of unstyled text.
   if (!fontsReady || !languageInitialized) {
     return null;
-  }
-
-  // ── CRITICAL GUARD: If Clerk publishable key is missing (e.g., env not injected
-  // during EAS build), render a visible error rather than crashing silently.
-  if (!clerkPublishableKey) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1C2E4A', padding: 24 }}>
-        <Text style={{ color: '#FF6B6B', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 }}>
-          Configuration Error
-        </Text>
-        <Text style={{ color: '#FFFFFF', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
-          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.{'\n'}
-          This build is misconfigured. Please rebuild with the correct EAS environment variables.
-        </Text>
-      </View>
-    );
   }
 
   const resolvedRole: 'seller' | 'aggregator' =
@@ -262,21 +225,17 @@ export default function RootLayout() {
       ? storedUserType
       : lastRole;
 
-  // ── Expo Router root stack.
-  // Using Stack instead of Slot to preserve memory/state between root segments.
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
-      <ApiClientConfigurator>
-        <NotificationWatcher />
-        <PushTokenRegistrar />
-        <OfflineAwareNavigator
-          isOnline={isOnline}
-          isRetrying={isRetrying}
-          onRetry={retryConnectivity}
-          role={resolvedRole}
-          segments={segments}
-        />
-      </ApiClientConfigurator>
-    </ClerkProvider>
+    <ApiClientConfigurator>
+      <NotificationWatcher />
+      <PushTokenRegistrar />
+      <OfflineAwareNavigator
+        isOnline={isOnline}
+        isRetrying={isRetrying}
+        onRetry={retryConnectivity}
+        role={resolvedRole}
+        segments={segments}
+      />
+    </ApiClientConfigurator>
   );
 }

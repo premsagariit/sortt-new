@@ -1,31 +1,42 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { MapPin, Star } from 'phosphor-react-native';
 
 import { NavBar } from '../../components/ui/NavBar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Text, Numeric } from '../../components/ui/Typography';
+import { MaterialCode } from '../../components/ui/Card';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { api } from '../../lib/api';
-import { MAP_RENDERING_AVAILABLE } from '../../utils/mapAvailable';
+import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
+import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
 
 type MapAggregator = {
   id: string;
   name: string;
+  businessName: string;
   initial: string;
   distance: string;
   localities: string;
   rating: number;
   reviews: number;
   isOnline: boolean;
+  materials: MaterialCode[];
   latitude: number | null;
   longitude: number | null;
 };
 
-const HYDERABAD_CENTER: [number, number] = [78.4867, 17.385];
+const MATERIAL_LABEL: Record<MaterialCode, string> = {
+  metal: '⚙ Metal',
+  plastic: '🧴 Plastic',
+  paper: '📄 Paper',
+  ewaste: '💻 E-Waste',
+  fabric: '👗 Fabric',
+  glass: '🍶 Glass',
+  custom: '📦 Other',
+};
 
 const toNumberOrNull = (value: unknown): number | null => {
   if (value == null) return null;
@@ -34,14 +45,45 @@ const toNumberOrNull = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const toOptionalString = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
 export default function SellerBrowseMapScreen() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [aggregators, setAggregators] = React.useState<MapAggregator[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
 
-  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+  const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
+  const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+  const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
+      setAuthenticatedMapStyle(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
+      .then((style) => {
+        if (isMounted) setAuthenticatedMapStyle(style);
+      })
+      .catch((error) => {
+        console.warn('[browse-map] failed to resolve map style', error);
+        if (isMounted) setAuthenticatedMapStyle(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
 
   React.useEffect(() => {
     let active = true;
@@ -50,16 +92,23 @@ export default function SellerBrowseMapScreen() {
       .then((res: any) => {
         if (!active) return;
         const rows = Array.isArray(res.data?.aggregators) ? res.data.aggregators : [];
+        const materialCodes = new Set<MaterialCode>(['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom']);
 
         const mapped = rows.map((item: any): MapAggregator => ({
           id: String(item.id),
-          name: String(item.name ?? 'Aggregator'),
-          initial: String(item.initial ?? 'A').charAt(0).toUpperCase(),
-          distance: String(item.distance ?? 'City-wide'),
-          localities: String(item.localities ?? 'City-wide service'),
+          name: toOptionalString(item.name),
+          businessName: toOptionalString(item.businessName) || toOptionalString(item.name),
+          initial: toOptionalString(item.initial).charAt(0).toUpperCase() || toOptionalString(item.name).charAt(0).toUpperCase(),
+          distance: toOptionalString(item.distance),
+          localities: toOptionalString(item.localities),
           rating: Number(item.rating ?? 0),
           reviews: Number(item.reviews ?? 0),
           isOnline: Boolean(item.isOnline),
+          materials: Array.isArray(item.materials)
+            ? item.materials
+                .map((mat: unknown) => String(mat).toLowerCase())
+                .filter((mat: string): mat is MaterialCode => materialCodes.has(mat as MaterialCode))
+            : [],
           latitude: item.latitude == null ? null : toNumberOrNull(item.latitude),
           longitude: item.longitude == null ? null : toNumberOrNull(item.longitude),
         }));
@@ -91,7 +140,7 @@ export default function SellerBrowseMapScreen() {
     [mappableAggregators, selectedId]
   );
 
-  const mapCenter = React.useMemo<[number, number]>(() => {
+  const mapCenter = React.useMemo<[number, number] | null>(() => {
     if (selected?.latitude != null && selected?.longitude != null) {
       return [selected.longitude, selected.latitude];
     }
@@ -99,7 +148,7 @@ export default function SellerBrowseMapScreen() {
     if (first?.latitude != null && first?.longitude != null) {
       return [first.longitude, first.latitude];
     }
-    return HYDERABAD_CENTER;
+    return null;
   }, [mappableAggregators, selected]);
 
   const showEmptyState = !isLoading && mappableAggregators.length === 0;
@@ -120,10 +169,10 @@ export default function SellerBrowseMapScreen() {
       />
 
       <View style={styles.mapWrap}>
-        {canRenderMap && mapLibre ? (
+        {canRenderMap && mapLibre && mapCenter ? (
           <>
-            <mapLibre.MapView style={styles.map} mapStyle={OLA_TILE_STYLE_URL}>
-              <mapLibre.Camera centerCoordinate={mapCenter} zoomLevel={mappableAggregators.length > 0 ? 11.5 : 10} />
+            <mapLibre.MapView style={styles.map} mapStyle={authenticatedMapStyle ?? undefined}>
+              <mapLibre.Camera centerCoordinate={mapCenter} zoomLevel={11.5} />
 
               {mappableAggregators.map((agg) => (
                 <mapLibre.PointAnnotation
@@ -154,10 +203,14 @@ export default function SellerBrowseMapScreen() {
           <View style={styles.mapFallback}>
             <MapPin size={18} color={colors.muted} />
             <Text variant="caption" color={colors.muted} style={styles.centerText}>
-              Live map preview is unavailable in Expo Go.
+              {mapAvailability.canRenderMap
+                ? 'No live coordinates available for map preview yet.'
+                : mapAvailability.heading || 'Live map preview is unavailable.'}
             </Text>
             <Text variant="caption" color={colors.muted} style={styles.centerText}>
-              Use an EAS dev/prod build to view map pins.
+              {mapAvailability.canRenderMap
+                ? 'Aggregators will appear once coordinate data is available from backend.'
+                : mapAvailability.body || 'Use an EAS dev/prod build to view map pins.'}
             </Text>
           </View>
         )}
@@ -171,12 +224,25 @@ export default function SellerBrowseMapScreen() {
       </View>
 
       {selected ? (
-        <View style={styles.selectedCard}>
+        <Pressable
+          style={styles.selectedCard}
+          onPress={() =>
+            router.push({
+              pathname: '/(seller)/agg-profile',
+              params: { id: selected.id },
+            } as any)
+          }
+        >
           <View style={styles.selectedHeader}>
-            <Text variant="body" style={styles.selectedName}>{selected.name}</Text>
+            <View style={styles.selectedTitleBlock}>
+              <Text variant="body" style={styles.selectedName}>{selected.name}</Text>
+              <Text variant="caption" color={colors.muted} style={styles.selectedBusinessName}>
+                {selected.businessName}
+              </Text>
+            </View>
             <Numeric style={styles.selectedDistance}>{selected.distance}</Numeric>
           </View>
-          <Text variant="caption" color={colors.muted}>{selected.localities}</Text>
+
           <View style={styles.ratingRow}>
             <Star size={12} color={colors.amber} weight="fill" />
             <Numeric style={styles.reviewText}>{selected.rating} ({selected.reviews})</Numeric>
@@ -185,7 +251,34 @@ export default function SellerBrowseMapScreen() {
               {selected.isOnline ? 'Online' : 'Offline'}
             </Text>
           </View>
-        </View>
+
+          <Text variant="caption" color={colors.muted} style={styles.selectedLocalities}>
+            {selected.localities || 'City-wide service'}
+          </Text>
+
+          <View style={styles.materialsRow}>
+            {selected.materials.length > 0 ? (
+              selected.materials.map((material) => (
+                <View
+                  key={material}
+                  style={[
+                    styles.materialChip,
+                    {
+                      backgroundColor: colors.material[material].bg,
+                      borderColor: colors.material[material].fg,
+                    },
+                  ]}
+                >
+                  <Text variant="caption" style={[styles.materialChipText, { color: colors.material[material].fg }]}>
+                    {MATERIAL_LABEL[material]}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text variant="caption" color={colors.muted}>No materials listed</Text>
+            )}
+          </View>
+        </Pressable>
       ) : null}
 
       {showEmptyState ? (
@@ -194,24 +287,7 @@ export default function SellerBrowseMapScreen() {
           heading={error ? 'Unable to load map' : 'No coordinates available'}
           body={error ? 'Please try again in a moment.' : 'Aggregators will appear once coordinate data is available.'}
         />
-      ) : (
-        <FlatList
-          data={mappableAggregators}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const isSelected = selected?.id === item.id;
-            return (
-              <View style={[styles.listCard, isSelected && styles.listCardSelected]}>
-                <Text variant="caption" style={styles.listName}>{item.name}</Text>
-                <Numeric style={styles.listDistance}>{item.distance}</Numeric>
-              </View>
-            );
-          }}
-        />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -233,6 +309,7 @@ const styles = StyleSheet.create({
   },
   mapWrap: {
     flex: 1,
+    flexGrow: 1.35,
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
     borderRadius: radius.card,
@@ -320,13 +397,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  selectedTitleBlock: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
   selectedName: {
     color: colors.navy,
     fontWeight: '700',
   },
+  selectedBusinessName: {
+    marginTop: 2,
+  },
   selectedDistance: {
     color: colors.muted,
     fontSize: 12,
+  },
+  selectedLocalities: {
+    marginTop: 2,
   },
   ratingRow: {
     marginTop: 2,
@@ -344,31 +431,20 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginLeft: spacing.xs,
   },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
+  materialsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    marginTop: 6,
   },
-  listCard: {
-    backgroundColor: colors.surface,
+  materialChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    minWidth: 120,
   },
-  listCardSelected: {
-    borderColor: colors.navy,
-    backgroundColor: colors.surface2,
-  },
-  listName: {
-    color: colors.navy,
-    fontWeight: '600',
-  },
-  listDistance: {
-    marginTop: 2,
-    color: colors.muted,
+  materialChipText: {
     fontSize: 11,
+    fontWeight: '600',
   },
 });

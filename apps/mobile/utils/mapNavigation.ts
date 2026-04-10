@@ -13,11 +13,6 @@ type OpenExternalDirectionsInput = {
   errorBody?: string;
 };
 
-type NavigationCandidate = {
-  label: string;
-  url: string;
-};
-
 const buildOlaDirectionsUrl = ({ destination, origin, waypoints = [] }: OpenExternalDirectionsInput): string => {
   const params = new URLSearchParams();
   params.set('destination', `${destination.latitude},${destination.longitude}`);
@@ -67,54 +62,30 @@ const buildGeoDirectionsUrl = ({ destination }: OpenExternalDirectionsInput): st
   return `geo:${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}`;
 };
 
-async function getAvailableCandidates(candidates: NavigationCandidate[]): Promise<NavigationCandidate[]> {
-  const available: NavigationCandidate[] = [];
+export async function openExternalDirections(input: OpenExternalDirectionsInput): Promise<void> {
+  // Open one directions URL and let the OS route it to user-selected apps.
+  // On Android this triggers the native chooser when no default app is set.
+  const targets = [
+    buildOlaDirectionsUrl(input),
+    buildGoogleDirectionsUrl(input),
+    buildMapMyIndiaDirectionsUrl(input),
+    buildGeoDirectionsUrl(input),
+  ];
 
-  for (const candidate of candidates) {
+  for (const url of targets) {
     try {
-      const canOpen = await Linking.canOpenURL(candidate.url);
-      if (canOpen) {
-        available.push(candidate);
-      }
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) continue;
+      await Linking.openURL(url);
+      return;
     } catch {
     }
   }
 
-  return available;
-}
-
-export async function openExternalDirections(input: OpenExternalDirectionsInput): Promise<void> {
-  const available = await getAvailableCandidates([
-    { label: 'Google Maps', url: buildGoogleDirectionsUrl(input) },
-    { label: 'MapmyIndia', url: buildMapMyIndiaDirectionsUrl(input) },
-    { label: 'Ola Maps', url: buildOlaDirectionsUrl(input) },
-    { label: 'Other maps app', url: buildGeoDirectionsUrl(input) },
-  ]);
-
-  if (available.length === 0) {
+  {
     Alert.alert(
       input.errorTitle || 'Unable to open maps',
       input.errorBody || 'No compatible maps app was found on this device.'
     );
-    return;
   }
-
-  if (available.length === 1) {
-    await Linking.openURL(available[0].url);
-    return;
-  }
-
-  Alert.alert(
-    'Open route with',
-    'Choose a maps app for navigation.',
-    [
-      ...available.map((candidate) => ({
-        text: candidate.label,
-        onPress: () => {
-          void Linking.openURL(candidate.url);
-        },
-      })),
-      { text: 'Cancel', style: 'cancel' },
-    ]
-  );
 }

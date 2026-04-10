@@ -9,18 +9,22 @@
 // fall back to the Node.js fs.watch-based watcher, which is more tolerant of
 // cloud-sync interference.
 process.env.WATCHMAN_DISABLE = '1';
+process.env.EXPO_USE_POLLING = '1';
+process.env.CHOKIDAR_USEPOLLING = '1';
 
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
+const sharedPackagesRoot = path.resolve(workspaceRoot, 'packages');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(projectRoot);
 
-// ── Monorepo: watch the workspace root so Metro can resolve shared packages ──
-config.watchFolders = [...(config.watchFolders || []), workspaceRoot];
+// ── Monorepo: watch only shared workspace packages to avoid watcher overload ──
+// Watching the whole workspace root in OneDrive paths can exceed watcher limits.
+config.watchFolders = [...(config.watchFolders || []), sharedPackagesRoot];
 
 // ── Resolver: look up modules from the workspace root first ──
 config.resolver.nodeModulesPaths = [

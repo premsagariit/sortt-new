@@ -15,8 +15,6 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { MaterialCode } from '../../components/ui/Card';
 import { api } from '../../lib/api';
 
-// ── Mock Data ──────────────────────────────────────────────────────
-
 interface Aggregator {
   id: string;
   name: string;
@@ -53,11 +51,30 @@ const MATERIAL_LABEL: Record<MaterialCode, string> = {
   custom: '📦 Other',
 };
 
+const normalizeSearchText = (value: unknown): string => {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const tokenizeSearchQuery = (value: string): string[] => {
+  const normalized = normalizeSearchText(value);
+  if (!normalized) return [];
+  return normalized.split(' ').filter(Boolean);
+};
+
 const toNumberOrNull = (value: unknown): number | null => {
   if (value == null) return null;
   if (typeof value === 'string' && value.trim().length === 0) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toOptionalString = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
 };
 
 // ── Component ──────────────────────────────────────────────────────
@@ -86,14 +103,18 @@ export default function SellerBrowseScreen() {
                 .filter((mat: string): mat is MaterialCode => materialCodes.has(mat as MaterialCode))
             : [];
 
+          const name = toOptionalString(item.name);
+          const initialFromName = name.charAt(0).toUpperCase();
+          const initial = toOptionalString(item.initial).charAt(0).toUpperCase() || initialFromName;
+
           return {
             id: String(item.id),
-            name: String(item.name ?? 'Aggregator'),
-            initial: String(item.initial ?? 'A').charAt(0).toUpperCase(),
-            distance: String(item.distance ?? 'City-wide'),
+            name,
+            initial,
+            distance: toOptionalString(item.distance),
             latitude: toNumberOrNull(item.latitude),
             longitude: toNumberOrNull(item.longitude),
-            localities: String(item.localities ?? 'City-wide service'),
+            localities: toOptionalString(item.localities),
             rating: Number(item.rating ?? 0),
             reviews: Number(item.reviews ?? 0),
             materials,
@@ -121,16 +142,33 @@ export default function SellerBrowseScreen() {
   }, []);
 
   const filteredAggregators = aggregators.filter((agg) => {
-    const q = searchQuery.trim().toLowerCase();
+    const tokens = tokenizeSearchQuery(searchQuery);
+    const normalizedName = normalizeSearchText(agg.name);
+    const normalizedLocalities = normalizeSearchText(agg.localities);
+    const normalizedMaterials = agg.materials.map((material) => normalizeSearchText(material));
+    const normalizedMaterialLabels = agg.materials.map((material) => normalizeSearchText(MATERIAL_LABEL[material] ?? material));
+    const searchableFields = [normalizedName, normalizedLocalities, ...normalizedMaterials, ...normalizedMaterialLabels];
+
     const matchesSearch =
-      q.length === 0 ||
-      agg.name.toLowerCase().includes(q) ||
-      agg.localities.toLowerCase().includes(q) ||
-      agg.materials.some((material) => material.toLowerCase().includes(q));
+      tokens.length === 0 ||
+      tokens.every((token) => searchableFields.some((field) => field.includes(token)));
 
     const matchesFilter = activeFilter === 'all' || agg.materials.includes(activeFilter as MaterialCode);
     return matchesSearch && matchesFilter;
   });
+
+  const hasActiveSearch = tokenizeSearchQuery(searchQuery).length > 0;
+  const hasActiveMaterialFilter = activeFilter !== 'all';
+  const emptyHeading = loadError
+    ? 'Unable to load aggregators'
+    : hasActiveSearch || hasActiveMaterialFilter
+      ? 'No results found'
+      : 'No aggregators found';
+  const emptyBody = loadError
+    ? 'Please try again in a moment.'
+    : hasActiveSearch || hasActiveMaterialFilter
+      ? 'Try different keywords or clear filters.'
+      : 'Try adjusting your filters.';
 
   const renderHeader = () => (
     <View>
@@ -282,8 +320,8 @@ export default function SellerBrowseScreen() {
         ListEmptyComponent={
           <EmptyState
             icon={<MagnifyingGlass size={48} />}
-            heading={loadError ? 'Unable to load aggregators' : 'No aggregators found'}
-            body={loadError ? 'Please try again in a moment.' : 'Try adjusting your filters.'}
+            heading={emptyHeading}
+            body={emptyBody}
           />
         }
       />

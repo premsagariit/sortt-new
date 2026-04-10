@@ -14,7 +14,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { colors } from '../constants/tokens';
@@ -24,9 +23,58 @@ import { api } from '../lib/api';
 
 let hasShownSplashAnimation = false;
 
+const routeFromProfile = (profile: ReturnType<typeof useAuthStore.getState>, router: ReturnType<typeof useRouter>) => {
+  if (!profile.userType) {
+    router.replace('/(auth)/user-type' as any);
+    return;
+  }
+
+  if (profile.userType === 'seller') {
+    const hasName = !!profile.name && profile.name.trim().length > 0;
+    const hasProfileType = !!profile.accountType;
+    const hasLocality = !!profile.locality && profile.locality.trim().length > 0;
+    const hasCity = !!profile.city;
+    const needsBusinessSetup = profile.accountType === 'business' && !(profile.email && profile.email.trim().length > 0);
+
+    if (!hasProfileType) {
+      router.replace('/(auth)/seller/account-type' as any);
+      return;
+    }
+    if (!hasName || !hasLocality || !hasCity) {
+      router.replace('/(auth)/seller/seller-setup' as any);
+      return;
+    }
+    if (needsBusinessSetup) {
+      router.replace('/(auth)/seller/business-setup' as any);
+      return;
+    }
+    router.replace('/(seller)/home' as any);
+    return;
+  }
+
+  const hasBusinessName = !!profile.name && profile.name.trim().length > 0;
+  const hasCity = !!profile.city;
+  const hasArea = !!profile.locality && profile.locality.trim().length > 0;
+
+  if (!hasBusinessName || !hasCity) {
+    router.replace('/(auth)/aggregator/profile-setup' as any);
+    return;
+  }
+  if (!hasArea) {
+    router.replace('/(auth)/aggregator/area-setup' as any);
+    return;
+  }
+
+  router.replace('/(aggregator)/home' as any);
+};
+
 export default function IndexScreen() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
+  // JWT token from Zustand — non-null means authenticated
+  const token = useAuthStore((s) => s.token);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const isSignedIn = token !== null;
+  const isLoaded = true; // no async SDK init needed
 
   // Track whether the splash animation has finished
   const [splashDone, setSplashDone] = useState(hasShownSplashAnimation);
@@ -59,7 +107,7 @@ export default function IndexScreen() {
 
   // Route once splash, Clerk, and onboarding gate are resolved.
   useEffect(() => {
-    if (!splashDone || !isLoaded || !onboardingChecked) return;
+    if (!splashDone || !isLoaded || !onboardingChecked || !hasHydrated) return;
 
     let cancelled = false;
 
@@ -131,10 +179,18 @@ export default function IndexScreen() {
         }
 
         router.replace('/(aggregator)/home' as any);
-      } catch {
-        if (!cancelled) {
-          router.replace('/(auth)/user-type' as any);
+      } catch (error: any) {
+        if (cancelled) return;
+
+        const errorStatus = error?.response?.status as number | undefined;
+        const isAuthError = errorStatus === 401 || errorStatus === 403;
+        if (isAuthError) {
+          useAuthStore.getState().signOut();
+          router.replace('/(auth)/phone' as any);
+          return;
         }
+
+        routeFromProfile(useAuthStore.getState(), router);
       }
     };
 
@@ -143,7 +199,7 @@ export default function IndexScreen() {
     return () => {
       cancelled = true;
     };
-  }, [splashDone, isLoaded, onboardingChecked, onboardingComplete, isSignedIn, router]);
+  }, [splashDone, isLoaded, onboardingChecked, onboardingComplete, isSignedIn, hasHydrated, router]);
 
   return (
     <View style={styles.container}>

@@ -1,20 +1,38 @@
 import express from 'express';
-import { verifyToken } from '@clerk/backend';
 import { getChannelHmacPrefix } from '../utils/channelHelper';
 import { createTokenRequest } from '../lib/realtime';
 
 const router = express.Router();
 
-// GET /api/realtime/token (NEW — standard endpoint with JWT middleware)
-// Requires Clerk JWT in Authorization header  
+const buildCapability = (userId: string, userType?: string) => {
+  const hmacPrefix = getChannelHmacPrefix(userId);
+  const capability: Record<string, string[]> = {
+    [`${hmacPrefix}:*`]: ['subscribe', 'publish', 'presence'],
+  };
+
+  if (userType === 'aggregator') {
+    capability['orders:hyd:new'] = ['subscribe'];
+  }
+
+  return capability;
+};
+
+/**
+ * GET /api/realtime/token
+ * Protected by authMiddleware — req.user.id is the internal UUID.
+ * Issues an Ably token scoped to the authenticated user's channels.
+ */
 router.get('/token', async (req, res) => {
   try {
-    const clerkUserId = req.user?.clerk_user_id;
-    if (!clerkUserId) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).json({ error: 'Unable to determine user' });
     }
 
-    const tokenRequest = await createTokenRequest(clerkUserId);
+    const tokenRequest = await createTokenRequest(
+      userId,
+      buildCapability(userId, req.user?.user_type)
+    );
     return res.status(200).json(tokenRequest);
   } catch (error: any) {
     console.error('[realtime] Token generation error:', error);
@@ -22,49 +40,22 @@ router.get('/token', async (req, res) => {
   }
 });
 
-// GET /api/realtime/ably-token (LEGACY)
-// Endpoint used by mobile client to retrieve short-lived Ably tokens
+/**
+ * GET /api/realtime/ably-token (LEGACY — kept for mobile backward compat)
+ * Falls through to the same logic as /token since both are now behind
+ * the same JWT authMiddleware.
+ */
 router.get('/ably-token', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing or malformed Authorization header' });
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unable to determine user' });
     }
 
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'Token missing' });
-    }
-
-    // Verify token manually using Clerk client to extract user securely
-    let verified;
-    try {
-      verified = await verifyToken(token, {
-        secretKey: process.env.CLERK_SECRET_KEY!,
-        authorizedParties: []
-      });
-    } catch (e: any) {
-      const message = String(e?.message ?? 'invalid token');
-      const isExpired = /expired/i.test(message);
-      return res.status(401).json({
-        error: isExpired ? 'token_expired' : 'invalid_token',
-        message: isExpired ? 'Session expired. Please sign in again.' : 'Invalid token',
-      });
-    }
-
-    const clerkUserId = verified.sub;
-    if (!clerkUserId) {
-      return res.status(401).json({ error: 'No subject in token' });
-    }
-
-    // Generate secure prefix constraint
-    const hmacPrefix = getChannelHmacPrefix(clerkUserId);
-
-    // Request token bounded to exact channels this user can access
-    const tokenRequest = await createTokenRequest(clerkUserId, {
-      [`${hmacPrefix}:*`]: ['subscribe', 'publish', 'presence']
-    });
-
+    const tokenRequest = await createTokenRequest(
+      userId,
+      buildCapability(userId, req.user?.user_type)
+    );
     return res.status(200).json(tokenRequest);
   } catch (error: any) {
     console.error('[realtime] Token generation error:', error);

@@ -17,10 +17,72 @@ import { useChatStore } from '../../../store/chatStore';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
 import { api } from '../../../lib/api';
-import { MAP_RENDERING_AVAILABLE } from '../../../utils/mapAvailable';
+import { getMapRenderAvailability } from '../../../utils/mapAvailable';
 import { getMapLibreModule } from '../../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../../lib/olaMaps';
+import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../../lib/olaMaps';
 import { openExternalDirections } from '../../../utils/mapNavigation';
+
+type RoutePoint = [number, number];
+
+function decodePolyline(encoded: string, precision = 5): RoutePoint[] {
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+    const factor = Math.pow(10, precision);
+    const points: RoutePoint[] = [];
+
+    while (index < encoded.length) {
+        let result = 0;
+        let shift = 0;
+        let byte: number;
+
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lat += deltaLat;
+
+        result = 0;
+        shift = 0;
+        do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lng += deltaLng;
+
+        points.push([lng / factor, lat / factor]);
+    }
+
+    return points;
+}
+
+function normalizeRouteCoordinates(raw: any): RoutePoint[] {
+    if (Array.isArray(raw) && raw.length > 0 && Array.isArray(raw[0])) {
+        return raw
+            .map((item: any) => [Number(item[0]), Number(item[1])] as RoutePoint)
+            .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    }
+
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+        try {
+            const decoded5 = decodePolyline(raw, 5);
+            if (decoded5.length > 1) return decoded5;
+        } catch {
+        }
+
+        try {
+            const decoded6 = decodePolyline(raw, 6);
+            if (decoded6.length > 1) return decoded6;
+        } catch {
+        }
+    }
+
+    return [];
+}
 
 export default function NavigateScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,13 +90,40 @@ export default function NavigateScreen() {
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [resolvedPickupCoords, setResolvedPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-    const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-    const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+    const [routeCoordinates, setRouteCoordinates] = useState<RoutePoint[]>([]);
+    const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
+    const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
+    const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+    const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
     const insets = useSafeAreaInsets();
     const { id } = useLocalSearchParams<{ id: string }>();
     const { orders, fetchOrder } = useOrderStore();
     const { updateOrderStatusApi } = useAggregatorStore();
     const order = orders.find((o) => o.orderId === id);
+
+    React.useEffect(() => {
+        let isMounted = true;
+
+        if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
+            setAuthenticatedMapStyle(null);
+            return () => {
+                isMounted = false;
+            };
+        }
+
+        void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
+            .then((style) => {
+                if (isMounted) setAuthenticatedMapStyle(style);
+            })
+            .catch((error) => {
+                console.warn('[aggregator-navigate] failed to resolve map style', error);
+                if (isMounted) setAuthenticatedMapStyle(null);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
 
     React.useEffect(() => {
         if (id && !order) {
@@ -162,6 +251,74 @@ export default function NavigateScreen() {
         };
     }, [id, order?.status]);
 
+    React.useEffect(() => {
+        let mounted = true;
+
+        const loadRoute = async () => {
+            if (!currentLocation || !resolvedPickupCoords) {
+                if (mounted) setRouteCoordinates([]);
+                return;
+            }
+
+            const tryOlaRoute = async (): Promise<RoutePoint[]> => {
+                if (!process.env.EXPO_PUBLIC_OLA_MAPS_API_KEY) return [];
+                const url = new URL('https://api.olamaps.io/routing/v1/directions');
+                url.searchParams.set('origin', `${currentLocation.latitude},${currentLocation.longitude}`);
+                url.searchParams.set('destination', `${resolvedPickupCoords.latitude},${resolvedPickupCoords.longitude}`);
+                url.searchParams.set('mode', 'driving');
+                url.searchParams.set('alternatives', 'false');
+                url.searchParams.set('overview', 'full');
+                url.searchParams.set('steps', 'false');
+                url.searchParams.set('api_key', process.env.EXPO_PUBLIC_OLA_MAPS_API_KEY);
+
+                const response = await fetch(url.toString());
+                if (!response.ok) return [];
+
+                const payload = await response.json() as any;
+                const route = payload?.routes?.[0];
+                const candidates = [
+                    normalizeRouteCoordinates(route?.geometry?.coordinates),
+                    normalizeRouteCoordinates(route?.geometry),
+                    normalizeRouteCoordinates(route?.overview_polyline?.points),
+                ];
+                return candidates.find((candidate) => candidate.length > 1) ?? [];
+            };
+
+            const tryOsrmRoute = async (): Promise<RoutePoint[]> => {
+                const url = new URL(
+                    `https://router.project-osrm.org/route/v1/driving/${currentLocation.longitude},${currentLocation.latitude};${resolvedPickupCoords.longitude},${resolvedPickupCoords.latitude}`
+                );
+                url.searchParams.set('overview', 'full');
+                url.searchParams.set('geometries', 'geojson');
+
+                const response = await fetch(url.toString());
+                if (!response.ok) return [];
+                const payload = await response.json() as any;
+                const coordinates = payload?.routes?.[0]?.geometry?.coordinates;
+                return normalizeRouteCoordinates(coordinates);
+            };
+
+            try {
+                const olaPoints = await tryOlaRoute();
+                const points = olaPoints.length > 1 ? olaPoints : await tryOsrmRoute();
+
+                if (!mounted) return;
+                if (Array.isArray(points) && points.length > 1) {
+                    setRouteCoordinates(points);
+                } else {
+                    setRouteCoordinates([]);
+                }
+            } catch {
+                if (mounted) setRouteCoordinates([]);
+            }
+        };
+
+        void loadRoute();
+        return () => {
+            mounted = false;
+        };
+    }, [currentLocation, resolvedPickupCoords]);
+
     const internalOrderId = order?.orderId ?? id ?? 'ORD-24091';
     const navUserId = useAuthStore((s: any) => s.userId);
     const chatUnread = useChatStore((state) => {
@@ -246,7 +403,7 @@ export default function NavigateScreen() {
             <View style={styles.mapContainer}>
                 {resolvedPickupCoords ? (
                     canRenderMap && mapLibre ? (
-                        <mapLibre.MapView style={styles.map} mapStyle={OLA_TILE_STYLE_URL}>
+                        <mapLibre.MapView style={styles.map} mapStyle={authenticatedMapStyle ?? undefined}>
                             <mapLibre.Camera
                                 centerCoordinate={
                                     currentLocation
@@ -279,10 +436,12 @@ export default function NavigateScreen() {
                                         type: 'Feature',
                                         geometry: {
                                             type: 'LineString',
-                                            coordinates: [
-                                                [currentLocation.longitude, currentLocation.latitude],
-                                                [resolvedPickupCoords.longitude, resolvedPickupCoords.latitude],
-                                            ],
+                                            coordinates: routeCoordinates.length > 1
+                                                ? routeCoordinates
+                                                : [
+                                                    [currentLocation.longitude, currentLocation.latitude],
+                                                    [resolvedPickupCoords.longitude, resolvedPickupCoords.latitude],
+                                                ],
                                         },
                                         properties: {},
                                     } as any}
@@ -298,10 +457,9 @@ export default function NavigateScreen() {
                         <View style={styles.mapGrid}>
                             <EmptyState
                                 icon={<MapPin size={48} color={colors.muted} weight="thin" />}
-                                heading="Map unavailable in Expo Go"
-                                body="Location tracking continues and navigation opens in your maps app."
+                                heading={mapAvailability.heading || 'Map unavailable'}
+                                body={mapAvailability.body || 'Location tracking continues and navigation opens in your maps app.'}
                             />
-                            {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
                         </View>
                     )
                 ) : (
@@ -309,7 +467,7 @@ export default function NavigateScreen() {
                         <EmptyState
                           icon={<MapPin size={48} color={colors.muted} weight="thin" />}
                           heading="Location unavailable"
-                                                    body="Pickup coordinates could not be resolved for this order."
+                          body="Pickup coordinates could not be resolved for this order."
                         />
                     </View>
                 )}
@@ -424,11 +582,11 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
     },
     currentPointPin: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: colors.navy,
-        borderWidth: 2,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: colors.red,
+        borderWidth: 2.5,
         borderColor: colors.surface,
     },
     sellerPointPin: {

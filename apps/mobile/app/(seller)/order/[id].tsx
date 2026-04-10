@@ -12,11 +12,9 @@ import {
   Clock,
   MapPin,
   Warning,
-  NavigationArrow,
   ImageSquare,
 } from 'phosphor-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
 
 import { colors, spacing, radius } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
@@ -32,9 +30,6 @@ import { ContactCard } from '../../../components/order/ContactCard';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore } from '../../../store/chatStore';
 import { useOrderChannel } from '../../../hooks/useOrderChannel';
-import { MAP_RENDERING_AVAILABLE } from '../../../utils/mapAvailable';
-import { getMapLibreModule } from '../../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../../lib/olaMaps';
 import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
 
 const OTP_ACTIVE_STATUSES = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'];
@@ -64,9 +59,6 @@ export default function SellerOrderDetailScreen() {
   const [showCancelSheet, setShowCancelSheet] = useState(false);
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = React.useState(false);
-  const [resolvedPickupCoords, setResolvedPickupCoords] = React.useState<{ latitude: number; longitude: number } | null>(null);
-  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
 
   const order = orders.find((o: any) => o.orderId === id);
   useOrderChannel(
@@ -140,52 +132,6 @@ export default function SellerOrderDetailScreen() {
   }, [id]);
 
   React.useEffect(() => {
-    let isMounted = true;
-
-    const resolvePickupCoords = async () => {
-      if (typeof order?.pickupLat === 'number' && typeof order?.pickupLng === 'number') {
-        setResolvedPickupCoords({ latitude: order.pickupLat, longitude: order.pickupLng });
-        return;
-      }
-
-      const addressText = (order?.pickupAddress ?? '').trim();
-      if (!addressText) {
-        setResolvedPickupCoords(null);
-        return;
-      }
-
-      try {
-        const geocodeRes = await api.get('/api/maps/geocode', { params: { address: addressText } });
-        const lat = Number(geocodeRes.data?.lat);
-        const lng = Number(geocodeRes.data?.lng);
-        if (!isMounted) return;
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          setResolvedPickupCoords({ latitude: lat, longitude: lng });
-          return;
-        }
-      } catch {
-        try {
-          const geocoded = await Location.geocodeAsync(addressText);
-          if (!isMounted) return;
-          if (Array.isArray(geocoded) && geocoded.length > 0) {
-            setResolvedPickupCoords({ latitude: geocoded[0].latitude, longitude: geocoded[0].longitude });
-            return;
-          }
-        } catch {
-        }
-      }
-
-      if (isMounted) setResolvedPickupCoords(null);
-    };
-
-    void resolvePickupCoords();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [order?.pickupLat, order?.pickupLng, order?.pickupAddress]);
-
-  React.useEffect(() => {
     if (!id) return;
     if (order?.status === 'completed') {
       const completedAmount =
@@ -203,31 +149,6 @@ export default function SellerOrderDetailScreen() {
   }, [id, order?.status, order?.orderId, order?.confirmedTotal, order?.displayAmount, order?.confirmedAmount, order?.estimatedTotal, order?.estimatedAmount]);
 
   const isCompleted = order?.status === 'completed';
-  const hasAcceptedFlow = !!order && ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
-  const hasPickupCoords = !!resolvedPickupCoords;
-  const hasAggregatorCoords = typeof order?.aggregatorLat === 'number' && typeof order?.aggregatorLng === 'number';
-  const hasLiveTrackingCoords =
-    hasPickupCoords &&
-    hasAggregatorCoords;
-
-  const liveDistanceLabel = useMemo(() => {
-    if (typeof order?.liveDistanceKm === 'number') {
-      return `${order.liveDistanceKm.toFixed(1)} km`;
-    }
-    if (!hasLiveTrackingCoords) return null;
-
-    const toRad = (deg: number) => (deg * Math.PI) / 180;
-    const earthRadiusKm = 6371;
-    const deltaLat = toRad((resolvedPickupCoords!.latitude as number) - (order!.aggregatorLat as number));
-    const deltaLng = toRad((resolvedPickupCoords!.longitude as number) - (order!.aggregatorLng as number));
-    const a =
-      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-      Math.cos(toRad(order!.aggregatorLat as number)) * Math.cos(toRad(resolvedPickupCoords!.latitude as number)) *
-      Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return `${(earthRadiusKm * c).toFixed(1)} km`;
-  }, [hasLiveTrackingCoords, resolvedPickupCoords, order?.liveDistanceKm, order?.aggregatorLat, order?.aggregatorLng]);
 
   const toTitleCase = React.useCallback((value: string) => {
     return String(value || '')
@@ -336,101 +257,6 @@ export default function SellerOrderDetailScreen() {
                 Final payout may vary based on market rates at the time of weighing.
               </Text>
             </View>
-          </View>
-        )}
-
-        {hasAcceptedFlow && (
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <NavigationArrow size={16} color={colors.navy} />
-              <Text variant="label" color={colors.slate}>LIVE TRACKING</Text>
-            </View>
-            {hasLiveTrackingCoords ? (
-              <View style={styles.liveMapWrap}>
-                {canRenderMap && mapLibre ? (
-                  <mapLibre.MapView style={styles.liveMap} mapStyle={OLA_TILE_STYLE_URL}>
-                    <mapLibre.Camera
-                      centerCoordinate={[
-                        ((order.aggregatorLng as number) + (resolvedPickupCoords!.longitude as number)) / 2,
-                        ((order.aggregatorLat as number) + (resolvedPickupCoords!.latitude as number)) / 2,
-                      ]}
-                      zoomLevel={13}
-                    />
-                    <mapLibre.PointAnnotation
-                      id="seller-live-aggregator"
-                      coordinate={[order.aggregatorLng as number, order.aggregatorLat as number]}
-                    >
-                      <View style={styles.aggregatorPointPin} />
-                    </mapLibre.PointAnnotation>
-                    <mapLibre.PointAnnotation
-                      id="seller-live-pickup"
-                      coordinate={[resolvedPickupCoords!.longitude as number, resolvedPickupCoords!.latitude as number]}
-                    >
-                      <View style={styles.pickupPointPin} />
-                    </mapLibre.PointAnnotation>
-                    <mapLibre.ShapeSource
-                      id="seller-live-line-source"
-                      shape={{
-                        type: 'Feature',
-                        geometry: {
-                          type: 'LineString',
-                          coordinates: [
-                            [order.aggregatorLng as number, order.aggregatorLat as number],
-                            [resolvedPickupCoords!.longitude as number, resolvedPickupCoords!.latitude as number],
-                          ],
-                        },
-                        properties: {},
-                      } as any}
-                    >
-                      <mapLibre.LineLayer
-                        id="seller-live-line-layer"
-                        style={{
-                          lineColor: colors.teal,
-                          lineWidth: 3,
-                        }}
-                      />
-                    </mapLibre.ShapeSource>
-                  </mapLibre.MapView>
-                ) : (
-                  <View style={styles.mapPlaceholderCard}>
-                    <Text variant="caption" color={colors.muted}>Live map unavailable in Expo Go. Tracking continues in text mode.</Text>
-                    {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
-                  </View>
-                )}
-              </View>
-            ) : hasPickupCoords ? (
-              <View style={styles.liveMapWrap}>
-                {canRenderMap && mapLibre ? (
-                  <mapLibre.MapView style={styles.liveMap} mapStyle={OLA_TILE_STYLE_URL}>
-                    <mapLibre.Camera
-                      centerCoordinate={[resolvedPickupCoords!.longitude, resolvedPickupCoords!.latitude]}
-                      zoomLevel={14}
-                    />
-                    <mapLibre.PointAnnotation
-                      id="seller-pickup-point"
-                      coordinate={[resolvedPickupCoords!.longitude, resolvedPickupCoords!.latitude]}
-                    >
-                      <View style={styles.pickupPointPin} />
-                    </mapLibre.PointAnnotation>
-                  </mapLibre.MapView>
-                ) : (
-                  <View style={styles.mapPlaceholderCard}>
-                    <Text variant="caption" color={colors.muted}>Map unavailable in Expo Go. Pickup coordinates are ready.</Text>
-                    {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.mapPlaceholderCard}>
-                <Text variant="caption" color={colors.muted}>Tracking starts when aggregator begins navigation.</Text>
-              </View>
-            )}
-
-            {liveDistanceLabel ? (
-              <Text variant="caption" color={colors.teal} style={{ marginTop: spacing.sm }}>
-                Aggregator is {liveDistanceLabel} away
-              </Text>
-            ) : null}
           </View>
         )}
 
@@ -609,42 +435,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     marginBottom: spacing.sm,
-  },
-  mapPlaceholderCard: {
-    minHeight: 88,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  liveMapWrap: {
-    height: 180,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    overflow: 'hidden',
-  },
-  liveMap: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  aggregatorPointPin: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.navy,
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  pickupPointPin: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.red,
-    borderWidth: 2,
-    borderColor: colors.surface,
   },
   itemHeaderRow: {
     flexDirection: 'row',

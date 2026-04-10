@@ -11,6 +11,11 @@ export interface GeoResult {
   display_address: string;  // e.g., "Banjara Hills, Hyderabad"
 }
 
+export interface AutocompleteResult {
+  description: string;
+  place_id: string;
+}
+
 export interface IMapProvider {
   /**
    * Geocode an address to city code, locality, and display address.
@@ -25,4 +30,10 @@ export interface IMapProvider {
    * Returns a human-readable address string.
    */
   reverseGeocode(lat: number, lng: number): Promise<string>;
+
+  /**
+   * Optional autocomplete suggestions for address/locality search.
+   * Providers that do not support autocomplete may omit this method.
+   */
+  autocomplete?: (input: string) => Promise<AutocompleteResult[]>;
 }

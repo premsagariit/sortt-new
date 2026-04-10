@@ -67,10 +67,19 @@ const formatReviewDate = (value: string): string => {
   });
 };
 
+const resolveRouteParam = (value: string | string[] | undefined): string => {
+  if (Array.isArray(value)) {
+    return String(value[0] ?? '').trim();
+  }
+
+  return String(value ?? '').trim();
+};
+
 export default function AggregatorProfileScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const resetListing = useListingStore((s) => s.resetListing);
+  const aggregatorId = resolveRouteParam(id);
 
   const [profile, setProfile] = React.useState<AggregatorProfileResponse | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -80,14 +89,14 @@ export default function AggregatorProfileScreen() {
     let active = true;
 
     const load = async () => {
-      if (!id) {
+      if (!aggregatorId) {
         setError('Aggregator not found');
         setIsLoading(false);
         return;
       }
 
       try {
-        const res = await api.get(`/api/aggregators/${id}/public-profile`);
+        const res = await api.get(`/api/aggregators/${encodeURIComponent(aggregatorId)}/public-profile`);
         if (!active) return;
         setProfile(res.data as AggregatorProfileResponse);
         setError(null);
@@ -103,11 +112,11 @@ export default function AggregatorProfileScreen() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [aggregatorId]);
 
-  const displayName = profile?.name ?? 'Aggregator';
-  const avatarInitial = displayName.charAt(0).toUpperCase() || 'A';
-  const heroSubtitle = profile?.aggregatorTypeLabel ?? 'Aggregator';
+  const displayName = profile?.name ?? '';
+  const avatarInitial = displayName.charAt(0).toUpperCase();
+  const heroSubtitle = profile?.aggregatorTypeLabel ?? '';
   const ratingValue = Number(profile?.rating ?? 0);
   const ratingStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
 
@@ -132,29 +141,37 @@ export default function AggregatorProfileScreen() {
         <View style={styles.heroSection}>
           <View style={styles.heroHeader}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{avatarInitial}</Text>
+              <Text style={styles.avatarText}>{avatarInitial || ' '}</Text>
             </View>
             <View style={styles.heroInfo}>
-              <Text style={styles.aggName}>{displayName}</Text>
-              <Text style={styles.aggType}>{heroSubtitle}</Text>
-              <View style={styles.ratingRow}>
-                <View style={styles.stars}>
-                  {[0, 1, 2, 3, 4].map((index) => (
-                    <Star
-                      key={`hero-star-${index}`}
-                      size={16}
-                      weight={index < ratingStars ? 'fill' : 'regular'}
-                      color={index < ratingStars ? colors.amber : colors.muted}
-                    />
-                  ))}
-                </View>
-                <Numeric style={styles.ratingText}>
-                  {ratingValue.toFixed(1)} · {profile?.stats?.pickups ?? 0} pickups
-                </Numeric>
-              </View>
+              {profile ? (
+                <>
+                  <Text style={styles.aggName}>{displayName}</Text>
+                  <Text style={styles.aggType}>{heroSubtitle}</Text>
+                  <View style={styles.ratingRow}>
+                    <View style={styles.stars}>
+                      {[0, 1, 2, 3, 4].map((index) => (
+                        <Star
+                          key={`hero-star-${index}`}
+                          size={16}
+                          weight={index < ratingStars ? 'fill' : 'regular'}
+                          color={index < ratingStars ? colors.amber : colors.muted}
+                        />
+                      ))}
+                    </View>
+                    <Numeric style={styles.ratingText}>
+                      {ratingValue.toFixed(1)} · {profile.stats.pickups} pickups
+                    </Numeric>
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.aggType}>
+                  {isLoading ? 'Loading profile from backend...' : 'Profile details unavailable'}
+                </Text>
+              )}
             </View>
             <View style={styles.kycBadge}>
-              <Text style={styles.kycText}>{profile?.isVerified ? '✓ Verified' : 'Pending'}</Text>
+              <Text style={styles.kycText}>{profile ? (profile.isVerified ? '✓ Verified' : 'Pending') : '...'}</Text>
             </View>
           </View>
         </View>

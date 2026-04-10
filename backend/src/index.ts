@@ -5,7 +5,6 @@ import './instrument';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { clerkMiddleware } from '@clerk/express';
 import { authMiddleware } from './middleware/auth';
 import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
@@ -29,11 +28,10 @@ import { startScheduler } from './scheduler';
 // ── Startup environment validation ─────────────────────────────────────────
 // Must happen before any middleware or route registration so that missing env
 // vars produce a single clear error at boot rather than cryptic per-request
-// crashes from @clerk/express or @clerk/backend internals.
+// crashes from auth internals.
 const REQUIRED_ENV_VARS = [
   'DATABASE_URL',
-  'CLERK_SECRET_KEY',
-  'CLERK_PUBLISHABLE_KEY',
+  'JWT_SECRET',
 ] as const;
 
 const missingVars = REQUIRED_ENV_VARS.filter((k) => !process.env[k]);
@@ -51,8 +49,7 @@ console.log('[DIAG] Backend initializing...');
 console.log('[DIAG] env.PORT:', process.env.PORT);
 console.log('[DIAG] env.NODE_ENV:', process.env.NODE_ENV);
 console.log('[DIAG] env.DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('[DIAG] env.CLERK_SECRET_KEY configured:', !!process.env.CLERK_SECRET_KEY);
-console.log('[DIAG] env.CLERK_PUBLISHABLE_KEY configured:', !!process.env.CLERK_PUBLISHABLE_KEY);
+console.log('[DIAG] env.JWT_SECRET configured:', !!process.env.JWT_SECRET);
 console.log('[DIAG] env.ABLY_API_KEY exists:', !!process.env.ABLY_API_KEY);
 console.log('[DIAG] env.R2_BUCKET_NAME:', process.env.R2_BUCKET_NAME || 'MISSING ⚠️');
 
@@ -83,25 +80,14 @@ app.use(sanitizeBody);
 
 app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 
-// Public auth routes — before Clerk middleware so OTP endpoints never need a token
+// Public auth routes — before custom auth middleware so OTP endpoints never need a token
 app.use('/api/auth', authRouter);
 app.use('/api/admin/auth', adminAuthRouter);
-
-// clerkMiddleware() populates req.auth so getAuth() works in route handlers.
-// Passing secretKey and publishableKey explicitly prevents Clerk from throwing
-// "Publishable key is missing" when the env vars are not yet available at module
-// load time (race condition on Azure cold start).
-// If the keys are still missing here, clerkMiddleware degrades gracefully
-// (req.auth will be empty) and authMiddleware will return 401 as normal.
-app.use(clerkMiddleware({
-  secretKey: process.env.CLERK_SECRET_KEY,
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-}));
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Custom authMiddleware: verifies JWT via createClerkClient().verifyToken(),
+// Custom authMiddleware: verifies JWT via custom token logic,
 // returns 401 (never redirects), exempts /api/auth/* and /api/rates
 app.use(authMiddleware);
 
@@ -109,7 +95,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    clerk: !!process.env.CLERK_SECRET_KEY && !!process.env.CLERK_PUBLISHABLE_KEY ? 'configured' : 'MISSING ⚠️',
+    auth: 'custom-jwt',
   });
 });
 

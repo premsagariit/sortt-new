@@ -46,14 +46,7 @@
         }
       ],
       "expo-secure-store",
-      [
-        "@maplibre/maplibre-react-native",
-        {
-          "android": {
-            "nativeVersion": "11.8.0"
-          }
-        }
-      ]
+      "@maplibre/maplibre-react-native"
     ],
     "experiments": {
       "typedRoutes": true
@@ -64,9 +57,7 @@
       },
       "router": {}
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/2918abc2-4b92-484b-b98a-8f5b71a9b006"
     },

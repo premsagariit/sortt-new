@@ -22,11 +22,38 @@ const TYPE_TO_RANGE: Record<string, { start: number; end: number }> = {
 
 const IST_TZ = 'Asia/Kolkata';
 
-export function normalizeAreaValue(value: unknown): string {
+const NON_ALNUM_TO_SPACE = /[^a-z0-9]+/g;
+
+const normalizeAddressText = (value: unknown): string => {
   return String(value ?? '')
     .toLowerCase()
+    .replace(NON_ALNUM_TO_SPACE, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+};
+
+const splitAddressParts = (value: unknown): string[] => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return [];
+  return raw
+    .split(/[,;|\n]/)
+    .map((part) => normalizeAddressText(part))
+    .filter(Boolean);
+};
+
+const escapeRegex = (value: string): string => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const hasWordBoundaryMatch = (haystack: string, area: string): boolean => {
+  if (!haystack || !area) return false;
+  const phrasePattern = escapeRegex(area).replace(/\s+/g, '\\s+');
+  const pattern = new RegExp(`(?:^|\\b)${phrasePattern}(?:\\b|$)`);
+  return pattern.test(haystack);
+};
+
+export function normalizeAreaValue(value: unknown): string {
+  return normalizeAddressText(value);
 }
 
 export function parseOperatingAreas(value: unknown): string[] {
@@ -50,7 +77,7 @@ export function parseOperatingAreas(value: unknown): string[] {
     }
   }
 
-  return trimmed.split(',').map((v) => v.trim()).filter(Boolean);
+  return trimmed.split(/[,;|]/).map((v) => v.trim()).filter(Boolean);
 }
 
 export function isAddressInOperatingAreas(
@@ -58,17 +85,35 @@ export function isAddressInOperatingAreas(
   pickupAddress: unknown,
   operatingAreas: string[]
 ): boolean {
-  const normalizedAreas = operatingAreas.map(normalizeAreaValue).filter(Boolean);
+  const normalizedAreas = Array.from(
+    new Set(operatingAreas.map(normalizeAreaValue).filter(Boolean))
+  );
   if (normalizedAreas.length === 0) return false;
 
   const localityNorm = normalizeAreaValue(pickupLocality);
   const addressNorm = normalizeAreaValue(pickupAddress);
+  const addressParts = splitAddressParts(pickupAddress);
 
-  return normalizedAreas.some((area) => (
-    localityNorm === area ||
-    localityNorm.includes(area) ||
-    addressNorm.includes(area)
-  ));
+  const strictCandidates = [localityNorm, ...addressParts, addressNorm].filter(Boolean);
+
+  for (const area of normalizedAreas) {
+    const strictHit = strictCandidates.some((candidate) => (
+      candidate === area || hasWordBoundaryMatch(candidate, area)
+    ));
+
+    if (strictHit) {
+      return true;
+    }
+  }
+
+  for (const area of normalizedAreas) {
+    // Hybrid fallback: allow controlled substring matching only for meaningful area labels.
+    if (area.length < 4) continue;
+    if (localityNorm.includes(area)) return true;
+    if (addressNorm.includes(area)) return true;
+  }
+
+  return false;
 }
 
 const parseTimeToMinutes = (time: string): number | null => {

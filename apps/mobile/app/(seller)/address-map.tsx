@@ -12,11 +12,23 @@ import { Input } from '../../components/ui/Input';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { api } from '../../lib/api';
 import { useAddressStore } from '../../store/addressStore';
-import { MAP_RENDERING_AVAILABLE } from '../../utils/mapAvailable';
+import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
+import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
 
 type Coordinate = { latitude: number; longitude: number };
+
+const CITY_CODE_BY_NAME: Record<string, string> = {
+  hyderabad: 'HYD',
+  bangalore: 'BLR',
+  bengaluru: 'BLR',
+  mumbai: 'MUM',
+  delhi: 'DEL',
+  'new delhi': 'DEL',
+  pune: 'PUN',
+  chennai: 'CHN',
+  kolkata: 'KOL',
+};
 
 export default function AddressMapScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
@@ -36,8 +48,34 @@ export default function AddressMapScreen() {
   const [isSearching, setIsSearching] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
-  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+  const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
+  const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
+  const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+  const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
+      setAuthenticatedMapStyle(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
+      .then((style) => {
+        if (isMounted) setAuthenticatedMapStyle(style);
+      })
+      .catch((error) => {
+        console.warn('[address-map] failed to resolve map style', error);
+        if (isMounted) setAuthenticatedMapStyle(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -138,7 +176,7 @@ export default function AddressMapScreen() {
               street: fallbackStreet || base.street,
               city: fallbackCity || base.city,
               pincode: fallbackPincode || base.pincode,
-              city_code: fallbackCity.toLowerCase().includes('hyderabad') ? 'HYD' : base.city_code,
+              city_code: CITY_CODE_BY_NAME[fallbackCity.toLowerCase()] || base.city_code,
               pickup_locality: fallbackLocality || base.pickup_locality,
               latitude,
               longitude,
@@ -272,8 +310,14 @@ export default function AddressMapScreen() {
             <>
               <mapLibre.MapView
                 style={styles.map}
-                mapStyle={OLA_TILE_STYLE_URL}
+                mapStyle={authenticatedMapStyle ?? undefined}
                 onPress={(event: any) => void onMapPress(event)}
+                onDidFailLoadingMap={() => {
+                  console.warn('[address-map] MapLibre failed loading map style');
+                }}
+                onDidFinishLoadingStyle={() => {
+                  console.info('[address-map] MapLibre style loaded');
+                }}
               >
                 <mapLibre.Camera
                   centerCoordinate={coordinates ? [coordinates.longitude, coordinates.latitude] : [78.4867, 17.385]}
@@ -297,7 +341,8 @@ export default function AddressMapScreen() {
           ) : (
             <View style={styles.mapUnavailableCard}>
               <MapPin size={18} color={colors.muted} />
-              <Text variant="caption" color={colors.muted}>Map preview unavailable in Expo Go</Text>
+              <Text variant="caption" color={colors.muted}>{mapAvailability.heading || 'Map preview unavailable'}</Text>
+              <Text variant="caption" color={colors.slate}>{mapAvailability.body || 'Use search to pin the address.'}</Text>
               <Input
                 label="Search address"
                 value={searchQuery}
@@ -310,7 +355,6 @@ export default function AddressMapScreen() {
                 disabled={isSearching || isResolvingMap || isLocatingCurrentPosition}
                 style={{ width: '100%' }}
               />
-              {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
             </View>
           )}
         </View>

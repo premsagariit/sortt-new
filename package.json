@@ -21,7 +21,8 @@
   "packageManager": "pnpm@10.30.3",
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "expo": "~54.0.33"
+    "expo": "~54.0.33",
+    "typescript": "^5.5.3"
   },
   "pnpm": {
     "overrides": {

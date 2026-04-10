@@ -867,6 +867,10 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
     set({ isOnline: v, error: null });
     try {
       await api.post('/api/aggregators/heartbeat', { is_online: v });
+      if (v) {
+        // Ensure missed eligible orders surface immediately after coming online.
+        void get().fetchFeed(true);
+      }
     } catch (e: any) {
       // Revert on failure
       set({ isOnline: !v, error: e.response?.data?.error ?? e.message ?? 'Failed to update status' });

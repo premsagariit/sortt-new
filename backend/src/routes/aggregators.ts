@@ -13,11 +13,32 @@ import {
     isAddressInOperatingAreas,
     isPickupWindowWithinSchedule,
     isWithinWorkingHoursNow,
+    normalizeAreaValue,
     parseOperatingAreas,
     parseOperatingHoursSchedule,
 } from '../utils/availability';
 
 const router = Router();
+
+const sanitizeOperatingAreas = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+
+    const seen = new Set<string>();
+    const next: string[] = [];
+
+    for (const raw of value) {
+        const trimmed = String(raw ?? '').trim();
+        if (!trimmed) continue;
+
+        const key = normalizeAreaValue(trimmed);
+        if (!key || seen.has(key)) continue;
+
+        seen.add(key);
+        next.push(trimmed);
+    }
+
+    return next;
+};
 
 const toNumberOrNull = (value: unknown): number | null => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -417,7 +438,12 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 
         if (operating_area !== undefined) {
             updateFields.push(`operating_area = $${placeholderIdx++}`);
-            values.push(Array.isArray(operating_area) ? JSON.stringify(operating_area) : operating_area);
+            if (Array.isArray(operating_area)) {
+                const sanitizedAreas = sanitizeOperatingAreas(operating_area);
+                values.push(JSON.stringify(sanitizedAreas));
+            } else {
+                values.push(String(operating_area ?? '').trim());
+            }
         }
 
         if (operating_hours !== undefined) {
@@ -641,7 +667,7 @@ router.post('/heartbeat', verifyRole('aggregator'), async (req: Request, res: Re
                 const operatingAreas = parseOperatingAreas(profile.operating_area);
                 const schedule = parseOperatingHoursSchedule(profile.operating_hours);
 
-                if (cityCode && operatingAreas.length > 0 && isWithinWorkingHoursNow(schedule)) {
+                if (cityCode && operatingAreas.length > 0) {
                     const candidatesRes = await query(
                         `SELECT o.id,
                                 o.order_number,

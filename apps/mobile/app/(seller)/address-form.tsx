@@ -10,9 +10,9 @@ import { Input } from '../../components/ui/Input';
 import { PrimaryButton } from '../../components/ui/Button';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { useAddressStore } from '../../store/addressStore';
-import { MAP_RENDERING_AVAILABLE } from '../../utils/mapAvailable';
+import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
+import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
 
 type Coordinate = { latitude: number; longitude: number };
 
@@ -43,8 +43,34 @@ export default function AddressFormScreen() {
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+  const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
+  const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
+  const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+  const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
+      setAuthenticatedMapStyle(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
+      .then((style) => {
+        if (isMounted) setAuthenticatedMapStyle(style);
+      })
+      .catch((error) => {
+        console.warn('[address-form] failed to resolve map style', error);
+        if (isMounted) setAuthenticatedMapStyle(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -195,7 +221,7 @@ export default function AddressFormScreen() {
 
             <View style={styles.previewMapWrap}>
               {canRenderMap && mapLibre ? (
-                <mapLibre.MapView style={styles.previewMap} mapStyle={OLA_TILE_STYLE_URL}>
+                <mapLibre.MapView style={styles.previewMap} mapStyle={authenticatedMapStyle ?? undefined}>
                   <mapLibre.Camera
                     centerCoordinate={coordinates ? [coordinates.longitude, coordinates.latitude] : [78.4867, 17.385]}
                     zoomLevel={coordinates ? 15 : 11}
@@ -213,9 +239,8 @@ export default function AddressFormScreen() {
               ) : (
                 <View style={styles.mapUnavailableWrap}>
                   <MapPin size={18} color={colors.muted} />
-                  <Text variant="caption" color={colors.muted}>Map preview unavailable in Expo Go</Text>
-                  <Text variant="caption" color={colors.slate}>Use Adjust to set location using search/current location.</Text>
-                  {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
+                  <Text variant="caption" color={colors.muted}>{mapAvailability.heading || 'Map preview unavailable'}</Text>
+                  <Text variant="caption" color={colors.slate}>{mapAvailability.body || 'Use Adjust to set location using search/current location.'}</Text>
                 </View>
               )}
             </View>

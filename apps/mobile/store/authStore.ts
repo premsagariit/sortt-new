@@ -1,13 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import { normalizeLanguage, type SupportedLanguage } from '../lib/i18n';
 import { useLanguageStore } from './languageStore';
-
-let globalClerkSignOut: (() => Promise<void>) | null = null;
-
-export const setGlobalClerkSignOut = (fn: () => Promise<void>) => {
-  globalClerkSignOut = fn;
-};
 
 type UserType = 'seller' | 'aggregator' | null;
 
@@ -26,6 +22,7 @@ export interface AuthState {
   token: string | null;
   user: SessionUser | null;
   isNewUser: boolean;
+  hasHydrated: boolean;
 
   phoneNumber: string;
   isLoading: boolean;
@@ -44,6 +41,7 @@ export interface AuthState {
 
   setSession: (data: { token: string; user: SessionUser; isNewUser: boolean }) => void;
   clearSession: () => void;
+  setHasHydrated: (hydrated: boolean) => void;
 
   setPhoneNumber: (phone: string) => void;
   setIsLoading: (loading: boolean) => void;
@@ -70,6 +68,7 @@ const initialState = {
   token: null,
   user: null,
   isNewUser: false,
+  hasHydrated: false,
 
   phoneNumber: '',
   isLoading: false,
@@ -87,106 +86,143 @@ const initialState = {
   meLoaded: false,
 };
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  ...initialState,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
 
-  setSession: ({ token, user, isNewUser }) => {
-    set({
-      token,
-      user,
-      isNewUser,
-      userId: user.id,
-      userType: user.user_type,
-    });
-  },
+      setSession: ({ token, user, isNewUser }) => {
+        set({
+          token,
+          user,
+          isNewUser,
+          userId: user.id,
+          userType: user.user_type,
+        });
+      },
 
-  clearSession: () => {
-    set({
-      token: null,
-      user: null,
-      isNewUser: false,
-      userId: null,
-      userType: null,
-      meLoaded: false,
-    });
-  },
+      clearSession: () => {
+        set({
+          token: null,
+          user: null,
+          isNewUser: false,
+          userId: null,
+          userType: null,
+          accountType: null,
+          name: '',
+          email: '',
+          locality: '',
+          city: '',
+          createdAt: null,
+          meLoaded: false,
+        });
+      },
 
-  setPhoneNumber: (phone) => set({ phoneNumber: phone }),
-  setIsLoading: (loading) => set({ isLoading: loading }),
-  setLegacySession: (session) => set({ session }),
+      setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
 
-  requestOtp: async (phone, mode) => {
-    set({ isLoading: true });
-    try {
-      await api.post('/api/auth/request-otp', { phone: `+91${phone}`, mode });
-      set({ isLoading: false });
-      return { success: true };
-    } catch (err: any) {
-      set({ isLoading: false });
-      return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Failed to request OTP' };
-    }
-  },
+      setPhoneNumber: (phone) => set({ phoneNumber: phone }),
+      setIsLoading: (loading) => set({ isLoading: loading }),
+      setLegacySession: (session) => set({ session }),
 
-  verifyOtp: async (phone, otp) => {
-    set({ isLoading: true });
-    try {
-      const res = await api.post('/api/auth/verify-otp', { phone: `+91${phone}`, otp });
-      set({ isLoading: false });
-      return { success: true, data: res.data };
-    } catch (err: any) {
-      set({ isLoading: false });
-      return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Verification failed' };
-    }
-  },
+      requestOtp: async (phone, mode) => {
+        set({ isLoading: true });
+        try {
+          await api.post('/api/auth/request-otp', { phone: `+91${phone}`, mode });
+          set({ isLoading: false });
+          return { success: true };
+        } catch (err: any) {
+          set({ isLoading: false });
+          return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Failed to request OTP' };
+        }
+      },
 
-  setUserId: (id) => set({ userId: id }),
-  setUserType: (type) => set({ userType: type }),
-  setAccountType: (type) => set({ accountType: type }),
-  setName: (name) => set({ name }),
-  setEmail: (email) => set({ email }),
-  setLocality: (locality) => set({ locality }),
-  setCity: (city) => set({ city }),
-  setPreferredLanguage: (preferredLanguage) => set({ preferredLanguage }),
+      verifyOtp: async (phone, otp) => {
+        set({ isLoading: true });
+        try {
+          const res = await api.post('/api/auth/verify-otp', { phone: `+91${phone}`, otp });
+          set({ isLoading: false });
+          return { success: true, data: res.data };
+        } catch (err: any) {
+          set({ isLoading: false });
+          return { success: false, error: err?.response?.data?.error || err?.response?.data?.message || 'Verification failed' };
+        }
+      },
 
-  reset: () => set(initialState),
+      setUserId: (id) => set({ userId: id }),
+      setUserType: (type) => set({ userType: type }),
+      setAccountType: (type) => set({ accountType: type }),
+      setName: (name) => set({ name }),
+      setEmail: (email) => set({ email }),
+      setLocality: (locality) => set({ locality }),
+      setCity: (city) => set({ city }),
+      setPreferredLanguage: (preferredLanguage) => set({ preferredLanguage }),
 
-  signOut: async () => {
-    if (globalClerkSignOut) {
-      try {
-        await globalClerkSignOut();
-      } catch {
-      }
-    }
-    set(initialState);
-  },
+      reset: () => set({ ...initialState, hasHydrated: true }),
 
-  fetchMe: async () => {
-    if (get().meLoaded) return;
-    try {
-      const res = await api.get('/api/users/me');
-      const u = res.data;
+      signOut: async () => {
+        // No Clerk session to invalidate — simply clear local state.
+        set({ ...initialState, hasHydrated: true });
+      },
+
+      fetchMe: async () => {
+        if (get().meLoaded) return;
+        try {
+          const res = await api.get('/api/users/me');
+          const u = res.data;
 
       const accountType = u.seller_profile_type || u.profile_type || (u.user_type === 'aggregator' ? 'business' : 'individual');
       const locality = u.user_type === 'seller' ? u.seller_locality : u.aggregator_locality;
       const city = u.user_type === 'seller' ? u.seller_city_code : u.aggregator_city_code;
       const preferredLanguage = normalizeLanguage(u.preferred_language);
 
-      set({
-        userId: u.id ?? null,
-        userType: u.user_type ?? null,
-        user: u.id ? { id: u.id, user_type: u.user_type ?? null } : null,
-        accountType: accountType as any,
-        name: u.name ?? '',
-        email: u.email ?? '',
-        locality: locality ?? '',
-        city: city ?? '',
-        preferredLanguage,
-        createdAt: u.created_at ?? null,
-        meLoaded: true,
-      });
+          set({
+            userId: u.id ?? null,
+            userType: u.user_type ?? null,
+            user: u.id ? { id: u.id, user_type: u.user_type ?? null } : null,
+            accountType: accountType as any,
+            name: u.name ?? '',
+            email: u.email ?? '',
+            locality: locality ?? '',
+            city: city ?? '',
+            preferredLanguage,
+            createdAt: u.created_at ?? null,
+            meLoaded: true,
+          });
 
-      void useLanguageStore.getState().hydrateFromProfile(u.preferred_language);
-    } catch {
+          void useLanguageStore.getState().hydrateFromProfile(u.preferred_language);
+        } catch {
+        }
+      },
+    }),
+    {
+      name: 'sortt-auth-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isNewUser: state.isNewUser,
+        userId: state.userId,
+        userType: state.userType,
+        accountType: state.accountType,
+        name: state.name,
+        email: state.email,
+        locality: state.locality,
+        city: state.city,
+        preferredLanguage: state.preferredLanguage,
+        createdAt: state.createdAt,
+        phoneNumber: state.phoneNumber,
+      }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          state?.setHasHydrated(true);
+          return;
+        }
+
+        state?.setIsLoading(false);
+        state?.setUserId(state.user?.id ?? state.userId ?? null);
+        state?.setUserType(state.user?.user_type ?? state.userType ?? null);
+        state?.setHasHydrated(true);
+      },
     }
-  },
-}));
+  )
+);

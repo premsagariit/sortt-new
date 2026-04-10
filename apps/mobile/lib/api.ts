@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 const isPrivateOrLocalHost = (host: string): boolean => {
   return (
@@ -11,7 +12,23 @@ const isPrivateOrLocalHost = (host: string): boolean => {
   );
 };
 
+const isLoopbackHost = (host: string): boolean => {
+  return host === 'localhost' || host === '127.0.0.1';
+};
+
 const resolveExpoDevHost = (): string | null => {
+  const runtimeHostCandidates: Array<string | undefined> = [
+    (Constants as any)?.expoConfig?.hostUri,
+    (Constants as any)?.manifest2?.extra?.expoClient?.hostUri,
+    (Constants as any)?.manifest?.debuggerHost,
+  ];
+
+  for (const candidate of runtimeHostCandidates) {
+    if (!candidate) continue;
+    const host = candidate.trim().replace(/^https?:\/\//, '').split(':')[0];
+    if (host) return host;
+  }
+
   const candidates = [
     process.env.EXPO_PUBLIC_DEV_HOST,
     process.env.EXPO_PUBLIC_HOST,
@@ -48,12 +65,19 @@ export const getBaseUrl = (): string => {
           const parsed = new URL(baseUrl as string);
           const envHost = parsed.hostname;
 
-          if (isPrivateOrLocalHost(envHost) && envHost !== resolvedHost) {
+          const shouldAvoidLoopbackDowngrade =
+            !isLoopbackHost(envHost) && isLoopbackHost(resolvedHost);
+
+          if (isPrivateOrLocalHost(envHost) && envHost !== resolvedHost && !shouldAvoidLoopbackDowngrade) {
             const corrected = `${parsed.protocol}//${resolvedHost}${parsed.port ? `:${parsed.port}` : ''}${parsed.pathname}`;
             console.warn(
               `[API] EXPO_PUBLIC_API_URL host (${envHost}) differs from active Expo host (${resolvedHost}). Using ${corrected}`
             );
             baseUrl = corrected;
+          } else if (shouldAvoidLoopbackDowngrade) {
+            console.warn(
+              `[API] Keeping EXPO_PUBLIC_API_URL host (${envHost}) and ignoring loopback Expo host (${resolvedHost}) for device connectivity.`
+            );
           }
         } catch {
           // Keep the provided value if parsing fails.
@@ -109,7 +133,7 @@ export const setApiLanguageGetter = (getter: (() => string | null) | null) => {
   getLanguage = getter;
 };
 
-// Request interceptor — attaches Clerk JWT on every request
+// Request interceptor — attaches JWT on every authenticated request
 api.interceptors.request.use(
   async (config) => {
     try {

@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
-import { clerkClient } from '@clerk/express';
 import { query } from '../lib/db';
+import { issueToken } from '../lib/jwt';
 import {
     redis,
     otpRequestPhoneLimiter,
@@ -42,20 +42,6 @@ const isMetaTemplateParamMismatch = (error: any): boolean => {
     const code = error?.response?.data?.error?.code;
     const details = String(error?.response?.data?.error?.error_data?.details ?? '').toLowerCase();
     return code === 132000 && details.includes('number of localizable_params');
-};
-
-const getOrCreateClerkUserId = async (phoneHmac: string): Promise<string> => {
-    const existing = await clerkClient.users.getUserList({ externalId: [phoneHmac] });
-    if (existing.data && existing.data.length > 0) {
-        return existing.data[0].id;
-    }
-
-    const created = await clerkClient.users.createUser({
-        externalId: phoneHmac,
-        username: `u_${phoneHmac.slice(0, 16)}`,
-        password: crypto.randomBytes(32).toString('hex'),
-    });
-    return created.id;
 };
 
 router.post('/request-otp', async (req: Request, res: Response) => {
@@ -118,11 +104,6 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         }
 
         // ── Send OTP via Meta WhatsApp Cloud API ──────────────────────────────
-        // The template MUST be an approved "authentication" category template.
-        // Always inject body + url-button components so the OTP appears in the
-        // message. The hello_world template does NOT accept components — if you
-        // are still using it, replace META_OTP_TEMPLATE_NAME in Azure env with
-        // your approved authentication template name.
         const whatsappConfigured = !!(META_TOKEN && META_PHONE_ID);
         if (whatsappConfigured) {
             const sendTemplateMessage = async (template: any) => {
@@ -166,11 +147,6 @@ router.post('/request-otp', async (req: Request, res: Response) => {
                         Sentry.captureException(retryErr, { level: 'warning' });
                     }
                 } else {
-                    // Non-fatal: OTP is already stored in Redis.
-                    // Common causes:
-                    //   - Template not approved yet → change META_OTP_TEMPLATE_NAME
-                    //   - Recipient number not whitelisted in Meta test sandbox
-                    //   - hello_world template used (doesn't accept components)
                     console.warn('[OTP] WhatsApp send failed (non-fatal):', metaErr?.response?.data || metaErr?.message);
                     Sentry.captureException(metaErr, { level: 'warning' });
                 }
@@ -179,27 +155,18 @@ router.post('/request-otp', async (req: Request, res: Response) => {
             console.warn('[OTP] META_TOKEN or META_PHONE_ID not set — WhatsApp delivery skipped. OTP is held in Redis only.');
         }
 
-
-        // Log OTP code to terminal for developer testing.
-        // In production, only log when explicitly enabled via LOG_PLAINTEXT_OTP=true.
         if (process.env.NODE_ENV !== 'production' || LOG_PLAINTEXT_OTP) {
             console.log(`[OTP DEV] Testing Code for ${normalizedPhone.slice(-4)}: ${otp}`);
         }
-        const expiresAt = new Date(Date.now() + 300 * 1000); // 5 min, matches Redis TTL
+        const expiresAt = new Date(Date.now() + 300 * 1000); // 5 min
 
-        // Audit Log (HMAC is not persisted - Security X3)
+        // Audit Log
         await query(
-            `INSERT INTO otp_log (phone_hash, otp_hmac, expires_at)
-            VALUES ($1, $2, $3)`,
+            `INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, $2, $3)`,
             [phoneHmac, 'otp_sent', expiresAt]
         );
 
-
-        // In dev mode (no Meta keys) expose the OTP in the response so the
-        // mobile app can auto-fill it without needing Azure log access.
-        // NEVER include dev_otp when WhatsApp is configured (production).
         const devOtp = whatsappConfigured ? undefined : otp;
-
         res.json({ success: true, ...(devOtp !== undefined && { dev_otp: devOtp }) });
     } catch (error: any) {
         console.error('[OTP] Request OTP Error:', error?.message || error);
@@ -237,7 +204,6 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
         const storedHmac = await redis.get<string>(`otp:phone:${phoneHmac}`);
         if (!storedHmac) {
-            // Log failure
             await query(`INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, 'otp_failed', NOW())`, [phoneHmac]);
             return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
         }
@@ -263,18 +229,17 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         // OTP Verified successfully
         await query(`INSERT INTO otp_log (phone_hash, otp_hmac, expires_at) VALUES ($1, 'otp_verified', NOW())`, [phoneHmac]);
 
-        let userRecord: { id: string; user_type: 'seller' | 'aggregator' | null; is_active: boolean; clerk_user_id: string; };
+        let userRecord: { id: string; user_type: 'seller' | 'aggregator' | null; is_active: boolean; };
         let isNewUser = false;
 
         if (mode === 'signup') {
-            const clerkUserId = await getOrCreateClerkUserId(phoneHmac);
             const phoneLast4 = normalizedPhone.slice(-4);
             try {
                 const insertResult = await query(
-                    `INSERT INTO users (clerk_user_id, phone_hash, phone_last4, user_type, is_active, name, display_phone, created_at, last_seen)
-                     VALUES ($1, $2, $3, $4, true, $5, $6, NOW(), NOW())
-                     RETURNING id, user_type, is_active, clerk_user_id`,
-                    [clerkUserId, phoneHmac, phoneLast4, 'seller', `User ${phoneLast4}`, normalizedPhone]
+                    `INSERT INTO users (phone_hash, phone_last4, user_type, is_active, name, display_phone, created_at, last_seen)
+                     VALUES ($1, $2, $3, true, $4, $5, NOW(), NOW())
+                     RETURNING id, user_type, is_active`,
+                    [phoneHmac, phoneLast4, 'seller', `User ${phoneLast4}`, normalizedPhone]
                 );
                 userRecord = insertResult.rows[0];
                 isNewUser = true;
@@ -289,7 +254,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
                 `UPDATE users
                  SET last_seen = NOW()
                  WHERE phone_hash = $1
-                 RETURNING id, user_type, is_active, clerk_user_id`,
+                 RETURNING id, user_type, is_active`,
                 [phoneHmac]
             );
 
@@ -304,15 +269,11 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
             isNewUser = false;
         }
 
-        // Generate SignIn Token for Frontend (Ticket Strategy)
-        const signInToken = await clerkClient.signInTokens.createSignInToken({
-            userId: userRecord.clerk_user_id,
-            expiresInSeconds: 60 * 5, // 5 minutes validity
-        });
+        // Issue custom JWT (7-day expiry)
+        const jwt = await issueToken(userRecord.id, '7d');
 
-        // Return safe user DTO (excluding phone_hash and clerk_user_id)
         res.json({
-            token: { jwt: signInToken.token },
+            token: { jwt },
             user: {
                 id: userRecord.id,
                 user_type: isNewUser ? null : userRecord.user_type,
@@ -322,9 +283,8 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Verify OTP Error:', error?.message || error);
-        if (error?.errors?.[0]) console.error('Clerk Error:', error.errors[0].code, error.errors[0].message);
         Sentry.captureException(error);
-        res.status(500).json({ error: error?.errors?.[0]?.message || 'Internal Server Error' });
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 

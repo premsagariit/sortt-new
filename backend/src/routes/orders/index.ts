@@ -11,7 +11,7 @@ import { storageProvider } from '../../lib/storage';
 import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import axios from 'axios';
-import { createClerkClient } from '@clerk/backend';
+
 import { createNotification } from '../../lib/notifications';
 import { channelName } from '../../utils/channelHelper';
 import { sendPushToUsers } from '../../utils/pushNotifications';
@@ -250,10 +250,9 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
             fullPickupAddress,
             areas
           );
-          const isNowWithinHours = isWithinWorkingHoursNow(schedule);
           const isPickupWindowValid = isPickupWindowWithinSchedule(schedule, preferred_pickup_window);
 
-          return inArea && isNowWithinHours && isPickupWindowValid;
+          return inArea && isPickupWindowValid;
         });
 
         // Get user IDs for push notification
@@ -313,7 +312,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
     });
 
     return res.status(201).json({
-      order: buildOrderDto(order, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+      order: buildOrderDto(order, userId, resolveViewerType(req.user?.user_type))
     });
   } catch (error: any) {
     console.error('POST /api/orders error:', error);
@@ -496,7 +495,7 @@ router.get('/', async (req, res) => {
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].created_at : null;
 
     return res.json({
-      orders: rows.map(o => buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))),
+      orders: rows.map(o => buildOrderDto(o, userId, resolveViewerType(req.user?.user_type))),
       nextCursor,
       hasMore
     });
@@ -537,9 +536,6 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     }
 
     const schedule = parseOperatingHoursSchedule(operating_hours);
-    if (!isWithinWorkingHoursNow(schedule)) {
-      return res.json({ orders: [], nextCursor: null, hasMore: false });
-    }
 
     // Feed: 'created' orders in aggregator's city where aggregator has ≥1 matching rate
     // G10.7: orders with NO matching rate for this aggregator are excluded
@@ -569,9 +565,8 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
               AND EXISTS (
                 SELECT 1
                 FROM unnest($${params.length + 1}::text[]) AS area_name
-                WHERE lower(COALESCE(o.pickup_locality, '')) = area_name
-                   OR lower(COALESCE(o.pickup_locality, '')) LIKE '%' || area_name || '%'
-                   OR lower(COALESCE(o.pickup_address, '')) LIKE '%' || area_name || '%'
+             WHERE regexp_replace(lower(COALESCE(o.pickup_locality, '')), '[^a-z0-9]+', ' ', 'g') LIKE '%' || area_name || '%'
+               OR regexp_replace(lower(COALESCE(o.pickup_address, '')), '[^a-z0-9]+', ' ', 'g') LIKE '%' || area_name || '%'
               )`;
     params.push(normalizedAreas);
 
@@ -661,7 +656,7 @@ router.get('/feed', verifyUserRole('aggregator'), async (req, res) => {
     // V25: pickup_address null for pre-acceptance (buildOrderDto handles this)
     return res.json({
       orders: rows.map((o: DbOrder) => {
-        const dto = buildOrderDto(o, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type));
+        const dto = buildOrderDto(o, userId, resolveViewerType(req.user?.user_type));
         // Compute total estimated weight from estimated_weights jsonb map
         const weightMap: Record<string, any> = typeof o.estimated_weights === 'object' && o.estimated_weights !== null
           ? o.estimated_weights as Record<string, any>
@@ -1084,7 +1079,7 @@ router.get('/:id', async (req, res) => {
       const sellerOtp = await redis.get<string>(`otp:order_plain:${id}`);
       order.otp = sellerOtp ?? '';
     }
-    return res.json(buildOrderDto(order, userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type)));
+    return res.json(buildOrderDto(order, userId, resolveViewerType(req.user?.user_type)));
 
   } catch (e) {
     console.error('GET /api/orders/:id error:', e);
@@ -1246,7 +1241,7 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
     );
 
     return res.status(200).json({
-      order: buildOrderDto(refreshed.rows[0], userId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+      order: buildOrderDto(refreshed.rows[0], userId, resolveViewerType(req.user?.user_type))
     });
   } catch (e: any) {
     await client.query('ROLLBACK');
@@ -1414,56 +1409,7 @@ router.patch('/:id/status', async (req, res) => {
           }
         });
 
-        // SP1: On acceptance, cache seller's phone from Clerk into users.display_phone.
-        // Non-fatal — runs after response is sent. Clerk outage cannot block acceptance.
-        if (newStatus === 'accepted') {
-          setImmediate(async () => {
-            try {
-              // Fetch the order's seller_id (not available in currentOrder without a join)
-              const sellerRes = await query(
-                'SELECT seller_id, display_phone FROM orders o JOIN users u ON u.id = o.seller_id WHERE o.id = $1',
-                [id]
-              );
-              if (!sellerRes.rows[0]) return;
-              const { seller_id, display_phone } = sellerRes.rows[0];
 
-              // Early-return guard — already cached, skip Clerk API call
-              if (display_phone) return;
-
-              const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-              if (!clerkSecretKey) {
-                console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller phone');
-                return;
-              }
-
-              // Fetch clerk_user_id for this seller
-              const userRes = await query(
-                'SELECT clerk_user_id FROM users WHERE id = $1',
-                [seller_id]
-              );
-              if (!userRes.rows[0]?.clerk_user_id) return;
-              const clerkUserId = userRes.rows[0].clerk_user_id;
-
-              const clerk = createClerkClient({ secretKey: clerkSecretKey });
-              const clerkUser = await clerk.users.getUser(clerkUserId);
-              const primaryPhoneId = clerkUser.primaryPhoneNumberId;
-              const phoneObj = clerkUser.phoneNumbers.find(p => p.id === primaryPhoneId);
-              const phoneNumber = phoneObj?.phoneNumber ?? null;
-
-              if (phoneNumber) {
-                await query(
-                  'UPDATE users SET display_phone = $1 WHERE id = $2',
-                  [phoneNumber, seller_id]
-                );
-                console.log(`[SP1] Cached seller phone for order ${id}`);
-              }
-            } catch (err) {
-              // Non-fatal: log and swallow. Acceptance response already sent.
-              console.error('[SP1] Failed to cache seller phone — non-fatal:', err);
-              Sentry.captureException(err);
-            }
-          });
-        }
 
         return res.json({ success: true, status: newStatus });
       } catch (e) {
@@ -1599,9 +1545,7 @@ router.delete('/:id', verifyUserRole(['seller', 'aggregator']), async (req, res)
 router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) => {
   const { orderId } = req.params;
   const aggregatorId = req.user!.id;
-  const aggregatorClerkUserId = req.user?.clerk_user_id;
   let sellerId: string | null = null;
-  let sellerClerkUserId: string | null = null;
 
   const client = await pool.connect();
   try {
@@ -1619,16 +1563,6 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     }
 
     sellerId = lockResult.rows[0].seller_id;
-
-    // WARN 1 + BLOCK: Fetch both seller and aggregator phones BEFORE COMMIT to prevent race condition
-    // Fetch seller's clerk_user_id
-    const sellerUserRes = await client.query(
-      `SELECT clerk_user_id FROM users WHERE id = $1`,
-      [sellerId]
-    );
-    sellerClerkUserId = sellerUserRes.rows[0]?.clerk_user_id ?? null;
-
-    // Fetch aggregator's clerk_user_id (already have it from req.user)
 
     await client.query(
       `UPDATE orders SET status = 'accepted', aggregator_id = $1, updated_at = NOW() WHERE id = $2`,
@@ -1709,62 +1643,6 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
       console.error('[Ably] Accept status publish error:', err);
     }
   });
-
-  // WARN 1 + BLOCK: Phone fetch for BOTH parties happens synchronously after COMMIT (no race condition)
-  // but outside transaction context (allows non-RLS display_phone updates)
-  try {
-    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-    if (!clerkSecretKey) {
-      console.warn('[SP1] CLERK_SECRET_KEY not set — cannot cache seller/aggregator phones');
-    } else {
-      const clerk = createClerkClient({ secretKey: clerkSecretKey });
-
-      // Fetch and cache seller phone (non-fatal)
-      if (sellerClerkUserId && sellerId) {
-        try {
-          const sellerClerkUser = await clerk.users.getUser(sellerClerkUserId);
-          const sellerPhoneObj = sellerClerkUser.phoneNumbers.find(
-            p => p.id === sellerClerkUser.primaryPhoneNumberId
-          );
-          const sellerPhone = sellerPhoneObj?.phoneNumber ?? null;
-
-          if (sellerPhone) {
-            await query('UPDATE users SET display_phone = $1 WHERE id = $2', [sellerPhone, sellerId]);
-            console.log(`[SP1] Cached seller phone for order ${orderId}`);
-          } else {
-            console.log(`[SP1] Seller has no phone on file for order ${orderId}`);
-          }
-        } catch (err) {
-          console.error('[SP1] Failed to fetch seller phone from Clerk — non-fatal:', err);
-          // Don't throw; keep going for aggregator
-        }
-      }
-
-      // Fetch and cache aggregator phone (non-fatal, BLOCK revision)
-      if (aggregatorClerkUserId) {
-        try {
-          const aggregatorClerkUser = await clerk.users.getUser(aggregatorClerkUserId);
-          const aggregatorPhoneObj = aggregatorClerkUser.phoneNumbers.find(
-            p => p.id === aggregatorClerkUser.primaryPhoneNumberId
-          );
-          const aggregatorPhone = aggregatorPhoneObj?.phoneNumber ?? null;
-
-          if (aggregatorPhone) {
-            await query('UPDATE users SET display_phone = $1 WHERE id = $2', [aggregatorPhone, aggregatorId]);
-            console.log(`[SP1] Cached aggregator phone for order ${orderId}`);
-          } else {
-            console.log(`[SP1] Aggregator has no phone on file for order ${orderId}`);
-          }
-        } catch (err) {
-          console.error('[SP1] Failed to fetch aggregator phone from Clerk — non-fatal:', err);
-          // Don't throw; accept response still goes through
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[SP1] Phone caching error — non-fatal:', err);
-    Sentry.captureException(err);
-  }
 
   // Notification + push on acceptance (D2: zero PII)
   setImmediate(async () => {
@@ -1899,7 +1777,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
   `, [orderId]);
 
   return res.status(200).json({
-    order: buildOrderDto(orderRes.rows[0], aggregatorId, req.user?.clerk_user_id, resolveViewerType(req.user?.user_type))
+    order: buildOrderDto(orderRes.rows[0], aggregatorId, resolveViewerType(req.user?.user_type))
   });
 });
 
@@ -2036,3 +1914,4 @@ router.post('/:orderId/verify-otp', verifyUserRole('aggregator'), async (req, re
 });
 
 export default router;
+

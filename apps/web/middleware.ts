@@ -1,32 +1,36 @@
 /**
  * apps/web/middleware.ts
  * ─────────────────────────────────────────────────────────────────
- * Vercel Edge Middleware — IP allowlist for /admin/* routes (X4, G16.1).
+ * Vercel Edge Middleware — IP allowlist (G16.1) + JWT cookie guard.
  *
- * - Reads ADMIN_IP_ALLOWLIST env var (comma-separated IPs)
- * - In development (NODE_ENV !== 'production'): bypasses check
- * - Returns 403 JSON for non-whitelisted IPs in production
- * - Returns 200 if allowlist is not configured (open) — operator responsibility
+ * Auth strategy (Clerk-free):
+ *  - Admin login stores a compact JWT in sessionStorage AND as an
+ *    `admin_token` cookie (set by the login page client-side).
+ *  - This middleware reads `admin_token` cookie, verifies the HS256
+ *    JWT using JWT_SECRET, and redirects to /admin/login on failure.
+ *  - Public route: /admin/login (no token required)
  * ─────────────────────────────────────────────────────────────────
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { jwtVerify } from 'jose';
 
-const isPublicRoute = createRouteMatcher(['/admin/login(.*)']);
+const JWT_SECRET_RAW = process.env.JWT_SECRET ?? '';
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  const adminTokenCookie = req.cookies.get('admin_token')?.value;
+function getSecret(): Uint8Array {
+  return new TextEncoder().encode(JWT_SECRET_RAW);
+}
 
-  if (adminTokenCookie) {
-    return NextResponse.next();
-  }
+const PUBLIC_PATHS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password', '/admin/request-access'];
+
+function isPublic(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+}
+
+export default async function middleware(req: NextRequest): Promise<NextResponse> {
+  const { pathname } = req.nextUrl;
 
   // ── 1. IP ALLOWLIST LOGIC (Gate G16.1) ──────────────────────────
-  // [Note: Temporarily commented out for Gate G16.1 local testing]
-  // if (process.env.NODE_ENV !== 'production') {
-  //   // Skip IP checking locally
-  // } else {
   const allowlistRaw = process.env.ADMIN_IP_ALLOWLIST ?? '';
   const allowlist = allowlistRaw
     .split(',')
@@ -34,7 +38,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     .filter(Boolean);
 
   if (allowlist.length === 0 && process.env.NODE_ENV !== 'production') {
-    console.warn('[admin-ip-allowlist] ADMIN_IP_ALLOWLIST is not configured; allowing all IPs in development.');
+    // no-op in dev
   }
 
   if (allowlist.length > 0) {
@@ -49,28 +53,38 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
           error: 'Access denied',
           message: 'Your IP address is not authorised to access this resource.',
         }),
-        {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
       );
     }
   }
-  // }
   // ─────────────────────────────────────────────────────────────────
 
-  // ── 2. CLERK AUTH LOGIC ──────────────────────────────────────────
-  if (!isPublicRoute(req)) {
-    const session = await auth();
-    if (!session.userId) {
+  // ── 2. JWT COOKIE GUARD ──────────────────────────────────────────
+  if (!isPublic(pathname)) {
+    const token = req.cookies.get('admin_token')?.value;
+
+    if (!token) {
       return NextResponse.redirect(new URL('/admin/login', req.url));
     }
+
+    // Skip verification if JWT_SECRET not configured (dev safety net)
+    if (JWT_SECRET_RAW.length >= 32) {
+      try {
+        await jwtVerify(token, getSecret(), { algorithms: ['HS256'] });
+      } catch {
+        const loginUrl = new URL('/admin/login', req.url);
+        loginUrl.searchParams.set('reason', 'timeout');
+        return NextResponse.redirect(loginUrl);
+      }
+    }
   }
-});
+  // ─────────────────────────────────────────────────────────────────
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
-    // Next.js standard Clerk matcher covering all active routes but skipping static files
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     '/(api|trpc)(.*)',
   ],

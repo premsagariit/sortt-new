@@ -8,6 +8,7 @@ type AblyMessageShape = {
 };
 
 type AblyChannel = {
+  state?: string;
   subscribe(event: string, cb: (message: AblyMessageShape) => void): void;
   unsubscribe(event: string, cb: (message: AblyMessageShape) => void): void;
   publish(event: string, payload: object): Promise<void>;
@@ -51,6 +52,11 @@ export class AblyBackendProvider implements IRealtimeProvider {
       const abblyChannel = this.client.channels.get(channel);
       this.channels.set(channel, abblyChannel);
 
+      const channelState = String(abblyChannel.state ?? '').toLowerCase();
+      if (channelState === 'failed') {
+        throw new Error(`Channel operation failed as channel state is failed: ${channel}`);
+      }
+
       const callback = (message: AblyMessageShape) => {
         handler({
           event: message.name || 'unknown',
@@ -86,6 +92,9 @@ export class AblyBackendProvider implements IRealtimeProvider {
     const text = String((error as any)?.message ?? error ?? '').toLowerCase();
     return (
       text.includes('state = detached') ||
+      text.includes('state is failed') ||
+      text.includes('state = failed') ||
+      text.includes('operation failed') ||
       text.includes('unable to attach') ||
       text.includes('channel detached') ||
       text.includes('already detached')

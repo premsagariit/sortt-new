@@ -7,7 +7,7 @@ export interface DbOrder {
   pickup_address: string | null;
   pickup_locality: string | null;
   phone_hash?: string;
-  clerk_user_id?: string;
+  clerk_user_id?: string; // Legacy: to be removed
   seller_name?: string;
   seller_display_phone?: string | null;  // SP1: populated from users.display_phone
   aggregator_name?: string;              // SP1: populated from joining users as agg
@@ -46,7 +46,6 @@ export type OrderDtoViewerType = 'seller' | 'aggregator';
 export function buildOrderDto(
   order: DbOrder,
   requestingUserId: string,
-  requestingUserClerkId?: string,
   viewerType?: OrderDtoViewerType | null
 ) {
   const canSeeAddress =
@@ -68,7 +67,7 @@ export function buildOrderDto(
       ? `#${order.order_number.toString().padStart(6, '0')}`
       : `#${order.id.slice(0, 8).toUpperCase()}`;
 
-  const channelPrefix = requestingUserClerkId ? getChannelHmacPrefix(requestingUserClerkId) : null;
+  const channelPrefix = getChannelHmacPrefix(requestingUserId);
   const chat_channel = channelPrefix ? `${channelPrefix}:chat:${order.id}` : undefined;
   const order_channel = channelPrefix ? `${channelPrefix}:order:${order.id}` : undefined;
   const chatChannelToken = chat_channel || null;  // camelCase alias for mobile store

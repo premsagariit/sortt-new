@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { MagnifyingGlass, MapPin, Info, X } from 'phosphor-react-native';
@@ -10,41 +10,148 @@ import { ZoneChip } from '../../../components/ui/ZoneChip';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { safeBack } from '../../../utils/navigation';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { api } from '../../../lib/api';
 
-const ALL_ZONES = [
-    'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'Kondapur', 'Madhapur',
-    'Hitech City', 'Manikonda', 'Kukatpally', 'Secunderabad', 'Abids',
-    'Begumpet', 'Ameerpet', 'Somajiguda', 'Nallakunta', 'Himayatnagar',
-];
+const AUTOCOMPLETE_MIN_CHARS = 2;
+const AUTOCOMPLETE_DEBOUNCE_MS = 300;
+
+type AreaSuggestion = {
+    label: string;
+    locality: string;
+};
+
+const normalizeAreaKey = (value: unknown): string => {
+    return String(value ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+const uniqAreas = (items: string[]): string[] => {
+    const seen = new Set<string>();
+    const next: string[] = [];
+
+    for (const item of items) {
+        const label = String(item ?? '').trim();
+        if (!label) continue;
+        const key = normalizeAreaKey(label);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        next.push(label);
+    }
+
+    return next;
+};
 
 export default function OperatingAreasScreen() {
     const router = useRouter();
     const { operatingAreas, setOperatingAreas, updateProfile } = useAggregatorStore();
     const [selectedZones, setSelectedZones] = useState<string[]>(operatingAreas);
     const [searchQuery, setSearchQuery] = useState('');
+    const [suggestions, setSuggestions] = useState<AreaSuggestion[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const requestSeqRef = useRef(0);
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
         setSelectedZones(operatingAreas);
     }, [operatingAreas]);
 
-    const filteredZones = useMemo(() => {
-        return ALL_ZONES.filter(z =>
-            z.toLowerCase().includes(searchQuery.toLowerCase()) && !selectedZones.includes(z)
-        );
-    }, [searchQuery, selectedZones]);
+    const selectedZoneKeys = useMemo(() => {
+        return new Set(selectedZones.map((zone) => normalizeAreaKey(zone)));
+    }, [selectedZones]);
+
+    const filteredSuggestions = useMemo(() => {
+        return suggestions.filter((item) => !selectedZoneKeys.has(normalizeAreaKey(item.locality)));
+    }, [selectedZoneKeys, suggestions]);
+
+    useEffect(() => {
+        const query = searchQuery.trim();
+        const queryKey = normalizeAreaKey(query);
+
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+        }
+
+        if (query.length < AUTOCOMPLETE_MIN_CHARS) {
+            setSuggestions([]);
+            setIsSearching(false);
+            setSearchError(null);
+            return;
+        }
+
+        setIsSearching(true);
+        setSearchError(null);
+
+        debounceTimerRef.current = setTimeout(() => {
+            const requestId = ++requestSeqRef.current;
+
+            api.get('/api/maps/autocomplete', { params: { input: query } })
+                .then((res: any) => {
+                    if (requestSeqRef.current !== requestId) return;
+
+                    const predictions = Array.isArray(res.data?.predictions) ? res.data.predictions : [];
+                    const nextSuggestions = predictions
+                        .map((item: any) => {
+                            const label = String(item?.description ?? '').trim();
+                            const locality = String(item?.locality ?? '').trim();
+                            return { label, locality };
+                        })
+                        .filter((item: AreaSuggestion) => item.label.length > 0 && item.locality.length > 0)
+                        .filter((item: AreaSuggestion) => {
+                            const normalizedLabel = normalizeAreaKey(item.label);
+                            const normalizedLocality = normalizeAreaKey(item.locality);
+                            return normalizedLabel.includes(queryKey) || normalizedLocality.includes(queryKey);
+                        });
+
+                    const dedupedByLocality = new Map<string, AreaSuggestion>();
+                    for (const item of nextSuggestions) {
+                        const localityKey = normalizeAreaKey(item.locality);
+                        if (!localityKey || dedupedByLocality.has(localityKey)) continue;
+                        dedupedByLocality.set(localityKey, item);
+                    }
+
+                    setSuggestions(Array.from(dedupedByLocality.values()));
+                    setIsSearching(false);
+                    setSearchError(null);
+                })
+                .catch((err: any) => {
+                    if (requestSeqRef.current !== requestId) return;
+                    console.error('[OperatingAreas] Autocomplete failed:', err);
+                    setSuggestions([]);
+                    setIsSearching(false);
+                    setSearchError('Could not fetch area suggestions right now.');
+                });
+        }, AUTOCOMPLETE_DEBOUNCE_MS);
+
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+                debounceTimerRef.current = null;
+            }
+        };
+    }, [searchQuery]);
 
     const toggleZone = (zone: string) => {
-        setSelectedZones(prev =>
-            prev.includes(zone) ? prev.filter(z => z !== zone) : [...prev, zone]
-        );
+        setSelectedZones((prev) => {
+            const zoneKey = normalizeAreaKey(zone);
+            const exists = prev.some((entry) => normalizeAreaKey(entry) === zoneKey);
+            if (exists) {
+                return prev.filter((entry) => normalizeAreaKey(entry) !== zoneKey);
+            }
+            return uniqAreas([...prev, zone]);
+        });
     };
 
     const handleSave = async () => {
         if (selectedZones.length === 0) return;
         setIsSaving(true);
         try {
-            await updateProfile({ operating_area: selectedZones });
+            await updateProfile({ operating_area: uniqAreas(selectedZones) });
             setIsSaving(false);
             router.back();
         } catch (err: any) {
@@ -111,18 +218,33 @@ export default function OperatingAreasScreen() {
 
                     <View style={styles.suggestionsList}>
                         <View style={styles.chipsWrap}>
-                            {filteredZones.map(zone => (
+                            {filteredSuggestions.map((item) => (
                                 <ZoneChip
-                                    key={zone}
-                                    label={zone}
+                                    key={item.label}
+                                    label={item.label}
                                     selected={false}
-                                    onPress={() => toggleZone(zone)}
+                                    onPress={() => toggleZone(item.locality)}
                                 />
                             ))}
                         </View>
-                        {filteredZones.length === 0 && searchQuery.length > 0 && (
+                        {isSearching && (
                             <View style={styles.emptySearch}>
-                                <Text variant="caption" color={colors.muted}>No zones matching "{searchQuery}"</Text>
+                                <Text variant="caption" color={colors.muted}>Searching areas...</Text>
+                            </View>
+                        )}
+                        {!isSearching && searchError && searchQuery.length >= AUTOCOMPLETE_MIN_CHARS && (
+                            <View style={styles.emptySearch}>
+                                <Text variant="caption" color={colors.muted}>{searchError}</Text>
+                            </View>
+                        )}
+                        {!isSearching && !searchError && filteredSuggestions.length === 0 && searchQuery.length >= AUTOCOMPLETE_MIN_CHARS && (
+                            <View style={styles.emptySearch}>
+                                <Text variant="caption" color={colors.muted}>No matching areas found.</Text>
+                            </View>
+                        )}
+                        {searchQuery.length > 0 && searchQuery.length < AUTOCOMPLETE_MIN_CHARS && (
+                            <View style={styles.emptySearch}>
+                                <Text variant="caption" color={colors.muted}>Type at least {AUTOCOMPLETE_MIN_CHARS} characters to search areas.</Text>
                             </View>
                         )}
                     </View>

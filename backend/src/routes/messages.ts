@@ -3,7 +3,6 @@ import sanitizeHtml from 'sanitize-html';
 import * as Sentry from '@sentry/node';
 import multer from 'multer';
 import sharp from 'sharp';
-import { createClerkClient } from '@clerk/backend';
 import { query } from '../lib/db';
 import { createNotification } from '../lib/notifications';
 import { channelName } from '../utils/channelHelper';
@@ -12,7 +11,6 @@ import { publishEvent } from '../lib/realtime';
 import { storageProvider } from '../lib/storage';
 
 const router = Router();
-const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -78,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         // Verify sender is a party to the order (seller or assigned aggregator)
         const orderRes = await query(`
-            SELECT o.seller_id, o.aggregator_id, s.clerk_user_id as seller_clerk, a.clerk_user_id as agg_clerk
+            SELECT o.seller_id, o.aggregator_id, s.id as seller_clerk, a.id as agg_clerk
             FROM orders o
             LEFT JOIN users s ON s.id = o.seller_id
             LEFT JOIN users a ON a.id = o.aggregator_id
@@ -184,7 +182,7 @@ router.post('/image', upload.single('file'), async (req: Request, res: Response)
         }
 
         const orderRes = await query(`
-            SELECT o.seller_id, o.aggregator_id, s.clerk_user_id as seller_clerk, a.clerk_user_id as agg_clerk
+            SELECT o.seller_id, o.aggregator_id, s.id as seller_clerk, a.id as agg_clerk
             FROM orders o
             LEFT JOIN users s ON s.id = o.seller_id
             LEFT JOIN users a ON a.id = o.aggregator_id
@@ -298,8 +296,8 @@ router.patch('/read', async (req: Request, res: Response) => {
 
         const orderRes = await query(`
             SELECT o.seller_id, o.aggregator_id,
-                   s.clerk_user_id AS seller_clerk,
-                   a.clerk_user_id AS agg_clerk
+                   s.id AS seller_clerk,
+                   a.id AS agg_clerk
             FROM orders o
             LEFT JOIN users s ON s.id = o.seller_id
             LEFT JOIN users a ON a.id = o.aggregator_id
@@ -358,8 +356,8 @@ router.get('/', async (req: Request, res: Response) => {
         // Verify party membership
         const orderRes = await query(
             `SELECT o.seller_id, o.aggregator_id,
-                    su.name AS seller_name, su.clerk_user_id AS seller_clerk,
-                    au.name AS aggregator_name, au.clerk_user_id AS aggregator_clerk
+                    su.name AS seller_name, su.id AS seller_clerk,
+                    au.name AS aggregator_name, au.id AS aggregator_clerk
              FROM orders o
              LEFT JOIN users su ON su.id = o.seller_id
              LEFT JOIN users au ON au.id = o.aggregator_id
@@ -384,21 +382,9 @@ router.get('/', async (req: Request, res: Response) => {
 
         const mappedMessages = await Promise.all(result.rows.map(resolveMessageRow));
 
-        let sellerAvatarUrl: string | null = null;
-        let aggregatorAvatarUrl: string | null = null;
-        try {
-            if (order.seller_clerk) {
-                const sellerClerkUser = await clerkClient.users.getUser(order.seller_clerk);
-                sellerAvatarUrl = sellerClerkUser.imageUrl ?? null;
-            }
-            if (order.aggregator_clerk) {
-                const aggClerkUser = await clerkClient.users.getUser(order.aggregator_clerk);
-                aggregatorAvatarUrl = aggClerkUser.imageUrl ?? null;
-            }
-        } catch {
-            sellerAvatarUrl = null;
-            aggregatorAvatarUrl = null;
-        }
+        // Avatar URLs: not available without Clerk — return null
+        const sellerAvatarUrl: string | null = null;
+        const aggregatorAvatarUrl: string | null = null;
 
         return res.json({
             messages: mappedMessages,

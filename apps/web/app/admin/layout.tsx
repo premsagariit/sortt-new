@@ -13,8 +13,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useClerk } from '@clerk/nextjs';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   ChartBar,
   Buildings,
@@ -53,18 +52,18 @@ const NAV_ITEMS = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { signOut } = useClerk();
+  const router = useRouter();
   // Remaining session time in ms (15 min initially, ticked down by InactivityGuard)
   const [remainingMs, setRemainingMs] = useState(15 * 60 * 1000);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleTick = useCallback((ms: number) => setRemainingMs(ms), []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     sessionStorage.removeItem('admin_token');
     document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
     sessionStorage.removeItem('lastActivity');
-    await signOut({ redirectUrl: '/admin/login' });
+    router.push('/admin/login?reason=timeout');
   };
 
   // Skip the guard and the sidebar entirely for auth routes

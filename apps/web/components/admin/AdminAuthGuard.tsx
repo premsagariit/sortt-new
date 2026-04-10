@@ -15,7 +15,6 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth, useClerk } from '@clerk/nextjs';
 
 interface AdminAuthGuardProps {
   children: React.ReactNode;
@@ -25,13 +24,8 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [verified, setVerified] = useState(false);
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const { signOut } = useClerk();
 
   useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (!apiUrl) {
@@ -46,14 +40,8 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
           .split('; ')
           .find((part) => part.startsWith('admin_token='))
           ?.split('=')[1];
-        const fallbackToken = sessionStorage.getItem('admin_token') || (fallbackCookie ? decodeURIComponent(fallbackCookie) : '');
+        const token = sessionStorage.getItem('admin_token') || (fallbackCookie ? decodeURIComponent(fallbackCookie) : '');
 
-        if (!isSignedIn && !fallbackToken) {
-          router.replace('/admin/login');
-          return;
-        }
-
-        const token = fallbackToken || await getToken();
         if (!token) {
           router.replace('/admin/login');
           return;
@@ -67,16 +55,17 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
 
         if (!response.ok) {
           sessionStorage.removeItem('admin_token');
-          await signOut({ redirectUrl: '/admin/login' });
+          document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
+          router.replace('/admin/login');
           return;
         }
 
         const data = await response.json();
 
-        // user_type comes from DB-fetched /api/users/me — V7 compliance
         if (data?.user_type !== 'admin') {
           sessionStorage.removeItem('admin_token');
-          await signOut({ redirectUrl: '/admin/login?reason=unauthorized' });
+          document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
+          router.replace('/admin/login?reason=unauthorized');
           return;
         }
 
@@ -88,10 +77,11 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         setVerified(true);
       } catch {
         sessionStorage.removeItem('admin_token');
-        await signOut({ redirectUrl: '/admin/login' });
+        document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
+        router.replace('/admin/login');
       }
     })();
-  }, [getToken, isLoaded, isSignedIn, pathname, router, signOut]);
+  }, [pathname, router]);
 
   if (!verified) {
     return (

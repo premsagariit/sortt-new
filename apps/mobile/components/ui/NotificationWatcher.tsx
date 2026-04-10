@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
@@ -9,7 +9,8 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
  */
 export function NotificationWatcher() {
   const { isOnline } = useNetworkStatus();
-  const { isSignedIn } = useAuth();
+  const session = useAuthStore(s => s.session);
+  const isSignedIn = !!session;
   const fetchNotifications = useNotificationStore(s => s.fetchNotifications);
 
   useEffect(() => {

@@ -9,23 +9,8 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-type ClerkLike = {
-  session?: {
-    getToken: () => Promise<string | null>;
-  };
-};
-
 async function getToken(): Promise<string> {
   if (typeof window === 'undefined') return '';
-
-  const clerk = (window as Window & { Clerk?: ClerkLike }).Clerk;
-  if (clerk?.session) {
-    try {
-      return (await clerk.session.getToken()) || '';
-    } catch (err) {
-      console.error('Clerk getToken error', err);
-    }
-  }
 
   const fallbackToken = window.sessionStorage.getItem('admin_token');
   if (fallbackToken) {

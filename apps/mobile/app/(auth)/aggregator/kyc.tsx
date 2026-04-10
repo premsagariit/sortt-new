@@ -14,19 +14,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import { Camera, Storefront, WarningCircle, CheckCircle, IconWeight, Truck } from 'phosphor-react-native';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
+import { useAuthStore } from '../../../store/authStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { safeBack } from '../../../utils/navigation';
 import { api } from '../../../lib/api';
 
 export default function KycScreen() {
-    const { getToken } = useAuth();
     const {
         aggregatorType,
         kycShopPhotoUri,
@@ -79,12 +78,7 @@ export default function KycScreen() {
                         type: 'image/jpeg',
                     } as any);
 
-                    let authToken: string | null = null;
-                    try {
-                        authToken = await getToken({ skipCache: true } as any);
-                    } catch {
-                        authToken = await getToken();
-                    }
+                    const authToken = useAuthStore.getState().token;
 
                     const url = `${api.defaults.baseURL}/api/aggregators/kyc`;
                     const controller = new AbortController();

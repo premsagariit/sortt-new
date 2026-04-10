@@ -15,12 +15,12 @@ const isDev = process.env.NODE_ENV === 'development';
 // Production-grade CSP
 const ProdCSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://clerk.sortt.com",
+  "script-src 'self' 'unsafe-inline'",
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://*.cloudflarestorage.com https://*.r2.cloudflarestorage.com https://*.clerk.com https://img.clerk.com",
-  "connect-src 'self' https://*.cloudflarestorage.com https://*.r2.cloudflarestorage.com https://*.clerk.accounts.dev https://clerk.sortt.com",
+  "img-src 'self' data: blob: https://*.cloudflarestorage.com https://*.r2.cloudflarestorage.com",
+  "connect-src 'self' https://*.cloudflarestorage.com https://*.r2.cloudflarestorage.com",
   "frame-ancestors 'none'",
 ].join('; ');
 
@@ -28,7 +28,7 @@ const ProdCSP = [
 // and local backend on any localhost port
 const DevCSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.sortt.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
@@ -47,10 +47,7 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '**.r2.cloudflarestorage.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'img.clerk.com',
+
       },
     ],
   },

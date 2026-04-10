@@ -3,7 +3,6 @@ import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Camera, CheckCircle, ArrowRight, WarningCircle, Sparkle, Plus, Minus, PencilSimple } from 'phosphor-react-native';
-import { useAuth } from '@clerk/clerk-expo';
 
 import { NavBar } from '../../../components/ui/NavBar';
 import { Text } from '../../../components/ui/Typography';
@@ -12,6 +11,7 @@ import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator'
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
 import { useLanguageStore } from '../../../store/languageStore';
+import { useAuthStore } from '../../../store/authStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
 import { MaterialCard } from '../../../components/ui/MaterialCard';
 import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
@@ -23,7 +23,6 @@ export default function Step1Screen() {
   const { photoUris, isAnalyzing, addPhotoUri, removePhotoAt, setIsAnalyzing, processAiItems, resetListing, selectedMaterials, setMaterials } = useListingStore();
   const [analysisError, setAnalysisError] = useState<'manual' | null>(null);
 
-  const { getToken } = useAuth();
   const language = useLanguageStore((state) => state.language);
   const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
 
@@ -44,12 +43,7 @@ export default function Step1Screen() {
         name: 'scrap.jpg',
       } as any);
 
-      let authToken: string | null = null;
-      try {
-        authToken = await getToken({ skipCache: true } as any);
-      } catch {
-        authToken = await getToken();
-      }
+      const authToken = useAuthStore.getState().token;
       const url = `${api.defaults.baseURL}/api/scrap/analyze?language=${encodeURIComponent(language)}`;
       
       const controller = new AbortController();

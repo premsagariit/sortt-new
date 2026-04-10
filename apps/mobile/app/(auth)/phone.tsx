@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useAuth, useSignIn } from '@clerk/clerk-expo';
 import {
   Phone,
   UserPlus,
@@ -81,8 +80,6 @@ const resolveOnboardingRoute = (me: MeResponse): string => {
 
 export default function PhoneScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
-  const { signIn, setActive } = useSignIn();
   const setSession = useAuthStore((s) => s.setSession);
 
   const [step, setStep] = useState<Step>('phone');
@@ -242,18 +239,6 @@ export default function PhoneScreen() {
 
       const { token, user, is_new_user } = res.data;
       setSession({ token: token.jwt, user, isNewUser: is_new_user });
-
-      try {
-        if (signIn && setActive && token?.jwt) {
-          await signOut().catch(() => {});
-          const signInAttempt = await signIn.create({ strategy: 'ticket', ticket: token.jwt });
-          if (signInAttempt.status === 'complete') {
-            await setActive({ session: signInAttempt.createdSessionId });
-          }
-        }
-      } catch {
-        // Clerk session setup failed, but we can still navigate
-      }
 
       if (is_new_user) {
         router.replace('/(auth)/user-type');

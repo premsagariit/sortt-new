@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuthStore } from '../../store/authStore';
 import { registerForPushNotificationsAsync } from '../../lib/push';
 import { api } from '../../lib/api';
 
@@ -12,7 +12,8 @@ import { api } from '../../lib/api';
  * never delivered.
  */
 export function PushTokenRegistrar() {
-  const { isSignedIn } = useAuth();
+  const session = useAuthStore(s => s.session);
+  const isSignedIn = !!session;
   const hasRegistered = useRef(false);
 
   useEffect(() => {

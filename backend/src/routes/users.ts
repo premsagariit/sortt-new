@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { getAuth } from '@clerk/express';
 import { query } from '../lib/db';
 import { normalizeLanguage } from '../utils/language';
-import * as Sentry from '@sentry/node'; // Assuming Sentry is imported or needs to be added
+import * as Sentry from '@sentry/node';
 
 const router = Router();
 
+// PATCH /api/users/language
 router.patch('/language', async (req, res) => {
   const userId = req.user?.id;
   const preferredLanguageRaw = req.body?.preferred_language;
@@ -45,12 +45,12 @@ router.patch('/language', async (req, res) => {
   }
 });
 
-// Persist selected user type during onboarding
+// POST /api/users/user-type — persist selected user type during onboarding
 router.post('/user-type', async (req, res) => {
-  const { userId: clerkUserId } = getAuth(req);
+  const userId = req.user?.id;
   const { user_type } = req.body as { user_type?: 'seller' | 'aggregator' };
 
-  if (!clerkUserId) {
+  if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -62,9 +62,9 @@ router.post('/user-type', async (req, res) => {
     const result = await query(
       `UPDATE users
        SET user_type = $1
-       WHERE clerk_user_id = $2
+       WHERE id = $2
        RETURNING id, user_type`,
-      [user_type, clerkUserId]
+      [user_type, userId]
     );
 
     if (result.rowCount === 0) {
@@ -79,14 +79,14 @@ router.post('/user-type', async (req, res) => {
   }
 });
 
-// Endpoint for push token registration
+// POST /api/users/device-token — push token registration
 router.post('/device-token', async (req, res) => {
+  const userId = req.user?.id;
   const { deviceToken, provider } = req.body;
-  const { userId: clerkUserId } = getAuth(req);
 
-  console.log('[DIAG] POST /api/users/device-token', { clerkUserId, deviceToken, provider });
+  console.log('[DIAG] POST /api/users/device-token', { userId, deviceToken, provider });
 
-  if (!clerkUserId) {
+  if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -95,13 +95,6 @@ router.post('/device-token', async (req, res) => {
   }
 
   try {
-    // Get internal user ID
-    const userRes = await query('SELECT id FROM users WHERE clerk_user_id = $1', [clerkUserId]);
-    if (userRes.rowCount === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const userId = userRes.rows[0].id;
-
     await query(
       `INSERT INTO device_tokens (user_id, expo_token, token_type)
        VALUES ($1, $2, $3)
@@ -117,28 +110,20 @@ router.post('/device-token', async (req, res) => {
   }
 });
 
-// Endpoint for updating user profile (Seller onboarding)
+// POST /api/users/profile — seller onboarding profile update
 router.post('/profile', async (req, res) => {
-  const { userId: clerkUserId } = getAuth(req);
+  const userId = req.user?.id;
   const { name, profile_type, business_name, gstin, locality, city_code, email } = req.body;
 
-  console.log('[DIAG] POST /api/users/profile', { clerkUserId, body: req.body });
+  console.log('[DIAG] POST /api/users/profile', { userId, body: req.body });
 
-  if (!clerkUserId) {
+  if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
-    // Get internal user ID
-    const userRes = await query('SELECT id FROM users WHERE clerk_user_id = $1', [clerkUserId]);
-    if (userRes.rowCount === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const userId = userRes.rows[0].id;
-
     await query('BEGIN');
 
-    // Update name in users table if provided
     if (name) {
       await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
     }
@@ -155,7 +140,6 @@ router.post('/profile', async (req, res) => {
       );
     }
 
-    // Upsert into seller_profiles
     if (profile_type || business_name || gstin || locality || city_code) {
       await query(
         `INSERT INTO seller_profiles (user_id, profile_type, business_name, gstin, locality, city_code)
@@ -180,7 +164,7 @@ router.post('/profile', async (req, res) => {
   }
 });
 
-// Endpoint for fetching current user details
+// GET /api/users/me — fetch current user details
 router.get('/me', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -188,9 +172,6 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Try users_public view, fallback to users if view doesn't exist (handled by DB error)
-    // To be safe against missing users_public, we'll try it, and if it fails, query users directly.
-    // Actually, Day 9 context says users_public should be used.
     let dbRes;
     try {
       dbRes = await query(
@@ -220,9 +201,9 @@ router.get('/me', async (req, res) => {
         [userId]
       );
     } catch (viewError: any) {
-      if (viewError.code === '42P01' || viewError.code === '42703') { // undefined_table or undefined_column
+      if (viewError.code === '42P01' || viewError.code === '42703') {
         dbRes = await query(
-            `SELECT u.id, u.user_type, u.is_active, u.name, u.email, u.created_at, u.preferred_language,
+          `SELECT u.id, u.user_type, u.is_active, u.name, u.email, u.created_at, u.preferred_language,
               u.password_change_required,
                   s.profile_type as seller_profile_type, s.business_name as seller_business_name,
                   s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
@@ -258,8 +239,8 @@ router.get('/me', async (req, res) => {
 
     const userObj = { ...dbRes.rows[0] };
     userObj.must_change_password = Boolean(userObj.password_change_required);
-    
-    // Explicitly strip sensitive fields just in case 'users' table fallback was used
+
+    // Strip sensitive fields
     delete userObj.phone_hash;
     delete userObj.clerk_user_id;
 

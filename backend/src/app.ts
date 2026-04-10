@@ -12,7 +12,6 @@ import path from 'path';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { clerkMiddleware } from '@clerk/express';
 import { authMiddleware } from './middleware/auth';
 import { sanitizeBody } from './middleware/sanitize';
 import { errorHandler } from './middleware/errorHandler';
@@ -60,11 +59,6 @@ app.post('/test/sanitize', (req, res) => res.json({ body: req.body }));
 // Public auth routes
 app.use('/api/auth', authRouter);
 
-app.use(clerkMiddleware({
-  secretKey: process.env.CLERK_SECRET_KEY,
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-}));
-
 // Serve static files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
@@ -74,7 +68,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    clerk: !!process.env.CLERK_SECRET_KEY && !!process.env.CLERK_PUBLISHABLE_KEY ? 'configured' : 'MISSING ⚠️',
+    auth: 'custom-jwt',
   });
 });
 
