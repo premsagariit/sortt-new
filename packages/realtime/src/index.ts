@@ -66,7 +66,7 @@ const resolveMobileAuthUrl = (): string | undefined => {
   }
 
   let baseUrl = normalizeBase(envApiUrl);
-  const isDev = (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV !== 'production';
+  const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev) {
     const runtimeHost = resolveExpoRuntimeHost();
