@@ -39,6 +39,18 @@
 > - Repository cleaned of all legacy test artifacts and log files.
 > - 🚀 **Day 17 status:** Active; Security Audit + Monitoring + Launch phase underway.
 
+> ✅ **Implementation Sync Note (2026-04-11)**
+> - Aggregator navigate now restores a visible current-location marker and renders detailed route geometry when available.
+> - Confirm execution now shows a pickup-location map preview and hands off to the device's native navigation app from the map card or Navigate button.
+> - Seller order detail live-tracking UI has been removed from the mobile implementation; seller-side flow now stays focused on order details and receipt handoff.
+> - The aggregator cancel affordance was simplified to the label "Cancel".
+
+> ✅ **Implementation Sync Note (2026-04-11) — Feed Reliability + Scheduled Pickup Routing**
+> - Realtime token capability issuance was corrected so aggregator sessions can subscribe to the shared feed channel `orders:hyd:new` without capability-denied errors.
+> - Aggregator feed realtime subscription now includes defensive failed-state handling and immediate API refresh fallback to protect order-feed continuity.
+> - Scheduled order routing no longer hard-requires that the current time be inside aggregator working hours during fanout/feed/catch-up; matching continues to enforce city/material/operating-area and pickup-window compatibility.
+> - Operating-area normalization/matching logic was strengthened and covered with backend tests to reduce address-format mismatch drops.
+
 ---
 
 ## 1. Executive Summary
@@ -126,7 +138,7 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 #### 5.1.3 Aggregator
 
 - Phone number + OTP verification. OTP delivered via WhatsApp.
-- Full name, business name (if applicable), operating area (select city + locality zones).
+- Full name, business name (if applicable), operating area (profile edit uses maps autocomplete; suggestions show locality, city, state, and country, while selected chips persist locality-only values).
 - Aggregator type: Shop-based or Mobile (tempo/auto).
 - Document upload (Lightweight KYC — reviewed manually by admin in v1): Aggregators must upload exactly 4 photos:
   1. **Aadhaar Card Front** — required for all aggregators.
@@ -154,6 +166,7 @@ To become the most trusted digital bridge between scrap sellers and aggregators 
 ### 5.3 Order Creation & Aggregator Matching
 
 - On submission, the order is broadcast to all **verified, online aggregators in the seller's city** who handle at least one of the listed material types. Matching is by `city_code` (e.g. `HYD`) and the aggregator's configured material rates — **not by GPS radius or PostGIS proximity** (the schema does not use geospatial column types for matching in the MVP).
+- For scheduled pickups, eligibility is evaluated against operating-area and pickup-window compatibility; it is not rejected only because current server time is outside the aggregator's present working-hour slot.
 - Aggregators receive a push notification and in-app order card with: seller **locality** (not full address — V25), material types, approximate weight, and preferred pickup window.
 - **First-accept-wins lock:** once an aggregator accepts, the order is locked to them and other aggregators see it as 'Taken' (HTTP 409 conflict).
 - The accept operation is executed inside a single PostgreSQL transaction using `SELECT … FOR UPDATE SKIP LOCKED` to eliminate race conditions — no optimistic concurrency workaround.
@@ -219,8 +232,9 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 
 - For mobile aggregators, the Route tab shows a map of pending orders within their operating area.
 - Route map rendering uses the `IMapProvider` abstraction (`packages/maps/`) — **never** a direct maps SDK import in application code. Provider selection is environment-driven via `MAP_PROVIDER`.
+- The Route screen now supports tap-to-preview order pins with a status-aware detail card showing weights, totals, and order state.
 - In v1: Aggregators manually select a cluster of nearby orders to batch into a single trip.
-- The "Plan Route" button is live in the MVP UI but launches directions via `IMapProvider.getDirections()` for a single selected order. Multi-order batch routing is a v2 feature.
+- External map launch is handled elsewhere in the execution flow; the Route screen itself does not expose a direct "Open Route in Maps" CTA. Multi-order batch routing is a v2 feature.
 
 > **Post-MVP:** Algorithmic route optimisation (TSP-based) with automatic batch suggestions.
 
@@ -235,9 +249,10 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 ### 5.11 Search & Filters
 
 **For Sellers:**
-- Browse aggregators by locality/area.
+- Browse aggregators by name, locality/area, and material type.
 - Filter by: material type handled, rating.
 - View aggregator profiles: materials, buy rates, operating hours, ratings.
+- Show an explicit "No results found" state when tokenized search returns no matches.
 
 > **Post-MVP:** Distance-based filtering and map-toggle view for aggregators require PostGIS proximity queries. The MVP schema uses `city_code` and `locality` text fields — no geospatial column types. Distance-based search is deferred until the cities table gains coordinate data.
 
@@ -296,7 +311,7 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 | **Listing Step 4 — Review & Submit** | Full order summary, Earnings Calculator total, Submit CTA |
 | Order List | Tabs: Active / Completed / Cancelled. Each card shows status chip, materials, aggregator name (if accepted), pickup time |
 | Order Detail | Full order timeline, aggregator profile card (post-acceptance), chat button, track on map button (en route), OTP entry on arrival |
-| Browse Aggregators | List of aggregators in city with rating and top material buy rates. Filter by material |
+| Browse Aggregators | List of aggregators in city with rating and top material buy rates. Tokenized search by name, locality, and material type; filter by material |
 | Aggregator Profile | Name, rating, materials handled, buy rates table, operating hours, reviews, Contact button |
 | Transaction Receipt | Completion confirmation, invoice download (Business Mode only via signed URL), rating prompt |
 | Rate & Review | Star rating input, optional text, submit — appears after order completion |
@@ -321,11 +336,11 @@ Real-time status updates are delivered via **Ably** (V37). The Ably channel for 
 | Order Detail (Post-Acceptance) | Full address revealed (V25), seller name + phone last 4, Get Directions, Chat with Seller, status progression buttons |
 | My Orders | Tabs: **Active / Completed / Cancelled** (3 tabs). Status progression controls (Mark On the Way, Mark Arrived, Start Weighing). |
 | Pickup Confirmation | Scale photo upload (mandatory), weight entry per material, running total, OTP entry field from seller |
-| Route Planner | Map placeholder via `IMapProvider` stub, pending order pins list with locality, "Plan Route" button |
+| Route Planner | Interactive map/list route planner with tappable order pins, status-aware detail preview, and no external maps CTA |
 | Price Management | Set/edit buy rate per kg per material type, last updated timestamp, market reference comparison |
 | Earnings Dashboard | Today / This Week / This Month tabs. Total earnings (DM Mono, amber). Bar chart. Material breakdown. Completed orders list. Average rating. |
 | Daily Price Index | City-wise material rates updated daily by AI scraper (Day 15), last updated timestamp, admin-corrected flag if manually adjusted |
-| Profile & Settings | KYC status chip, operating area, materials handled, operating hours, buy rates, reviews, Log Out |
+| Profile & Settings | KYC status chip, operating area (locality-only chips from maps autocomplete), materials handled, operating hours, buy rates, reviews, Log Out |
 
 ---
 
@@ -423,6 +438,14 @@ The following constraints arise from the MVP technology choices and must be acco
 - Aggregator app flows designed for low-tech-comfort users: maximum 3 taps to complete any primary action from the home screen (3-tap rule — hard UX constraint).
 - Minimum 48dp touch target height on all interactive elements (WCAG AA).
 
+### 8.7 Analytics & Monitoring
+
+- **Product funnel analytics** are implemented in **PostHog Cloud** and must track core events: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
+- **Admin web behavioural analytics** are implemented in **Microsoft Clarity** for session replay and heatmap review on admin workflows.
+- **Backend and admin web error telemetry** are handled in **Azure Application Insights** (exceptions, traces, request diagnostics).
+- **Mobile crash telemetry** remains **Sentry React Native SDK only** (for mobile crash capture + symbolication).
+- **Synthetic uptime checks** run through **Azure Monitor Availability Tests** for backend `/health` and admin web production URL.
+
 ---
 
 ## 9. MVP Scope vs Future Roadmap
@@ -442,7 +465,7 @@ The MVP is built over 17 days in a sequential single-thread model. The exact day
 | **Phase 9: Providers** | Day 14 | Provider abstractions | All 5 provider packages complete (maps, realtime, auth, storage, analysis) |
 | **Phase 10: Intelligence** | Day 15 | AI + Invoice + Scraper | Gemini image analysis, GST PDF invoices, daily price scraper |
 | **Phase 11: Admin Web + Tests** | Day 16 | ✅ Complete | Admin panel + tests complete, live-data wired, 100% pass rate |
-| **Phase 12: Launch** | Day 17 | **Active** | Security audit, monitoring (PostHog, Sentry), production deploy |
+| **Phase 12: Launch** | Day 17 | **Ready to Start** | Security audit, monitoring (Application Insights + Azure Availability), product analytics (PostHog), behavioural analytics (Clarity), mobile crashes (Sentry), production deploy |
 
 **Post-MVP roadmap (not in Days 4–17):**
 - Telugu (and other regional languages) localisation

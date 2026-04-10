@@ -11,12 +11,15 @@ Sortt
 │   │   └── Repository cleanup: removed all temp `.tmp` JWTs and standalone test scripts.
 │   ├── Day 17 status: **Ready to Start** — Security Audit + Monitoring + Launch kickoff unblocked.
 │   ├── Web scope clarification (2026-03-30): business seller + aggregator web UI deferred; admin web pages only in current phase
+│   ├── Aggregator operating-area autocomplete in profile edit shows full locality/city/state/country labels but stores locality-only chips
+│   ├── Seller browse search tokenizes name, locality, and material type terms and shows an explicit no-results state
 │   ├── Seller address flow split: `address-map.tsx` (map pin + reverse geocode) + `address-form.tsx` (details + save)
 │   ├── Address draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff
 │   ├── Listing wizard step3 + seller addresses list integrated with map-first address flow
-│   ├── Live tracking stabilization in:
-│   │   ├── `apps/mobile/app/(aggregator)/execution/navigate.tsx` (pickup geocode fallback + route rendering)
-│   │   └── `apps/mobile/app/(seller)/order/[id].tsx` (resilient live tracking map gating + fallback)
+│   ├── Map UX polish in:
+│   │   ├── `apps/mobile/app/(aggregator)/execution/navigate.tsx` (visible current-location marker + detailed route geometry + Cancel CTA)
+│   │   ├── `apps/mobile/app/(aggregator)/execution/confirm.tsx` (pickup-location map preview + native navigation handoff)
+│   │   └── `apps/mobile/app/(seller)/order/[id].tsx` (seller live-tracking removed; detail screen now summary-focused)
 │   ├── Order live-location field preservation in `apps/mobile/store/orderStore.ts`
 │   └── Seller earnings route collision fix in `backend/src/routes/orders/index.ts` (`/earnings` before `/:id`)
 │   ├── Maps migration completed: Google Maps → Ola Maps provider implementation in `packages/maps/src/providers/OlaMapsProvider.ts`
@@ -29,7 +32,12 @@ Sortt
 │   ├── End-to-end chat image messages implemented across mobile + backend + realtime (`apps/mobile/store/chatStore.ts`, `apps/mobile/hooks/useOrderChannel.ts`, `backend/src/routes/messages.ts`)
 │   ├── Shared chat UI modernization and small-screen hardening completed in `apps/mobile/app/(shared)/chat/[id].tsx` and `apps/mobile/components/ui/MessageBubble.tsx`
 │   ├── Realtime cleanup adjusted in `apps/mobile/lib/realtime.ts` to reduce detached-channel transition errors
-│   └── Narrow-screen action-button overflow fixes applied in seller listing and aggregator weighing photo flows (`apps/mobile/app/(seller)/listing/step2.tsx`, `apps/mobile/app/(aggregator)/execution/weighing/[id].tsx`)
+│   ├── Narrow-screen action-button overflow fixes applied in seller listing and aggregator weighing photo flows (`apps/mobile/app/(seller)/listing/step2.tsx`, `apps/mobile/app/(aggregator)/execution/weighing/[id].tsx`)
+│   ├── Realtime feed capability fix in `backend/src/routes/realtime.ts` grants aggregators subscribe access for `orders:hyd:new` (resolves Ably capability-denied errors)
+│   ├── Aggregator feed subscription hardening in `apps/mobile/hooks/useAggregatorFeedChannel.ts` with defensive subscribe + immediate API fallback refresh
+│   ├── Ably provider failed-state hardening in `packages/realtime/src/providers/AblyMobileProvider.ts` and `packages/realtime/src/providers/AblyBackendProvider.ts`
+│   ├── Operating-area normalization/matching hardening in `backend/src/utils/availability.ts` with regression tests in `backend/src/__tests__/availability.test.ts`
+│   └── Scheduled pickup routing fix in `backend/src/routes/orders/index.ts` and `backend/src/routes/aggregators.ts`: removed strict current-time working-hours gate while preserving city/material/area/pickup-window compatibility
 │
 ├── MEMORY.md # Authoritative project memory, decisions, and lessons learned
 ├── PLAN.md # Master execution roadmap with status checkpoints
@@ -83,7 +91,7 @@ Sortt
 │   │   │   │   ├── aggregator
 │   │   │   │   │   ├── _layout.tsx # Aggregator onboarding stack layout
 │   │   │   │   │   ├── profile-setup.tsx # Aggregator profile basics capture
-│   │   │   │   │   ├── area-setup.tsx # Aggregator operating area setup
+│   │   │   │   │   ├── area-setup.tsx # Aggregator operating area setup (onboarding/static zones)
 │   │   │   │   │   ├── materials-setup.tsx # Aggregator material/rate preferences setup
 │   │   │   │   │   └── kyc.tsx # Aggregator KYC media upload and submission
 │   │   │   │   └── seller
@@ -94,7 +102,7 @@ Sortt
 │   │   │   ├── (seller) # Seller experience route group
 │   │   │   │   ├── _layout.tsx # Seller tab layout and route shell
 │   │   │   │   ├── home.tsx # Seller dashboard with quick actions and highlights
-│   │   │   │   ├── browse.tsx # Materials/rates browsing screen
+│   │   │   │   ├── browse.tsx # Materials/rates browsing and tokenized search screen
 │   │   │   │   ├── agg-profile.tsx # Aggregator profile preview for seller context
 │   │   │   │   ├── prices.tsx # Detailed seller-facing price list
 │   │   │   │   ├── orders.tsx # Seller order list and status tabs
@@ -123,7 +131,7 @@ Sortt
 │   │   │   │   ├── earnings.tsx # Aggregator earnings analytics page
 │   │   │   │   ├── edit-profile.tsx # Aggregator profile edit form
 │   │   │   │   ├── profile.tsx # Aggregator profile overview screen
-│   │   │   │   ├── route.tsx # Route/navigation helper page for execution flow
+│   │   │   │   ├── route.tsx # Interactive route planner with status-aware order detail preview
 │   │   │   │   ├── settings.tsx # Aggregator settings and account actions
 │   │   │   │   ├── order
 │   │   │   │   │   └── [id].tsx # Pre-accept aggregator order detail page
@@ -131,7 +139,7 @@ Sortt
 │   │   │   │   │   ├── buy-rates.tsx # Aggregator buy-rate management page
 │   │   │   │   │   ├── hours-availability.tsx # Working hours and online availability setup
 │   │   │   │   │   ├── kyc-documents.tsx # KYC documents management page
-│   │   │   │   │   ├── operating-areas.tsx # Operating areas management page
+│   │   │   │   │   ├── operating-areas.tsx # Operating areas management page with maps autocomplete
 │   │   │   │   │   └── order-summary.tsx # Aggregator order summary and stats view
 │   │   │   │   └── execution
 │   │   │   │       ├── _layout.tsx # Execution flow stack layout
@@ -284,12 +292,12 @@ Sortt
 │   │   │   ├── sanitize.ts # Input sanitization middleware
 │   │   │   └── verifyRole.ts # Role guard middleware for protected routes
 │   │   ├── providers
-│   │   │   └── maps.ts # Maps/geocoding adapter via @sortt/maps
+│   │   │   └── maps.ts # Maps/geocoding adapter via @sortt/maps (locality-only persistence for operating areas)
 │   │   ├── routes
 │   │   │   ├── aggregators.ts # Aggregator profile/rates/availability endpoints
 │   │   │   ├── auth.ts # OTP request/verify and auth flow endpoints
 │   │   │   ├── disputes.ts # Dispute creation and status handling endpoints
-│   │   │   ├── maps.ts # Geocode/reverse/autocomplete endpoints via @sortt/maps
+│   │   │   ├── maps.ts # Geocode/reverse/autocomplete endpoints via @sortt/maps (locality-only persistence for operating areas)
 │   │   │   ├── messages.ts # Chat/message endpoints
 │   │   │   ├── notifications.ts # Notification fetch/update endpoints
 │   │   │   ├── rates.ts # Public and role-based rates endpoints

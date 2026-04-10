@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import {
   Check,
@@ -17,26 +17,76 @@ import {
   FileText,
   Dress,
 } from 'phosphor-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { BaseCard } from '../../components/ui/Card';
-import { PrimaryButton } from '../../components/ui/Button';
+import { StatusChip } from '../../components/ui/StatusChip';
 import { Text, Numeric } from '../../components/ui/Typography';
-import { useOrderStore } from '../../store/orderStore';
-import { MAP_RENDERING_AVAILABLE } from '../../utils/mapAvailable';
+import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
+import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
-import { OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
-import { openExternalDirections } from '../../utils/mapNavigation';
+import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+type OrderStatus =
+  | 'created'
+  | 'accepted'
+  | 'en_route'
+  | 'arrived'
+  | 'weighing_in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'disputed';
+
+type MaterialType = 'metal' | 'paper' | 'fabric';
+
+const MATERIAL_CODE_TO_TYPE: Record<string, MaterialType> = {
+  metal: 'metal',
+  metals: 'metal',
+  iron: 'metal',
+  steel: 'metal',
+  aluminum: 'metal',
+  aluminium: 'metal',
+  paper: 'paper',
+  papers: 'paper',
+  cardboard: 'paper',
+  carton: 'paper',
+  fabric: 'fabric',
+  fabrics: 'fabric',
+  cloth: 'fabric',
+  textile: 'fabric',
+  textiles: 'fabric',
+};
+
+const CONFIRMED_WEIGHT_STATUSES: OrderStatus[] = ['weighing_in_progress', 'completed'];
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toMaterialType(value: unknown): MaterialType {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return MATERIAL_CODE_TO_TYPE[normalized] ?? 'metal';
+}
+
+function normalizeOrderStatus(value: unknown): OrderStatus {
+  const normalized = String(value ?? 'created').toLowerCase() as OrderStatus;
+  const allowed: OrderStatus[] = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress', 'completed', 'cancelled', 'disputed'];
+  return allowed.includes(normalized) ? normalized : 'created';
+}
 
 interface Order {
   id: string;
   orderNumber: string;
+  status: OrderStatus;
   locality: string;
   distance: string;
+  weightBasis: 'estimated' | 'confirmed';
   materials: { type: 'metal' | 'paper' | 'fabric'; weight: number }[];
   price: number;
   lat: number;
@@ -47,8 +97,10 @@ const MOCK_ORDERS: Order[] = [
   {
     id: 'route-order-1',
     orderNumber: '#000005',
+    status: 'accepted',
     locality: 'Banjara Hills',
     distance: '0.8 km',
+    weightBasis: 'estimated',
     materials: [
       { type: 'metal', weight: 18 },
       { type: 'paper', weight: 15 },
@@ -60,8 +112,10 @@ const MOCK_ORDERS: Order[] = [
   {
     id: 'route-order-2',
     orderNumber: '#000006',
+    status: 'en_route',
     locality: 'Jubilee Hills',
     distance: '1.4 km',
+    weightBasis: 'estimated',
     materials: [{ type: 'metal', weight: 10 }],
     price: 280,
     lat: 50,
@@ -70,8 +124,10 @@ const MOCK_ORDERS: Order[] = [
   {
     id: 'route-order-3',
     orderNumber: '#000007',
+    status: 'weighing_in_progress',
     locality: 'Somajiguda',
     distance: '2.1 km',
+    weightBasis: 'confirmed',
     materials: [
       { type: 'paper', weight: 8 },
       { type: 'fabric', weight: 4 },
@@ -83,11 +139,89 @@ const MOCK_ORDERS: Order[] = [
 ];
 
 export default function RoutePlannerScreen() {
-  const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [focusedOrderId, setFocusedOrderId] = useState<string | null>(null);
   const orders = useOrderStore((state: any) => state.orders);
-  const mapLibre = React.useMemo(() => (MAP_RENDERING_AVAILABLE ? getMapLibreModule() : null), []);
-  const canRenderMap = Boolean(MAP_RENDERING_AVAILABLE && mapLibre && OLA_TILE_STYLE_URL);
+  const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
+  const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
+  const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+  const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
+      setAuthenticatedMapStyle(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
+      .then((style) => {
+        if (isMounted) setAuthenticatedMapStyle(style);
+      })
+      .catch((error) => {
+        console.warn('[aggregator-route] failed to resolve map style', error);
+        if (isMounted) setAuthenticatedMapStyle(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
+
+  const toRouteMaterials = React.useCallback((item: any, status: OrderStatus): { materials: Order['materials']; weightBasis: Order['weightBasis'] } => {
+    const weightBasis: Order['weightBasis'] = CONFIRMED_WEIGHT_STATUSES.includes(status) ? 'confirmed' : 'estimated';
+    const orderItems = Array.isArray(item?.orderItems)
+      ? item.orderItems
+      : (Array.isArray(item?.order_items) ? item.order_items : []);
+    const lineItems = Array.isArray(item?.lineItems)
+      ? item.lineItems
+      : (Array.isArray(item?.line_items) ? item.line_items : []);
+
+    const fromOrderItems = orderItems
+      .map((orderItem: any) => {
+        const estimated = toFiniteNumber(orderItem?.estimatedWeightKg ?? orderItem?.estimated_weight_kg);
+        const confirmed = toFiniteNumber(orderItem?.confirmedWeightKg ?? orderItem?.confirmed_weight_kg);
+        const picked = weightBasis === 'confirmed' ? (confirmed ?? estimated ?? 0) : (estimated ?? confirmed ?? 0);
+        const rounded = Number.isFinite(picked) ? Number(picked.toFixed(2)) : 0;
+        return {
+          type: toMaterialType(orderItem?.materialCode ?? orderItem?.material_code),
+          weight: rounded,
+        };
+      })
+      .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
+    if (fromOrderItems.length > 0) return { materials: fromOrderItems, weightBasis };
+
+    const fromLineItems = lineItems
+      .map((lineItem: any) => {
+        const weight = toFiniteNumber(lineItem?.weightKg ?? lineItem?.weight_kg ?? lineItem?.confirmedWeightKg ?? lineItem?.estimatedWeightKg) ?? 0;
+        return {
+          type: toMaterialType(lineItem?.materialCode ?? lineItem?.material_code),
+          weight: Number(weight.toFixed(2)),
+        };
+      })
+      .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
+    if (fromLineItems.length > 0) return { materials: fromLineItems, weightBasis };
+
+    const estimatedWeights = item?.estimatedWeights ?? item?.estimated_weights;
+    if (estimatedWeights && typeof estimatedWeights === 'object') {
+      const fromEstimatedWeights = Object.entries(estimatedWeights)
+        .map(([code, weight]) => ({
+          type: toMaterialType(code),
+          weight: Number((toFiniteNumber(weight) ?? 0).toFixed(2)),
+        }))
+        .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
+      if (fromEstimatedWeights.length > 0) return { materials: fromEstimatedWeights, weightBasis: 'estimated' };
+    }
+
+    const fallbackWeight = toFiniteNumber(item?.confirmedWeightKg ?? item?.confirmed_weight_kg ?? item?.estimatedWeightKg ?? item?.estimated_weight_kg) ?? 0;
+    return {
+      materials: [{ type: 'metal', weight: Number(fallbackWeight.toFixed(2)) }],
+      weightBasis,
+    };
+  }, []);
 
   const storeOrders: Order[] = React.useMemo(() => {
     const withCoordinates = Array.isArray(orders)
@@ -96,17 +230,24 @@ export default function RoutePlannerScreen() {
 
     if (withCoordinates.length === 0) return MOCK_ORDERS;
 
-    return withCoordinates.slice(0, 12).map((item: any, index: number) => ({
-      id: String(item.orderId ?? item.id ?? `route-order-${index + 1}`),
-      orderNumber: String(item.orderNumber ?? item.order_display_id ?? `#${String(item.orderId ?? '').slice(0, 6).toUpperCase()}`),
-      locality: String(item.pickupLocality ?? item.locality ?? 'Unknown area'),
-      distance: typeof item.liveDistanceKm === 'number' ? `${item.liveDistanceKm.toFixed(1)} km` : '—',
-      materials: [{ type: 'metal', weight: Number(item.estimatedWeightKg ?? 0) || 0 }],
-      price: Number(item.estimatedAmount ?? item.estimatedTotal ?? item.displayAmount ?? 0) || 0,
-      lat: Number(item.pickupLat),
-      lng: Number(item.pickupLng),
-    }));
-  }, [orders]);
+    return withCoordinates.slice(0, 12).map((item: any, index: number) => {
+      const status = normalizeOrderStatus(item?.status);
+      const materialPayload = toRouteMaterials(item, status);
+
+      return {
+        id: String(item.orderId ?? item.id ?? `route-order-${index + 1}`),
+        orderNumber: String(item.orderNumber ?? item.order_display_id ?? `#${String(item.orderId ?? '').slice(0, 6).toUpperCase()}`),
+        status,
+        locality: String(item.pickupLocality ?? item.locality ?? 'Unknown area'),
+        distance: typeof item.liveDistanceKm === 'number' ? `${item.liveDistanceKm.toFixed(1)} km` : '—',
+        weightBasis: materialPayload.weightBasis,
+        materials: materialPayload.materials,
+        price: Number(getOrderDisplayAmount(item)) || 0,
+        lat: Number(item.pickupLat),
+        lng: Number(item.pickupLng),
+      };
+    });
+  }, [orders, toRouteMaterials]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>(storeOrders.map(o => o.id));
 
@@ -124,26 +265,33 @@ export default function RoutePlannerScreen() {
     setSelectedIds(storeOrders.map((item) => item.id));
   }, [storeOrders]);
 
-  const totalValue = storeOrders
-    .filter(o => selectedIds.includes(o.id))
-    .reduce((sum, o) => sum + o.price, 0);
-
-  const openRouteInMaps = async (): Promise<void> => {
-    const selectedOrders = storeOrders.filter((order) => selectedIds.includes(order.id));
-    if (selectedOrders.length === 0) {
-      Alert.alert('No orders selected', 'Select at least one order to open route.');
+  React.useEffect(() => {
+    if (storeOrders.length === 0) {
+      setFocusedOrderId(null);
       return;
     }
 
-    const destinationOrder = selectedOrders[selectedOrders.length - 1];
-    const waypointOrders = selectedOrders.slice(0, -1);
-    await openExternalDirections({
-      destination: { latitude: destinationOrder.lat, longitude: destinationOrder.lng },
-      waypoints: waypointOrders.map((order) => ({ latitude: order.lat, longitude: order.lng })),
-      errorTitle: 'Unable to open maps',
-      errorBody: 'No compatible maps app was found on this device.',
-    });
-  };
+    if (focusedOrderId && storeOrders.some((order) => order.id === focusedOrderId)) return;
+    setFocusedOrderId(storeOrders[0].id);
+  }, [focusedOrderId, storeOrders]);
+
+  React.useEffect(() => {
+    if (selectedIds.length === 0) {
+      setFocusedOrderId(null);
+      return;
+    }
+
+    if (focusedOrderId && selectedIds.includes(focusedOrderId)) return;
+    setFocusedOrderId(selectedIds[0]);
+  }, [focusedOrderId, selectedIds]);
+
+  const totalValue = storeOrders
+    .filter(o => selectedIds.includes(o.id))
+    .reduce((sum, o) => sum + o.price, 0);
+  const focusedOrder = React.useMemo(
+    () => storeOrders.find((order) => order.id === focusedOrderId) ?? null,
+    [focusedOrderId, storeOrders],
+  );
 
   return (
     <View style={styles.container}>
@@ -177,7 +325,7 @@ export default function RoutePlannerScreen() {
         {/* Map Visualization Area */}
         <View style={styles.mapArea}>
           {canRenderMap && mapLibre ? (
-            <mapLibre.MapView style={styles.map} mapStyle={OLA_TILE_STYLE_URL}>
+            <mapLibre.MapView style={styles.map} mapStyle={authenticatedMapStyle ?? undefined}>
               <mapLibre.Camera centerCoordinate={[78.4867, 17.385]} zoomLevel={11} />
               {storeOrders
                 .filter((order) => selectedIds.includes(order.id))
@@ -186,8 +334,9 @@ export default function RoutePlannerScreen() {
                     key={order.id}
                     id={`route-order-pin-${order.id}`}
                     coordinate={[order.lng, order.lat]}
+                    onSelected={() => setFocusedOrderId(order.id)}
                   >
-                    <View style={styles.routePointPin} />
+                    <View style={[styles.routePointPin, focusedOrderId === order.id && styles.routePointPinActive]} />
                   </mapLibre.PointAnnotation>
                 ))}
             </mapLibre.MapView>
@@ -195,7 +344,7 @@ export default function RoutePlannerScreen() {
             <View style={styles.mapGraphic}>
             {/* Markers */}
             {storeOrders.map(order => (
-              <View
+              <TouchableOpacity
                 key={order.id}
                 style={[
                   styles.marker,
@@ -205,14 +354,16 @@ export default function RoutePlannerScreen() {
                   },
                   !selectedIds.includes(order.id) && { opacity: 0.4 },
                 ]}
+                onPress={() => setFocusedOrderId(order.id)}
+                activeOpacity={0.8}
               >
-                <View style={[styles.markerPin, styles.markerOrder]}>
+                <View style={[styles.markerPin, styles.markerOrder, focusedOrderId === order.id && styles.markerPinActive]}>
                   <Package size={14} color="#fff" weight="bold" />
                 </View>
                 <View style={styles.markerLabelBg}>
                   <Text style={styles.markerLabel}>{order.orderNumber}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
 
             {/* User Marker */}
@@ -229,8 +380,9 @@ export default function RoutePlannerScreen() {
             <View style={styles.mapOverlay}>
               <Globe size={40} color={colors.muted} style={{ opacity: 0.1 }} />
               <Text style={styles.mapOverlayText}>Route Preview</Text>
+              <Text style={styles.mapOverlayText}>{mapAvailability.heading || 'Map preview unavailable'}</Text>
+              <Text style={styles.mapOverlayText}>{mapAvailability.body || 'Use a development build to view map pins.'}</Text>
             </View>
-            {/* TODO: MapLibre requires a dev build. In Expo Go, this renders the search-based geocode fallback. See address-form.tsx for pattern. */}
           </View>
           )}
 
@@ -246,6 +398,36 @@ export default function RoutePlannerScreen() {
               <Numeric size={12} color={colors.amber}>~₹{totalValue.toLocaleString()} total</Numeric>
             </View>
           </View>
+
+          {focusedOrder ? (
+            <BaseCard style={styles.focusedOrderCard}>
+              <View style={styles.focusedOrderHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="label" style={styles.focusedOrderTitle}>{focusedOrder.orderNumber}</Text>
+                  <Text variant="caption" color={colors.muted}>{focusedOrder.locality} · {focusedOrder.distance}</Text>
+                </View>
+                <StatusChip status={focusedOrder.status} />
+              </View>
+
+              <View style={styles.materialRow}>
+                {focusedOrder.materials.map((material, index) => (
+                  <View key={`${focusedOrder.id}-${material.type}-${index}`} style={styles.miniChip}>
+                    {material.type === 'metal' ? <Wrench size={10} color={colors.slate} /> :
+                      material.type === 'paper' ? <FileText size={10} color={colors.slate} /> :
+                        <Dress size={10} color={colors.slate} />}
+                    <Text variant="caption" style={styles.miniChipText}>{material.weight} kg</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.focusedOrderFooter}>
+                <Text variant="caption" color={colors.muted}>
+                  {focusedOrder.weightBasis === 'confirmed' ? 'Showing confirmed pickup weight' : 'Showing estimated listing weight'}
+                </Text>
+                <Numeric color={colors.amber} style={styles.orderPrice}>~₹{focusedOrder.price}</Numeric>
+              </View>
+            </BaseCard>
+          ) : null}
         </View>
 
         {/* List Section */}
@@ -298,16 +480,6 @@ export default function RoutePlannerScreen() {
               );
             })}
           </ScrollView>
-
-          {/* Action Button */}
-          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-            <PrimaryButton
-              label="Open Route in Maps"
-              onPress={() => void openRouteInMaps()}
-              style={{ backgroundColor: colors.red }}
-              disabled={selectedIds.length === 0}
-            />
-          </View>
         </View>
       </View>
     </View>
@@ -360,6 +532,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
   },
+  routePointPinActive: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.navy,
+  },
   mapGraphic: {
     flex: 1,
     backgroundColor: '#EEF4FC',
@@ -397,6 +575,10 @@ const styles = StyleSheet.create({
   },
   markerOrder: {
     backgroundColor: colors.red,
+  },
+  markerPinActive: {
+    transform: [{ scale: 1.08 }],
+    borderColor: colors.navy,
   },
   markerUser: {
     backgroundColor: colors.teal,
@@ -437,6 +619,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  focusedOrderCard: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
+    padding: spacing.md,
+  },
+  focusedOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  focusedOrderTitle: {
+    color: colors.navy,
+    fontWeight: '700',
+  },
+  focusedOrderFooter: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   listSection: {
     flex: 1,
@@ -521,10 +727,5 @@ const styles = StyleSheet.create({
   },
   orderPrice: {
     textAlign: 'right',
-  },
-  footer: {
-    padding: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
 });

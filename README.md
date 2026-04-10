@@ -1,8 +1,8 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** Day 16 COMPLETE, Day 17 Security Audit & Monitoring active (2026-04-05)  
+> **Status:** Day 16 COMPLETE, Day 17 Security Audit & Monitoring ready to start (2026-04-11)  
 > **Architecture:** pnpm Monorepo  
-> **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI.
+> **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI, Azure Application Insights, Azure Monitor Availability Tests, PostHog Cloud, Microsoft Clarity, Sentry (mobile only).
 
 ---
 
@@ -88,15 +88,17 @@ pnpm dev:backend
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
 | **Database** | Azure PostgreSQL, RLS, migration-driven schema |
 | **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
+| **Observability** | Azure Application Insights (Express + Next.js), Azure Monitor Availability Tests |
+| **Analytics** | PostHog Cloud (product funnels), Microsoft Clarity (admin web behaviour), Sentry React Native SDK (mobile crash symbolication only) |
 | **Offline Handling** | `useNetworkStatus` (NetInfo), `OfflineAwareNavigator`, `AuthNetworkErrorScreen`, `NetworkErrorScreen` |
 | **AI** | Gemini Flash Vision (Photo Analysis), Gemini Pro (Price Scraping) |
 
 ---
 
-### 🗓 Current Status (2026-04-04)
+### 🗓 Current Status (2026-04-11)
 ✅ Day 16 Admin Web Dashboard & Tests completed with 100% pass rate.
 
-🚀 Day 17 Security Audit & Infrastructure Hardening: **ACTIVE**.
+🚀 Day 17 Security Audit & Infrastructure Hardening: **READY TO START** (Option B telemetry architecture documented).
 
 ✅ Day 14 provider abstraction layer completed (2026-03-24):
 - All 5 provider packages are implemented and build cleanly: `@sortt/maps`, `@sortt/realtime`, `@sortt/auth`, `@sortt/storage`, `@sortt/analysis`.
@@ -110,9 +112,15 @@ pnpm dev:backend
 - Daily Python price scraper is wired through `backend/src/scheduler.ts` (node-cron spawn of `scraper/main.py`) and feeds `price_index`.
 - Mobile listing step 2 uses AI estimate hints, and receipt flows support invoice download.
 
+✅ Aggregator operating-area discovery now uses maps autocomplete in profile edit.
+- Suggestions show locality + city + state + country for discovery, while selected chips persist locality-only values.
+
+✅ Seller browse search now tokenizes name, locality, and material type terms.
+- Empty matches now show an explicit "No results found" state.
+
 ✅ Execution status: Days 1–16 are complete.
 
-🚀 Day 17 Security Audit + Monitoring + Launch is now **ACTIVE**.
+🚀 Day 17 Security Audit + Monitoring + Launch is now **READY TO START**.
 
 
 ✅ Scope clarification (2026-03-30):
@@ -125,11 +133,19 @@ pnpm dev:backend
 - Seller listing step3 and addresses list entry points now route through map-first flow.
 - Post-save address routing returns to seller addresses list.
 
-✅ Live tracking and route-navigation stabilization updates applied:
-- Aggregator navigate screen now supports pickup-coordinate fallback via geocoding from pickup address.
-- Seller order detail live tracking map now supports pickup geocode fallback and resilient map-gating behavior.
-- Order store merge logic preserves live location fields (`aggregatorLat`, `aggregatorLng`, `liveDistanceKm`) across refresh polling.
-- Confirm execution screen stabilized for consistent back-blocking and animation state.
+✅ Map UX and route-navigation updates applied:
+- Aggregator navigate screen now restores a visible current-location marker and renders detailed route geometry when available.
+- Seller order detail live-tracking controls were removed so the seller page stays focused on order details and receipt flow.
+- Confirm execution screen now shows a pickup-location map preview and hands off to native navigation from the map card or Navigate button.
+- Route handoff keeps using the provider-aware external navigation helper in `apps/mobile/utils/mapNavigation.ts`.
+- Aggregator route planner now supports tap-to-preview order details on map pins, including status-aware weights/totals, and no longer shows an external "Open Route in Maps" button.
+
+✅ Realtime feed + scheduled routing hardening updates applied (2026-04-11):
+- Ably token capability issuance now includes aggregator subscribe access to `orders:hyd:new` in `backend/src/routes/realtime.ts`, resolving capability-denied feed subscription failures.
+- Aggregator feed subscription path now has defensive subscribe + immediate API fallback refresh behavior in `apps/mobile/hooks/useAggregatorFeedChannel.ts`.
+- Ably provider failed-state handling was hardened in both mobile and backend realtime providers (`packages/realtime/src/providers/AblyMobileProvider.ts`, `packages/realtime/src/providers/AblyBackendProvider.ts`).
+- Backend order routing for scheduled pickups no longer hard-blocks by "current time in working hours" during fanout/feed/heartbeat catch-up; matching continues to enforce city/material/operating-area/pickup-window compatibility.
+- Availability matching robustness and regression tests were added via `backend/src/utils/availability.ts` and `backend/src/__tests__/availability.test.ts`.
 
 ✅ Seller lifetime earnings endpoint issue fixed:
 - `/api/orders/earnings` route registration corrected to avoid collision with dynamic `/:id` route.
@@ -174,7 +190,7 @@ pnpm dev:backend
 - `packages/maps/src/providers/OlaMapsProvider.ts` now implements geocode + reverse geocode + autocomplete.
 - `backend/src/routes/maps.ts` now exposes authenticated `GET /api/maps/geocode`, `GET /api/maps/reverse`, and `GET /api/maps/autocomplete`.
 - Mobile map rendering now uses MapLibre + Ola style URL with safe gate fallback (`apps/mobile/utils/mapAvailable.ts`).
-- Updated map screens: `address-map`, `address-form`, seller order live tracking, aggregator execution navigate, and aggregator route planner.
+- Updated map screens: `address-map`, `address-form`, aggregator execution navigate, aggregator execution confirm, seller order detail cleanup, and aggregator route planner.
 - External route launch is provider-aware via `apps/mobile/utils/mapNavigation.ts` (no hardcoded Google URLs in screens).
 
 ---

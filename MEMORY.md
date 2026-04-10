@@ -27,6 +27,11 @@
 > - Unnecessary test/debug scripts removed from repository.
 > - Day 17 security audit and monitoring setup is the current active focus.
 
+> ✅ **Implementation Sync Note (2026-04-10) — Operating Area Autocomplete + Seller Search**
+> - Aggregator operating-area autocomplete applies to profile edit only; onboarding stays on the existing static flow unless explicitly expanded later.
+> - Autocomplete suggestions should show locality + city + state + country, but selected chips and stored values should remain locality-only.
+> - Seller browse search is tokenized across name, locality, and material type fields and should keep an explicit "No results found" empty state.
+
 > ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
 
 > ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
@@ -39,7 +44,7 @@
 
 > ✅ **Implementation Sync Note (2026-03-25)**
 > - Seller addresses refactor completed: two-page map-first flow (`address-map` → `address-form`) with shared draft handoff in `addressStore` and listing step3 integration.
-> - Live tracking/map stabilization completed across aggregator navigate and seller order detail screens, including pickup-coordinate geocode fallback when stored coordinates are absent.
+> - Map UX/navigation refinement completed across aggregator navigate and seller order detail screens, including pickup-coordinate geocode fallback when stored coordinates are absent and seller live-tracking removal from the detail page.
 > - Order store merge hardening completed to preserve `pickupLat/pickupLng`, `aggregatorLat/aggregatorLng`, and `liveDistanceKm` across silent refresh cycles.
 > - Seller lifetime earnings route regression fixed: `/api/orders/earnings` now registered before dynamic `/:id`, preventing UUID parse collisions.
 > - Validation snapshot: backend and workspace type-checks pass after above changes.
@@ -53,6 +58,28 @@
 >   - Pre-accept order header now falls back to `liveDistanceKm` when direct coordinate-based calculation is unavailable.
 > - External navigation flow corrected for execution screen:
 >   - `apps/mobile/utils/mapNavigation.ts` now offers user app choice (Google Maps / MapmyIndia / Ola Maps / other maps app) instead of forcing Ola-first launch.
+
+> ✅ **Implementation Sync Note (2026-04-11)**
+> - Aggregator navigate screen now restores a visible current-location marker and renders detailed route geometry when available, with a graceful fallback when routing data is incomplete.
+> - Seller order detail live-tracking UI was removed; the seller flow now stays focused on order details while pickup directions live in the execution flow.
+> - Confirm execution screen now shows a pickup-location map preview and opens the device's native navigation app from the map card or Navigate button.
+> - Aggregator navigate cancel affordance now uses the shorter "Cancel" label.
+
+> ✅ **Implementation Sync Note (2026-04-11) — Realtime Feed + Scheduled Routing Hardening**
+> - Ably token capability issuance was corrected in `backend/src/routes/realtime.ts` so aggregators receive explicit subscribe capability for the public feed channel `orders:hyd:new`, resolving "Channel denied access based on given capability" errors.
+> - Aggregator realtime subscription hardening was completed in `apps/mobile/hooks/useAggregatorFeedChannel.ts` with defensive subscribe handling and immediate API fallback refresh on subscribe failure.
+> - Provider/channel failed-state handling was strengthened in `packages/realtime/src/providers/AblyMobileProvider.ts` and `packages/realtime/src/providers/AblyBackendProvider.ts` to reduce noisy failed/detached transitions.
+> - Address/operating-area matching robustness was improved in `backend/src/utils/availability.ts` via strict normalized matching first and controlled substring fallback.
+> - Scheduled pickup routing was fixed in backend feed/fanout/catch-up flows (`backend/src/routes/orders/index.ts`, `backend/src/routes/aggregators.ts`) by removing strict "current time must be inside working hours" hard gates while preserving city/material/area/pickup-window compatibility checks.
+> - Regression coverage was added in `backend/src/__tests__/availability.test.ts` for operating-area normalization and matching behavior.
+
+> ✅ **Implementation Sync Note (2026-04-11) — Aggregator Route Planner Detail View**
+> - `apps/mobile/app/(aggregator)/route.tsx` now resolves order weights from `orderItems`, `lineItems`, and fallback estimate fields instead of showing a blanket `0 kg` value.
+> - Pin taps on the route map now open a status-aware order detail card that shows the order number, locality, status chip, material breakdown, weight basis, and total value.
+> - The `Open Route in Maps` button was removed from the screen; routing handoff now stays outside this view.
+
+> ✅ **Learned Lesson (Map UX Separation)**
+> - Keep seller detail screens focused on order context. Map preview and external navigation should live in the execution flow so the seller page does not mix order review with route navigation.
 > - Chat + media reliability pass completed:
 >   - Shared chat supports image messages end-to-end (mobile attach, backend route, signed URL rendering, realtime payload handling).
 >   - Chat header/meta strip and quick-reply chips were hardened for 320–360dp screens to prevent overflow and clipping.
@@ -62,6 +89,10 @@
 > ✅ **Learned Lesson (Numeric Mapping Safety)**
 > - DB/API numeric fields may arrive as strings (especially for decimal coordinates); strict `typeof value === 'number'` checks can silently drop valid distance/location data.
 > - Always normalize with safe number parsing in mobile mappers before UI-level distance formatting.
+
+> ✅ **Learned Lesson (Route Detail Weight Mapping)**
+> - Route-planner summaries must derive material weights from `orderItems`/`lineItems` and switch between estimated and confirmed values based on `order.status`.
+> - A single `estimatedWeightKg` fallback is not sufficient for aggregator route detail views because it hides confirmed pickup weights after weighing starts.
 
 > ✅ **Learned Lesson (Route Safety)**
 > - In Express routers, always register static routes (e.g., `/feed`, `/earnings`) before dynamic `/:id` routes.
@@ -74,6 +105,10 @@
 > ✅ **Learned Lesson (Realtime Cleanup Discipline)**
 > - For focus-scoped subscriptions, removing listeners is usually sufficient during screen cleanup.
 > - Force-removing channels during routine unmounts can trigger detached-state runtime noise and brittle reconnect behavior.
+
+> ✅ **Learned Lesson (Scheduled Routing Eligibility)**
+> - Do not reject future scheduled pickup orders only because the current clock is outside the aggregator's present working-hour window.
+> - Eligibility for scheduled feed visibility should prioritize city/material/operating-area and pickup-window compatibility; current-time hard gates can suppress valid next-day orders.
 
 > ✅ **Learned Lesson (PDF Generation — Migration back to pdf-lib 2026-03-28)**
 > - Earlier recommendation to use `puppeteer-core` is VOIDated. Azure App Service / B1ms free tier does not support Chromium reliably (crashes due to libnss/memory constraints).
@@ -166,6 +201,11 @@ Business/aggregator web remains deferred; admin web remains the active web scope
 | AI — Price Scraper | Python scraper (`scraper/main.py`) scheduled via node-cron in backend | Writes to `price_index` table with sanity checks |
 | Maps / Geocoding | Ola Maps API via `IMapProvider` + MapLibre tiles on mobile | Keep `MAP_PROVIDER`/`EXPO_PUBLIC_MAP_PROVIDER` env-driven |
 | PDF Generation | `pdf-lib` + `@pdf-lib/fontkit` | GST invoices — Native canvas instructions; `puppeteer` removed due to Azure limits |
+| Error Tracking (Backend/Web) | Azure Application Insights | Exception tracking + distributed tracing for Express/Next.js |
+| Error Tracking (Mobile) | Sentry React Native SDK | Mobile crash tracking + symbolication only |
+| Uptime Monitoring | Azure Monitor Availability Tests | Replaces UptimeRobot synthetic checks |
+| Product Analytics | PostHog Cloud | Funnel events (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) |
+| Behavioral Analytics (Admin Web) | Microsoft Clarity | Session replay + click/scroll heatmaps for admin UX |
 | Icons | Phosphor Icons (MIT) — outline, 1.5px stroke | Filled variant for active nav states only |
 | State Management | Zustand | No Redux, no Context API for global state |
 | Monorepo | pnpm workspaces | packages: `maps`, `realtime`, `auth`, `storage`, `analysis` |
@@ -397,7 +437,7 @@ Allowed transitions only:
 ### Data Exposure
 - **D1:** Private storage buckets + signed URLs only (see §3.9 above).
 - **D2:** Generic push notification bodies (see §3.8 above).
-- **D3:** Global Express error handler scrubs `process.env` before Sentry. `git-secrets` pre-commit hook.
+- **D3:** Global Express error handler scrubs `process.env` before Application Insights capture. `git-secrets` pre-commit hook.
 
 ### Client Trust
 - **C1:** OTP confirms WEIGHT AND AMOUNT — not just physical presence. Seller must review full transaction summary before OTP entry. `/verify-pickup-otp` receives HMAC-bound snapshot of order items.
@@ -467,6 +507,13 @@ MAP_PROVIDER                  # "google" | "ola" — switches IMapProvider impl
 
 # Push
 EXPO_ACCESS_TOKEN
+
+# Observability / Analytics
+APPLICATIONINSIGHTS_CONNECTION_STRING
+SENTRY_DSN_MOBILE            # Mobile-only Sentry DSN (React Native crash symbolication)
+POSTHOG_API_KEY              # Product analytics (funnels)
+POSTHOG_HOST                 # PostHog host, default https://app.posthog.com
+NEXT_PUBLIC_CLARITY_PROJECT_ID  # Admin web behavioral analytics (Clarity)
 
 # Ably
 ABLY_API_KEY                  # Backend-only. NEVER in mobile env/bundle.

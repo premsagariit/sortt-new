@@ -74,9 +74,9 @@
 - [x] Added shared draft lifecycle in `apps/mobile/store/addressStore.ts` for map/details handoff without data loss.
 - [x] Integrated map-first address creation from seller addresses list and listing wizard step3.
 - [x] Fixed post-save address routing to return to seller addresses list.
-- [x] Implemented live tracking map improvements:
+- [x] Implemented map UX improvements:
   - [x] Aggregator navigate map now uses pickup geocode fallback if pickup coordinates are unavailable.
-  - [x] Seller order detail live tracking now uses resilient coordinate gating and fallback map behavior.
+  - [x] Seller order detail live-tracking controls were removed; pickup navigation now lives in the execution flow.
   - [x] Order store merges now preserve live location fields across polling refreshes.
 - [x] Fixed seller earnings API route collision:
   - [x] `/api/orders/earnings` is registered before dynamic `/:id` route.
@@ -89,6 +89,15 @@
   - [x] Backend maps routes now include authenticated autocomplete endpoint (`GET /api/maps/autocomplete`).
   - [x] Mobile map rendering migrated to MapLibre + Ola tiles with `MAP_RENDERING_AVAILABLE` fallback gate for Expo Go.
   - [x] Aggregator route planner map now renders store-backed order pins when map rendering is enabled.
+- [x] Aggregator operating-area discovery now uses maps autocomplete in profile edit:
+  - [x] Suggestions show locality + city + state + country for discovery.
+  - [x] Selected chips persist locality-only values so saved areas stay clean and compatible.
+- [x] Seller browse search now tokenizes name, locality, and material type terms.
+  - [x] Empty result sets now surface an explicit "No results found" state.
+- [x] Map UX polish completed:
+  - [x] Aggregator navigate screen now restores a visible current-location marker, renders detailed route geometry when available, and falls back gracefully when routing data is unavailable.
+  - [x] Confirm execution screen now shows a pickup-location map preview and opens native navigation via tap or the Navigate button.
+  - [x] Seller order detail live-tracking UI was removed so the seller flow stays focused on order details, confirmation, and receipt handoff.
 - [x] Aggregator distance display stabilization completed:
   - [x] Numeric parsing hardened for coordinate/distance fields in mobile order/feed mappers (`orderStore` + `aggregatorStore`).
   - [x] Pre-accept order header now falls back to `liveDistanceKm` when coordinate-based distance is unavailable.
@@ -104,6 +113,12 @@
   - [x] GST Invoice engine implemented using `pdf-lib` (reverted from Puppeteer for Azure compatibility).
   - [x] Price index scraper functional/seeding via `scraper/main.py`.
   - [x] Ola Maps abstraction complete (`packages/maps`), though map rendering is restricted to dev builds (incompatible with Expo Go).
+- [x] **Realtime feed + scheduled routing hardening (2026-04-11)**:
+  - [x] Fixed Ably capability issuance in `backend/src/routes/realtime.ts` so aggregator tokens can subscribe to `orders:hyd:new`.
+  - [x] Hardened aggregator feed realtime subscribe flow in `apps/mobile/hooks/useAggregatorFeedChannel.ts` with immediate API fallback refresh on subscription failure.
+  - [x] Hardened failed-state handling in `packages/realtime/src/providers/AblyMobileProvider.ts` and `packages/realtime/src/providers/AblyBackendProvider.ts`.
+  - [x] Removed strict current-time working-hours hard gates from scheduled order fanout/feed/catch-up in `backend/src/routes/orders/index.ts` and `backend/src/routes/aggregators.ts` while keeping city/material/area/window compatibility checks.
+  - [x] Strengthened availability/address normalization matching and added coverage in `backend/src/__tests__/availability.test.ts`.
 
 ---
 
@@ -319,7 +334,7 @@
 
 ### 3.4 Aggregator Map & Earnings — [COMPLETE — 2026-03-06]
 - [x] **Route Screen** (`(aggregator)/route.tsx`):
-  - Static map placeholder. Order pins list. `PrimaryButton` "Plan Route" (disabled in static).
+  - Interactive map/list route planner with tappable order pins, status-aware detail preview, and no external maps CTA.
 - [x] **Earnings Screen** (`(aggregator)/earnings.tsx`):
   - Today / This Week / This Month tabs. Total earnings (DM Mono, `colors.amber`). Completed orders list. Avg rating.
 - [x] **Price Setting Dashboard**:
@@ -505,9 +520,9 @@
 - [x] `helmet()` applied globally as first middleware (V34).
 - [x] CORS middleware: reads `ALLOWED_ORIGINS` env var (comma-separated). No wildcard (X1).
 - [x] `express.json()` body parser: `strict: true`, `limit: '10kb'`.
-- [x] Global error handler: scrubs `process.env` before `Sentry.captureException()` (D3). Returns generic error message in production — never stack traces.
-- [x] `GET /health` — `{ status: 'ok', timestamp: ISO_STRING }`. No auth required. This is the UptimeRobot target.
-- [x] Sentry initialisation at startup (`backend/src/instrument.ts`). Import before all other backend code.
+- [x] Global error handler: scrubs `process.env` before Application Insights capture (D3). Returns generic error message in production — never stack traces.
+- [x] `GET /health` — `{ status: 'ok', timestamp: ISO_STRING }`. No auth required. Availability target is Azure Monitor Availability Tests.
+- [x] Application Insights initialisation at startup (`backend/src/instrument.ts`). Import before all other backend code.
 
 ### 6.2 Azure App Service Deploy (~30 min)
 - [x] Deploy Express backend to **Azure App Service** (Central India, free tier):
@@ -559,7 +574,7 @@
   3. `crypto.randomInt(100000, 999999)` — generate 6-digit OTP.
   4. Compute `HMAC-SHA256(otp, OTP_HMAC_SECRET)`. Store in Upstash Redis. Key: `otp:phone:{HMAC(phone, PHONE_HASH_SECRET)}`. TTL: 600 seconds.
   5. Call Meta WhatsApp Cloud API — `authentication` template category (required for free quota). Payload: `to: phone, template: { name: META_OTP_TEMPLATE_NAME, language: { code: 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }] }`.
-  6. Increment Meta conversation counter in Redis. Alert Sentry if counter > 900/month.
+  6. Increment Meta conversation counter in Redis. Alert via Azure Monitor/Application Insights if counter > 900/month.
   7. INSERT to `otp_log` (for audit). Return HTTP 200 `{ success: true }`. Never return the OTP in the response.
 - [x] `POST /api/auth/verify-otp` (no JWT required):
   1. `otpVerifyLimiter` — applied first.
@@ -627,6 +642,7 @@
   - Refactored layout sequence: status timeline section, payment summary, seller details card (merged from separate card), material breakdown.
   - Ratings block removed (moved to receipt page only).
   - Order status drives conditional rendering: created/accepted vs. pickup-accepted states shown explicitly.
+  - Live-tracking map controls removed; pickup navigation now lives in the execution flow.
 - [x] **Seller receipt page** (`apps/mobile/app/(seller)/order/receipt/[id].tsx`):
   - New dedicated route for completed orders. Serves as terminal receipt page.
   - Captures timeline, ratings prompt, media gallery (scrap photos with API fetch fallback).
@@ -1005,7 +1021,7 @@
   - Status change to `en_route` → seller: `"Pickup is on the way"`.
   - Status change to `arrived` → seller: `"Aggregator has arrived"`.
   - New chat message → offline party: `"You have a new message"`.
-- [x] Ably connection monitor: log Sentry warning at 150 connections (75% of 200 Ably free limit).
+- [x] Ably connection monitor: log Application Insights warning at 150 connections (75% of 200 Ably free limit).
 
 ### 🚦 DAY 13 VERIFICATION GATE
 - [x] **G13.1** — Chat: message sent on Device A → appears on Device B within 1 second.
@@ -1097,7 +1113,7 @@
 ### 15.2 GST Invoice Generation (~50 min)
 - [x] `backend/src/utils/invoiceGenerator.ts`:
   - Triggered by `verify-otp` route on `status='completed'` when order has `seller_gstin` OR `total_amount > 50000`.
-  - Validate GSTIN format: `/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/` (I3). Reject invalid → skip invoice, log Sentry warning.
+  - Validate GSTIN format: `/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/` (I3). Reject invalid → skip invoice, log Application Insights warning.
   - Sanitise ALL user-supplied strings (business name, address, material labels) with `sanitize-html` before embedding in HTML template (I3).
   - ~~Generate PDF with `pdf-lib`~~ → **Migrated (2026-03-27):** PDF is now rendered via **`puppeteer-core` + `@sparticuz/chromium`** — inline HTML template renders the canonical `sortt_invoice.html` design (Navy/Teal brand, DM Sans + DM Mono fonts, ₹ rupee symbol). `pdf-lib` removed.
   - File key includes `crypto.randomBytes(8).toString('hex')` segment (V27).
@@ -1111,7 +1127,7 @@
 ### 15.3 Price Scraper (~30 min)
 - [x] Python 3.12 scraper in `scraper/main.py`:
   - Hard-coded URL allowlist (3–5 Indian scrap price sources). Never fetches from DB-stored URLs (V19 SSRF prevention).
-  - Per-material sanity bounds: if scraped rate deviates > 30% from last known rate → `is_manual_override=true` + Sentry alert (X2). Does not write to DB.
+  - Per-material sanity bounds: if scraped rate deviates > 30% from last known rate → `is_manual_override=true` + Application Insights alert (X2). Does not write to DB.
   - `INSERT INTO price_index` with `scraped_at=NOW()`, `is_manual_override=false` for clean results.
   - Block private IP ranges in all outbound requests (V19).
 - [x] Deploy as Azure Function timer trigger (daily 05:30 IST) OR as a node-cron job in the Express scheduler — document which is used.
@@ -1123,7 +1139,7 @@
 - [x] **G15.4** — Gemini output: grep `backend/src/` for any code path that writes `analyzeScrapImage` result directly to `order_items.confirmed_weight_kg` → 0 results (I1).
 - [x] **G15.5** — GST invoice: complete an order with `seller_gstin` set → PDF generated → `invoices.invoice_data` JSONB populated → download link works from receipt screen.
 - [x] **G15.6** — Invoice file key: two completed orders → two different file key suffixes (V27 — no predictable path).
-- [x] **G15.7** — GSTIN with invalid format → 400, no invoice generated, Sentry event captured.
+- [x] **G15.7** — GSTIN with invalid format → 400, no invoice generated, Application Insights event captured.
 - [x] **G15.8** — Price scraper: runs without error. `price_index` table has new rows with `scraped_at` of today.
 
 ---
@@ -1201,7 +1217,7 @@
 - [ ] **I3** — PDF: `<script>` in GSTIN → rejected by regex. Raw user strings never in `pdf-lib` draw calls.
 - [ ] **D1** — All Cloudflare R2 files private: no public URL ever returned. Only signed URLs via backend ownership check.
 - [ ] **D2** — Push body audit: grep all `sendPush` calls for `address`, `name`, `phone`, `gstin` → 0 matches.
-- [ ] **D3** — Error handler: trigger intentional error → Sentry event has no `process.env` keys in payload.
+- [ ] **D3** — Error handler: trigger intentional error → Application Insights event has no `process.env` keys in payload.
 - [ ] **C1** — OTP screen: full transaction summary visible BEFORE OTP input (scroll test on iPhone SE).
 - [ ] **C2** — Heartbeat + culling: stop heartbeat for 6 min → `is_online=false` in DB. node-cron confirmed running.
 - [ ] **C3** — Photo first: listing submission without photo → backend validation error.
@@ -1223,9 +1239,11 @@
 - [ ] **V35** — `kyc_status` blocklisted from all non-admin routes AND DB trigger active.
 
 ### 17.2 Monitoring Setup (~25 min)
-- [ ] Sentry: crash reporting for React Native + Express + Next.js. Trigger test crash → event appears in Sentry within 30 seconds.
-- [ ] PostHog: confirm these events fire in production: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
-- [ ] UptimeRobot: health check every 5 min on Azure backend `/health` + Vercel URL.
+- [ ] Application Insights: wire Express + Next.js telemetry using `APPLICATIONINSIGHTS_CONNECTION_STRING`. Trigger backend and web test exceptions; verify traces/exceptions in Azure.
+- [ ] Azure Monitor Availability Tests: configure synthetic checks for backend `/health` and admin web production URL; alert rules active.
+- [ ] Microsoft Clarity: add Clarity script wiring to `apps/web/app/layout.tsx` and verify admin page sessions/heatmap ingestion.
+- [ ] PostHog: confirm product funnel events fire in production: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
+- [ ] Sentry (mobile only): trigger test React Native crash and verify symbolicated event in Sentry.
 - [ ] Ably Dashboard: alert rule set at 150 connections (75% of 200 free limit).
 - [ ] Upstash Dashboard: Meta OTP conversation counter visible. Alert configured at 900/month.
 - [ ] Azure Monitor: DB connection count and query performance visible in Azure Portal.
@@ -1251,13 +1269,14 @@
 - [ ] **L3** — WhatsApp OTP template: status = APPROVED in Meta Business Manager.
 - [ ] **L4** — Azure PostgreSQL: all 12 migrations applied, all RLS enabled, triggers active.
 - [ ] **L5** — `CLERK_SECRET_KEY` absent from all deployed client bundles (`grep` production build output).
-- [ ] **L6** — Sentry receiving events from production React Native app (test event confirmed).
-- [ ] **L7** — UptimeRobot + Ably monitoring active on production URLs.
-- [ ] **L8** — At least 2 full end-to-end test runs on **physical devices**: seller creates → aggregator accepts → weighing → OTP → receipt.
-- [ ] **L9** — At least 1 test aggregator account with `kyc_status='verified'` in production DB.
-- [ ] **L10** — `APP_NAME` and `APP_DOMAIN` updated from placeholder if final name decided.
-- [ ] **L11** — `pnpm type-check` monorepo-wide: 0 errors on production branch.
-- [ ] **L12** — EAS production build installs and runs without crash on both iOS and Android physical devices.
+- [ ] **L6** — Sentry receiving events from production React Native app only (test event confirmed).
+- [ ] **L7** — Azure Monitor Availability Tests + Ably monitoring active on production URLs.
+- [ ] **L8** — Application Insights receiving backend + admin web telemetry (test exceptions and traces confirmed).
+- [ ] **L9** — At least 2 full end-to-end test runs on **physical devices**: seller creates → aggregator accepts → weighing → OTP → receipt.
+- [ ] **L10** — At least 1 test aggregator account with `kyc_status='verified'` in production DB.
+- [ ] **L11** — `APP_NAME` and `APP_DOMAIN` updated from placeholder if final name decided.
+- [ ] **L12** — `pnpm type-check` monorepo-wide: 0 errors on production branch.
+- [ ] **L13** — EAS production build installs and runs without crash on both iOS and Android physical devices.
 
 ---
 
@@ -1413,7 +1432,7 @@
 - [x] Day 14 — Provider Abstractions (All 5 Packages) *(2026-03-24)*
 - [x] Day 15 — Gemini Vision + GST Invoice + Price Scraper *(2026-03-30 — COMPLETE)*
 - [x] Day 16 — Admin Web Dashboard + Clerk Auth Tests *(2026-04-04 — COMPLETE)*
-- [ ] Day 17 — Security Audit + Monitoring + Launch *(Active — 2026-04-04)*
+- [ ] Day 17 — Security Audit + Monitoring + Launch *(Ready to Start — 2026-04-06, Option B docs updated)*
 
 ---
 

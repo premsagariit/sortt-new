@@ -46,6 +46,9 @@
 >   - `backend/src/routes/maps.ts` now exposes authenticated `GET /api/maps/geocode`, `GET /api/maps/reverse`, and `GET /api/maps/autocomplete`.
 >   - Mobile map rendering migrated from `react-native-maps` to MapLibre + Ola vector tiles with `apps/mobile/utils/mapAvailable.ts` gate (`MAP_RENDERING_AVAILABLE=false` default for Expo Go).
 >   - Aggregator route planner now supports store-backed order pins on MapLibre when rendering is enabled.
+>   - The current route planner screen now opens a status-aware detail card on pin tap and no longer shows the removed external maps CTA.
+> - Aggregator operating-area discovery now uses maps autocomplete in profile edit; suggestions show locality + city + state + country, while selected chips persist locality-only values.
+> - Seller browse search now tokenizes name, locality, and material type fields and shows an explicit empty state when no matches remain.
 
 > ✅ **Implementation Sync Note (2026-04-05) — Day 16 Finalized & CI Restored**
 > - Resolved critical Next.js 15 build failures:
@@ -59,6 +62,18 @@
 >   - Updated `structure.md` and `README.md` to reflect the current state.
 > - All workspace gates (**type-check**, **lint**, **test**) are now fully passing monorepo-wide.
 > - 🚀 **Day 17 status:** Active; Security Audit + Monitoring + Launch phase underway.
+
+> ✅ **Implementation Sync Note (2026-04-11)**
+> - Aggregator navigate screen now renders a visible current-location marker and attempts detailed route geometry before falling back to a simpler path.
+> - Confirm screen now includes a pickup-location map preview and routes the user into the native navigation app chooser/default map app from the map card or Navigate button.
+> - Seller order detail live-tracking UI was removed from the mobile implementation, leaving order detail and receipt as the seller-facing responsibility of that page.
+> - Aggregator cancel text was simplified to "Cancel".
+
+> ✅ **Implementation Sync Note (2026-04-11) — Realtime Capability + Scheduled Routing Eligibility**
+> - Realtime token capability issuance now explicitly grants aggregators subscribe access for `orders:hyd:new`, eliminating Ably capability-denied feed subscription errors.
+> - Aggregator feed subscription paths were hardened with defensive failed-state handling and API refresh fallback to preserve feed continuity during channel-state instability.
+> - Routing eligibility for scheduled pickups was corrected to avoid strict current-time working-hours hard gates in feed creation fanout and heartbeat catch-up. Compatibility checks continue to enforce city/material/operating-area and pickup-window overlap.
+> - Operating-area matching normalization and tests were strengthened to reduce locality/address string mismatch regressions.
 
 
 ---
@@ -211,6 +226,7 @@ Client Apps (Mobile / Web)
 
 1. Seller submits listing → Custom backend validates input, geocodes address via `IMapProvider`, resolves `city_code` + `pickup_locality`, creates order row in PostgreSQL (`status='created'`).
 2. Custom backend queries PostgreSQL for online aggregators in the same `city_code` who handle the listed materials → dispatches push via Expo Push Service to all matching aggregators.
+  - For scheduled orders, eligibility must not be rejected solely because current server time is outside the aggregator's present working-hour slot; matching is based on area + pickup-window compatibility.
 3. Aggregator accepts → Express route runs `BEGIN; SELECT ... FOR UPDATE SKIP LOCKED WHERE id=$order_id AND status='created'; UPDATE ...; COMMIT;` (first-accept-wins). `Status→'accepted'`. Backend dispatches push to seller.
 4. Aggregator updates En Route → Custom backend updates `status→'en_route'` → publishes event to Ably channel → seller's app receives real-time update.
 5. Aggregator uploads scale photo → EXIF stripped by Express via `sharp` → uploaded to Cloudflare R2 via `IStorageProvider.upload()` → Custom backend generates OTP, stores HMAC in Upstash Redis (TTL 10 min) → calls Meta WhatsApp Cloud API directly → OTP delivered to seller as WhatsApp authentication template message (free up to 1,000 conversations/month).
@@ -613,7 +629,7 @@ app.post('/api/orders/:orderId/verify-otp', clerkJwtMiddleware, async (req, res)
     await redis.del(`otp:${orderId}`);
 
     // Trigger invoice generation (async — non-blocking)
-    generateAndStoreInvoice(orderId).catch(err => Sentry.captureException(err));
+    generateAndStoreInvoice(orderId).catch(err => appInsights.defaultClient.trackException({ exception: err as Error }));
 
     return res.status(200).json({ success: true });
   } catch (err) {
@@ -866,7 +882,7 @@ const { rows } = await db.query(
 
 ### 7.2 Maps Abstraction Layer (Geocoding Only)
 
-All geocoding calls (address → city_code + locality) go through the `IMapProvider` interface. No component may import Google Maps directly.
+All geocoding calls (address → city_code + locality) go through the `IMapProvider` interface. No component may import Google Maps directly. Autocomplete suggestions may display locality + city + state + country for discovery, but consumers should persist locality-only selections when storing operating areas.
 
 ```typescript
 // packages/maps/src/IMapProvider.ts
@@ -1366,10 +1382,10 @@ CREATE INDEX idx_status_history_order_id ON order_status_history (order_id, crea
 ```typescript
 // backend/src/scheduler.ts
 import cron from 'node-cron';
-import * as Sentry from '@sentry/node';
+import appInsights from 'applicationinsights';
 
 // RULE (Fix 14): ALL cron callbacks must be wrapped in try/catch.
-// On failure: capture exception to Sentry with job name + timestamp.
+// On failure: capture exception to Application Insights with job name + timestamp.
 // Never let a cron failure propagate to the Express process (no unhandled rejections).
 
 // Aggregator online culling — every 5 minutes (C2)
@@ -1380,7 +1396,10 @@ cron.schedule('*/5 * * * *', async () => {
        WHERE last_ping_at < NOW() - INTERVAL '5 minutes' AND is_online = true`
     );
   } catch (err) {
-    Sentry.captureException(err, { tags: { cron_job: 'aggregator_online_culling', ran_at: new Date().toISOString() } });
+    appInsights.defaultClient.trackException({
+      exception: err as Error,
+      properties: { cron_job: 'aggregator_online_culling', ran_at: new Date().toISOString() }
+    });
   }
 });
 
@@ -1389,7 +1408,10 @@ cron.schedule('*/15 * * * *', async () => {
   try {
     await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY aggregator_rating_stats');
   } catch (err) {
-    Sentry.captureException(err, { tags: { cron_job: 'rating_stats_refresh', ran_at: new Date().toISOString() } });
+    appInsights.defaultClient.trackException({
+      exception: err as Error,
+      properties: { cron_job: 'rating_stats_refresh', ran_at: new Date().toISOString() }
+    });
   }
 });
 
@@ -1398,7 +1420,10 @@ cron.schedule('30 0 * * *', async () => {
   try {
     await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index');
   } catch (err) {
-    Sentry.captureException(err, { tags: { cron_job: 'price_index_refresh', ran_at: new Date().toISOString() } });
+    appInsights.defaultClient.trackException({
+      exception: err as Error,
+      properties: { cron_job: 'price_index_refresh', ran_at: new Date().toISOString() }
+    });
   }
 });
 
@@ -1409,7 +1434,10 @@ cron.schedule('0 2 * * *', async () => {
       `DELETE FROM otp_log WHERE expires_at < NOW() - INTERVAL '7 days'`
     );
   } catch (err) {
-    Sentry.captureException(err, { tags: { cron_job: 'otp_log_cleanup', ran_at: new Date().toISOString() } });
+    appInsights.defaultClient.trackException({
+      exception: err as Error,
+      properties: { cron_job: 'otp_log_cleanup', ran_at: new Date().toISOString() }
+    });
   }
 });
 
@@ -1418,7 +1446,10 @@ cron.schedule('0 1 25 * *', async () => {
   try {
     await createNextMonthMessagePartition();
   } catch (err) {
-    Sentry.captureException(err, { tags: { cron_job: 'message_partition_creation', ran_at: new Date().toISOString() } });
+    appInsights.defaultClient.trackException({
+      exception: err as Error,
+      properties: { cron_job: 'message_partition_creation', ran_at: new Date().toISOString() }
+    });
   }
 });
 ```
@@ -1547,7 +1578,7 @@ These rules apply to every agent in every session:
 | 13 | Provider abstraction swap tests (Ola Maps, Soketi) | `IMapProvider`, `IRealtimeProvider`, env-var-driven swaps |
 | 14 | Admin web panel + IP security | Next.js 15, Vercel Edge Middleware, IP allowlist |
 | 15 | Business Mode APIs + GST invoices (mobile surfaces active; web deferred) | `business_members`, role RLS, `PATCH /api/sellers/profile` |
-| 16 | EAS build, E2E testing, Sentry/PostHog, performance audit | Detox/Playwright, Jest coverage, Azure Monitor review |
+| 16 | EAS build, E2E testing, telemetry stack, performance audit | Detox/Playwright, Jest coverage, Azure Monitor + Application Insights review |
 | 17 | Security audit, penetration testing, launch readiness | All V-series + X-series checks, admin audit log review |
 
 ---
@@ -1574,9 +1605,11 @@ These rules apply to every agent in every session:
 
 | Tool | Purpose | Free Tier |
 |---|---|---|
-| Sentry | Crash reporting — React Native + Next.js + Express | 5K errors/month |
-| PostHog | User funnel analytics | 1M events/month |
-| UptimeRobot | Health checks every 5 min | 50 monitors |
+| Azure Application Insights | Error tracking + distributed tracing for Express + Next.js | Included with Azure ingestion quotas |
+| Sentry (Mobile only) | Crash reporting + symbolication for React Native | 5K errors/month |
+| PostHog Cloud | User funnel analytics (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) | 1M events/month |
+| Microsoft Clarity | Admin web behavioural analytics (session replay + heatmaps) | Included (project-level quotas apply) |
+| Azure Monitor Availability Tests | Synthetic uptime checks for backend `/health` + admin web URL | Included with Azure Monitor |
 | Azure Monitor | Backend memory/CPU, DB connections, query performance | Included with Azure for Students |
 | Ably Dashboard | Realtime connection count — alert at 150 (75% of 200 free) | Included |
 | Redis Monitor | Meta WhatsApp daily OTP counter — alert at 900/month | Included in Upstash |
@@ -1738,7 +1771,7 @@ Per-user rate limiting: max 10 Gemini requests per user per hour (Upstash Redis)
 
 #### RA2 — WhatsApp OTP Flooding
 
-Rate limiting on `POST /api/auth/request-otp`: max 3 OTP requests per phone per 10-minute window, max 10 per day. Running daily conversation counter in Upstash Redis — alert via Sentry when counter reaches 900 (90% of 1,000 free monthly quota).
+Rate limiting on `POST /api/auth/request-otp`: max 3 OTP requests per phone per 10-minute window, max 10 per day. Running daily conversation counter in Upstash Redis — alert via Azure Monitor/Application Insights when counter reaches 900 (90% of 1,000 free monthly quota).
 
 #### RA3 — Order Spam
 
@@ -1774,7 +1807,7 @@ All push notification bodies use generic copy. See §5.2 for approved/forbidden 
 
 #### D3 — Environment Variable Leak in Error Logs
 
-Global Express error handler scrubs `process.env` before Sentry capture. Git pre-commit hook (`git-secrets`) fails if any secret pattern is found in source code.
+Global Express error handler scrubs `process.env` before Application Insights capture. Git pre-commit hook (`git-secrets`) fails if any secret pattern is found in source code.
 
 ---
 
@@ -1868,7 +1901,7 @@ Additional requirements:
 - All scraper outbound HTTP requests must pass through an IP validation step before the request is made
 - Block RFC 1918 private IP ranges: `10.x.x.x`, `172.16.x.x–172.31.x.x`, `192.168.x.x`
 - Block loopback: `127.x.x.x` and `::1`
-- If the target URL resolves to a private IP, abort the request and log to Sentry before sending
+- If the target URL resolves to a private IP, abort the request and log to Application Insights before sending
 - The allowlist is a compile-time constant — not a database table, not an env var
 
 ---
@@ -2007,9 +2040,11 @@ export interface IMapProvider {
 | `MAP_PROVIDER` | Backend + Mobile | `"google"` or `"ola"` |
 | `EXPO_ACCESS_TOKEN` | Backend only | Expo server SDK token for push dispatch |
 | `REALTIME_PROVIDER` | All | `"ably"` (default) — switches `IRealtimeProvider` |
-| `SENTRY_DSN` | All | Sentry error reporting DSN (use per-app variants: `SENTRY_DSN_MOBILE`, `SENTRY_DSN_BACKEND`, `SENTRY_DSN_WEB`) |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Backend + Web | Azure Application Insights connection string for Express + Next.js telemetry |
+| `SENTRY_DSN_MOBILE` | Mobile only | Sentry DSN for React Native crash tracking and symbolication |
 | `POSTHOG_API_KEY` | Mobile + Web | PostHog analytics API key |
 | `POSTHOG_HOST` | Mobile + Web | PostHog API host. Default: `https://app.posthog.com` |
+| `NEXT_PUBLIC_CLARITY_PROJECT_ID` | Web only | Microsoft Clarity project ID for admin behavioural analytics |
 | `ADMIN_IP_ALLOWLIST` | Vercel (web) only | Comma-separated IP allowlist for `/admin/*` routes. Read by Vercel Edge Middleware. |
 | `PHONE_HASH_SECRET` | Backend only | HMAC secret used to hash phone numbers before storing as `phone_hash`. Distinct from `OTP_HMAC_SECRET`. |
 
