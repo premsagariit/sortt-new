@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,7 +10,6 @@
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
-  font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -23,193 +20,168 @@ body {
   }
 }
 
-.font-mono {
-  font-family: 'DM Mono', monospace;
-}
-
 @layer utilities {
   .admin-bg-page {
-    background-color: #F4F6F9;
+    @apply bg-bg;
   }
 
   .admin-bg-surface {
-    background-color: #FFFFFF;
+    @apply bg-surface;
   }
 
   .admin-bg-surface-alt {
-    background-color: #F9FAFB;
+    @apply bg-surface2;
   }
 
   .admin-bg-navy {
-    background-color: #1C2E4A;
+    @apply bg-navy;
   }
 
   .admin-bg-navy-soft {
-    background-color: #2C4A72;
+    @apply bg-navySoft;
   }
 
   .admin-bg-error {
-    background-color: #C0392B;
+    @apply bg-red;
   }
 
   .admin-bg-error-soft {
-    background-color: #F9EDEC;
+    @apply bg-redLight;
   }
 
   .admin-bg-warning {
-    background-color: #B7791F;
+    @apply bg-amber;
   }
 
   .admin-bg-warning-soft {
-    background-color: #FEF9EC;
+    @apply bg-amberLight;
   }
 
   .admin-bg-success {
-    background-color: #1A6B63;
+    @apply bg-teal;
   }
 
   .admin-bg-success-soft {
-    background-color: #EAF5F4;
+    @apply bg-tealLight;
   }
 
   .admin-bg-input {
-    background-color: #F4F6F9;
+    @apply bg-bg;
   }
 
   .admin-text-navy {
-    color: #1C2E4A;
+    @apply text-navy;
   }
 
   .admin-text-navy-soft {
-    color: #2C4A72;
+    @apply text-navySoft;
   }
 
   .admin-text-slate {
-    color: #5C6B7A;
+    @apply text-slate;
   }
 
   .admin-text-muted {
-    color: #8E9BAA;
+    @apply text-muted;
   }
 
   .admin-text-error {
-    color: #C0392B;
+    @apply text-red;
   }
 
   .admin-text-warning {
-    color: #B7791F;
+    @apply text-amber;
   }
 
   .admin-text-success {
-    color: #1A6B63;
+    @apply text-teal;
   }
 
   .admin-border {
-    border-color: #DDE3EA;
+    @apply border-border;
   }
 
   .admin-border-error {
-    border-color: #ECC0BB;
+    @apply border-redLight;
   }
 
   .admin-border-warning {
-    border-color: #F3D89A;
+    @apply border-amberLight;
   }
 
   .admin-border-success {
-    border-color: #B0D9D6;
+    @apply border-tealLight;
   }
 
   .admin-border-navy {
-    border-color: #1C2E4A;
+    @apply border-navy;
   }
 
   .admin-border-warning-soft {
-    border-color: rgba(183, 121, 31, 0.4);
+    @apply border-amber/40;
   }
 
   .admin-chip-warning {
-    background-color: #FEF9EC;
-    color: #B7791F;
+    @apply bg-amberLight text-amber;
   }
 
   .admin-chip-error {
-    background-color: #F9EDEC;
-    color: #C0392B;
+    @apply bg-redLight text-red;
   }
 
   .admin-chip-success {
-    background-color: #EAF5F4;
-    color: #1A6B63;
+    @apply bg-tealLight text-teal;
   }
 
   .admin-chip-muted {
-    background-color: #F9FAFB;
-    color: #5C6B7A;
+    @apply bg-surface2 text-slate;
   }
 
   .admin-btn-primary {
-    background-color: #1C2E4A;
-    color: #FFFFFF;
-  }
-
-  .admin-btn-primary:hover {
-    opacity: 0.9;
+    @apply bg-navy text-surface hover:opacity-90;
   }
 
   .admin-btn-success {
-    background-color: #1A6B63;
-    color: #FFFFFF;
-  }
-
-  .admin-btn-success:hover {
-    opacity: 0.9;
+    @apply bg-teal text-surface hover:opacity-90;
   }
 
   .admin-btn-error {
-    background-color: #C0392B;
-    color: #FFFFFF;
-  }
-
-  .admin-btn-error:hover {
-    opacity: 0.9;
+    @apply bg-red text-surface hover:opacity-90;
   }
 
   .admin-hover-page:hover {
-    background-color: #F4F6F9;
+    @apply bg-bg;
   }
 
   .admin-hover-surface-alt:hover {
-    background-color: #F9FAFB;
+    @apply bg-surface2;
   }
 
   .admin-hover-error-faint:hover {
-    background-color: rgba(192, 57, 43, 0.1);
+    @apply bg-red/10;
   }
 
   .admin-hover-navy:hover {
-    background-color: #1C2E4A;
+    @apply bg-navy;
   }
 
   .admin-hover-page-text:hover {
-    color: #F4F6F9;
+    @apply text-bg;
   }
 
   .admin-hover-navy-text:hover {
-    color: #1C2E4A;
+    @apply text-navy;
   }
 
   .admin-hover-error-text:hover {
-    color: #C0392B;
+    @apply text-red;
   }
 
   .admin-input {
-    background-color: #F4F6F9;
-    border-color: #DDE3EA;
-    color: #1C2E4A;
+    @apply bg-bg border-border text-navy;
   }
 
   .admin-input:focus {
-    border-color: #1C2E4A;
+    @apply border-navy;
   }
 }

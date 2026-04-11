@@ -620,6 +620,8 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 
 > Agents: Append new entries here with a date when you solve a complex bug, establish a new pattern, or discover a codebase quirk. Never delete old entries.
 
+- **[2026-04-11] Web Landing Page patterns:** `next/font/google` is the correct DM Sans loading mechanism for Next.js 15 (not CSS `@import`). The root route must NOT be included in `apps/web/middleware.ts` IP allowlist matcher. Token-to-Tailwind class mapping must be verified in `apps/web/tailwind.config.ts` before any new web page is built — missing extended token mappings (`navySoft`, `redLight`, etc.) cause silent Tailwind fallbacks. Server Components are preferred for static marketing pages (no `'use client'` needed). Affects: `apps/web/app/page.tsx`, `apps/web/tailwind.config.ts`, `apps/web/app/layout.tsx`.
+
 - **[2026-02-26] pnpm not pre-installed on Windows:** pnpm is not bundled with Node.js on Windows — it must be installed globally first via `npm install -g pnpm` before `pnpm init` or any workspace commands will work. Always check for pnpm availability before starting Day 1. Affects: Day 1 monorepo bootstrap.
 
 - **[2026-02-26] Day 1 monorepo structure — what was created:** The following structure was established in Day 1 Phase A (2026-02-26). All files below are under the project root (`Sortt/`):

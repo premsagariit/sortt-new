@@ -97,6 +97,8 @@ pnpm dev:backend
 
 ### 🗓 Current Status (2026-04-11)
 ✅ Day 16 Admin Web Dashboard & Tests completed with 100% pass rate.
+✅ Landing page implemented at root route (`/`). Admin portal remains accessible at `/admin/login`.
+✅ README setup steps unchanged — no new services or env vars introduced.
 
 🚀 Day 17 Security Audit & Infrastructure Hardening: **READY TO START** (Option B telemetry architecture documented).
 

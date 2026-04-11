@@ -229,7 +229,7 @@ Sortt
 │       ├── next.config.ts # Next.js optimized remotePatterns for R2/Clerk
 │       ├── app # App Router layout and routes
 │       │   ├── layout.tsx # Root layout with Clerk + Next.js UI integration
-│       │   ├── page.tsx # Admin landing / redirect page
+│       │   ├── page.tsx # Public-facing landing page with hero, how-it-works, dual-audience cards, and footer (route `/`)
 │       │   ├── globals.css # Design system global overrides
 │       │   ├── admin # Admin Portal (Active)
 │       │   │   ├── layout.tsx # Admin SIDENAV + design system tokens
