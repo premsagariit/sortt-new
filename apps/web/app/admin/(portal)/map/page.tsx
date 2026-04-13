@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { adminFetch } from '@/lib/adminApi';
+import type { AdminOrderPin } from '@/lib/adminApi';
 import { MapPin, RefreshCw, AlertCircle } from 'lucide-react';
 import styles from './map.module.css';
 
@@ -37,9 +37,8 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 }
 
 export default function MapPage() {
-  const router = useRouter();
   const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<any>(null);
+  const leafletMapRef = useRef<{ remove: () => void } | null>(null);
   const [pins, setPins] = useState<OrderPin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +47,10 @@ export default function MapPage() {
   const loadPins = async () => {
     setLoading(true);
     try {
-      const data = await adminFetch<any>('/api/admin/orders/locations');
+      const data = await adminFetch<AdminOrderPin[]>('/api/admin/orders/locations');
       setPins(data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load order locations');
     } finally {
       setLoading(false);
     }
@@ -72,7 +71,7 @@ export default function MapPage() {
       }
 
       // Fix default icon paths (Next.js asset issue)
-      // @ts-ignore
+      // @ts-expect-error Leaflet exposes this private helper on runtime prototype
       delete L.Icon.Default.prototype._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',

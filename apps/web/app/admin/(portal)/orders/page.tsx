@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { adminFetch } from '@/lib/adminApi';
 import {
-  ShoppingBag, Filter, Search, ChevronRight, RefreshCw,
+  ShoppingBag, Search, ChevronRight, RefreshCw,
   Clock, CheckCircle, XCircle, Truck, AlertCircle, Package,
 } from 'lucide-react';
 import styles from './orders.module.css';

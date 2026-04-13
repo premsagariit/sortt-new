@@ -73,7 +73,7 @@ export default function ContactPage() {
              <div className="absolute top-0 right-0 w-32 h-32 bg-red/20 rounded-full blur-3xl pointer-events-none" />
              <h2 className="text-xl font-bold mb-3">Partner with {APP_NAME}</h2>
              <p className="text-white/70 text-sm mb-6">
-               Are you an aggregator looking to expand your business? Or a large society wanting a scheduled pickup solution? Let's talk.
+               Are you an aggregator looking to expand your business? Or a large society wanting a scheduled pickup solution? Let&apos;s talk.
              </p>
              <a href="mailto:partners@sortt.in" className="inline-flex items-center justify-center bg-white text-navy font-bold px-6 py-2.5 rounded-btn hover:bg-white/90 transition-colors text-sm">
                Email Partnership Team

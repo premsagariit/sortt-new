@@ -40,7 +40,7 @@ export default function DisputesPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red font-bold">•</span>
-                <strong>Payment Issues:</strong> If an aggregator attempts to renegotiate the confirmed rate outside the app's predefined parameters, report them.
+                <strong>Payment Issues:</strong> If an aggregator attempts to renegotiate the confirmed rate outside the app&apos;s predefined parameters, report them.
               </li>
             </ul>
 
@@ -50,7 +50,7 @@ export default function DisputesPage() {
                 <li>Open the {APP_NAME} mobile app.</li>
                 <li>Go to your <strong>Order History</strong>.</li>
                 <li>Select the specific transaction in question.</li>
-                <li>Tap on <strong>'Raise an Issue'</strong> at the bottom of the screen.</li>
+                <li>Tap on <strong>&apos;Raise an Issue&apos;</strong> at the bottom of the screen.</li>
                 <li>Provide details and attach any relevant photos.</li>
               </ol>
             </div>

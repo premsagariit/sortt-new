@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import type { AdminAnalytics } from '@/lib/adminApi';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp, Users, Package, BarChart2, RefreshCw } from 'lucide-react';
+import { Users, Package, BarChart2, RefreshCw } from 'lucide-react';
 import styles from './analytics.module.css';
 
 const PIE_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#3b82f6', '#06b6d4'];
@@ -22,14 +23,22 @@ function StatCard({ title, value, sub }: { title: string; value: React.ReactNode
   );
 }
 
-function customTooltip({ active, payload, label }: any) {
+function customTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ color?: string; name?: string | number; value?: unknown }>;
+  label?: string | number;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className={styles.tooltip}>
       <p className={styles.tooltipLabel}>{label}</p>
-      {payload.map((p: any, i: number) => (
+      {payload.map((p, i: number) => (
         <p key={i} style={{ color: p.color }}>
-          {p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
+          {String(p.name)}: {typeof p.value === 'number' ? p.value.toLocaleString() : String(p.value ?? '')}
         </p>
       ))}
     </div>
@@ -37,21 +46,21 @@ function customTooltip({ active, payload, label }: any) {
 }
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<AdminAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
-    try { setData(await adminFetch<any>('/api/admin/analytics')); }
+    try { setData(await adminFetch<AdminAnalytics>('/api/admin/analytics')); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
-  const totalOrders = data?.status_breakdown?.reduce((a: number, r: any) => a + Number(r.count), 0) ?? 0;
-  const completedOrders = data?.status_breakdown?.find((r: any) => r.status === 'completed')?.count ?? 0;
+  const totalOrders = data?.status_breakdown?.reduce((a: number, r) => a + Number(r.count), 0) ?? 0;
+  const completedOrders = data?.status_breakdown?.find((r) => r.status === 'completed')?.count ?? 0;
   const completionRate = totalOrders > 0 ? ((Number(completedOrders) / totalOrders) * 100).toFixed(1) : '0';
-  const totalGmv = data?.revenue_weekly?.reduce((a: number, r: any) => a + Number(r.gmv), 0) ?? 0;
+  const totalGmv = data?.revenue_weekly?.reduce((a: number, r) => a + Number(r.gmv), 0) ?? 0;
 
   return (
     <div className={styles.page}>
@@ -106,11 +115,11 @@ export default function AnalyticsPage() {
                       dataKey="count" nameKey="status"
                       cx="50%" cy="50%" outerRadius={80} innerRadius={50}
                     >
-                      {(data?.status_breakdown ?? []).map((_: any, i: number) => (
+                      {(data?.status_breakdown ?? []).map((_, i: number) => (
                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: any) => [Number(v).toLocaleString()]} />
+                    <Tooltip />
                     <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -123,7 +132,7 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={data?.hourly_distribution ?? []} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="hour" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={h => `${h}:00`} />
+                  <XAxis dataKey="hour" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(h: number) => `${h}:00`} />
                   <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
                   <Tooltip content={customTooltip} />
                   <Bar dataKey="orders" fill="#8b5cf6" radius={[3,3,0,0]} name="Orders" />
@@ -140,7 +149,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                 <XAxis dataKey="week_start" tick={{ fill: '#64748b', fontSize: 11 }}
                   tickFormatter={d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => `₹${(v/100).toFixed(0)}`} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v: number) => `₹${(v/100).toFixed(0)}`} />
                 <Tooltip content={customTooltip} />
                 <Bar dataKey="gmv" fill="#10b981" radius={[3,3,0,0]} name="GMV (paise)" />
                 <Bar dataKey="completed_orders" fill="#6366f1" radius={[3,3,0,0]} name="Completed Orders" />
@@ -153,7 +162,7 @@ export default function AnalyticsPage() {
             <div className={styles.chartCard}>
               <h2 className={styles.chartTitle}><Users size={16} /> Top Sellers</h2>
               <div className={styles.leaderboard}>
-                {(data?.top_sellers ?? []).map((s: any, i: number) => (
+                {(data?.top_sellers ?? []).map((s, i: number) => (
                   <div key={s.id} className={styles.leaderboardRow}>
                     <span className={styles.rank} style={{ color: i < 3 ? '#f59e0b' : '#475569' }}>#{i+1}</span>
                     <div className={styles.lbInfo}>
@@ -173,7 +182,7 @@ export default function AnalyticsPage() {
             <div className={styles.chartCard}>
               <h2 className={styles.chartTitle}><Package size={16} /> Top Aggregators</h2>
               <div className={styles.leaderboard}>
-                {(data?.top_aggregators ?? []).map((a: any, i: number) => (
+                {(data?.top_aggregators ?? []).map((a, i: number) => (
                   <div key={a.id} className={styles.leaderboardRow}>
                     <span className={styles.rank} style={{ color: i < 3 ? '#f59e0b' : '#475569' }}>#{i+1}</span>
                     <div className={styles.lbInfo}>

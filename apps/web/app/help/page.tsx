@@ -32,14 +32,14 @@ export default function HelpPage() {
               <div className="space-y-6">
                 <div>
                   <h3 className="font-bold text-navy mb-2">How do I schedule a pickup?</h3>
-                  <p className="text-slate text-sm">Download the Sortt app, create an account, select your material type, enter the estimated weight, and click 'Schedule Pickup'. A verified aggregator will accept it and come to your location.</p>
+                  <p className="text-slate text-sm">Download the Sortt app, create an account, select your material type, enter the estimated weight, and click &apos;Schedule Pickup&apos;. A verified aggregator will accept it and come to your location.</p>
                 </div>
                 <div>
                   <h3 className="font-bold text-navy mb-2">How do I know the rates are fair?</h3>
                   <p className="text-slate text-sm">Our rates are published daily based on current market benchmarks in Hyderabad. You will see indicative rates before validating your order, and the final price is calculated by actual weight on-site.</p>
                 </div>
                 <div>
-                  <h3 className="font-bold text-navy mb-2">What if the aggregator doesn't show up?</h3>
+                  <h3 className="font-bold text-navy mb-2">What if the aggregator doesn&apos;t show up?</h3>
                   <p className="text-slate text-sm">Aggregators are rated on their completion times. If an aggregator misses your scheduled window, the system will automatically re-assign your order to another trusted partner, and you will be notified in the app.</p>
                 </div>
               </div>

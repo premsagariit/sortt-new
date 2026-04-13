@@ -3,9 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminFetch } from '@/lib/adminApi';
+import type {
+  AdminOrderDetail,
+  AdminTimelineEvent,
+  AdminOrderItem,
+  AdminOrderMedia,
+} from '@/lib/adminApi';
 import {
   ArrowLeft, User, Truck, MapPin, Clock, Package, CheckCircle,
-  XCircle, Phone, Calendar, Scale, CreditCard, FileText, Image,
+  XCircle, Phone, Calendar, Scale, CreditCard, Image as ImageIcon,
 } from 'lucide-react';
 import styles from './order-detail.module.css';
 
@@ -47,14 +53,14 @@ function fmtDate(d: string | null) {
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    adminFetch(`/api/admin/orders/${params.id}`)
+    adminFetch<AdminOrderDetail>(`/api/admin/orders/${params.id}`)
       .then(setOrder)
-      .catch(e => setError(e.message))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load order'))
       .finally(() => setLoading(false));
   }, [params.id]);
 
@@ -157,7 +163,7 @@ export default function OrderDetailPage() {
             <p className={styles.unassigned}>No timeline events</p>
           ) : (
             <div className={styles.timeline}>
-              {order.timeline.map((ev: any, i: number) => (
+              {order.timeline.map((ev: AdminTimelineEvent, i: number) => (
                 <div key={i} className={styles.timelineItem}>
                   <div className={styles.timelineDot} style={{ background: STATUS_COLORS[ev.status] ?? '#6366f1' }} />
                   <div className={styles.timelineContent}>
@@ -196,7 +202,7 @@ export default function OrderDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {order.items.map((item: any, i: number) => (
+                {order.items.map((item: AdminOrderItem, i: number) => (
                   <tr key={i}>
                     <td>{item.material_code}</td>
                     <td>{item.estimated_weight_kg != null ? `${item.estimated_weight_kg} kg` : '—'}</td>
@@ -227,11 +233,11 @@ export default function OrderDetailPage() {
 
         {/* Media */}
         {(order.media ?? []).length > 0 && (
-          <Section title="Attachments" icon={Image}>
+          <Section title="Attachments" icon={ImageIcon}>
             <div className={styles.mediaGrid}>
-              {order.media.map((m: any) => (
+              {order.media.map((m: AdminOrderMedia) => (
                 <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className={styles.mediaCard}>
-                  <Image size={20} />
+                  <ImageIcon size={20} />
                   <span className={styles.mediaType}>{m.media_type}</span>
                   <span className={styles.mediaDate}>{fmtDate(m.created_at)}</span>
                 </a>

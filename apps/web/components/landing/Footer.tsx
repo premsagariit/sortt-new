@@ -41,24 +41,24 @@ export function Footer() {
               <h3 className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Platform</h3>
               <ul className="space-y-2.5">
                 <li>
-                  <a href="/#how-it-works" className="text-white/60 hover:text-white text-sm transition-colors">
+                  <Link href="/#how-it-works" className="text-white/60 hover:text-white text-sm transition-colors">
                     How It Works
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="/#materials" className="text-white/60 hover:text-white text-sm transition-colors">
+                  <Link href="/#materials" className="text-white/60 hover:text-white text-sm transition-colors">
                     Material Types
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="/#pricing" className="text-white/60 hover:text-white text-sm transition-colors">
+                  <Link href="/#pricing" className="text-white/60 hover:text-white text-sm transition-colors">
                     Live Prices
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="/#download" className="text-white/60 hover:text-white text-sm transition-colors">
+                  <Link href="/#download" className="text-white/60 hover:text-white text-sm transition-colors">
                     Download App
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>

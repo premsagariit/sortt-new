@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import NextImage from 'next/image';
-import { adminApi, type Dispute, type AdminOrderDetail } from '../../../../lib/adminApi';
+import { adminApi, type Dispute, type AdminOrderDetail, type AdminOrderItem } from '../../../../lib/adminApi';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -288,7 +288,7 @@ function DisputeRow({
                       <div>
                         <div className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Items</div>
                         <div className="flex flex-wrap gap-2">
-                          {order.items.map((item: any, i: number) => (
+                          {order.items.map((item: AdminOrderItem, i: number) => (
                             <span key={i} className="inline-flex items-center gap-1.5 bg-navy/5 border border-navy/10 text-navy text-[12px] font-medium px-3 py-1 rounded-full">
                               {item.material_code}
                               {item.actual_weight_kg ? ` · ${item.actual_weight_kg}kg` : item.estimated_weight_kg ? ` · ~${item.estimated_weight_kg}kg` : ''}
