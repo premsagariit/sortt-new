@@ -7,7 +7,6 @@ export interface DbOrder {
   pickup_address: string | null;
   pickup_locality: string | null;
   phone_hash?: string;
-  clerk_user_id?: string; // Legacy: to be removed
   seller_name?: string;
   seller_display_phone?: string | null;  // SP1: populated from users.display_phone
   aggregator_name?: string;              // SP1: populated from joining users as agg
@@ -162,7 +161,6 @@ export function buildOrderDto(
     otp: canSeeOrderOtp ? (order.otp ?? '') : '',
     order_number: undefined,
     phone_hash: undefined,
-    clerk_user_id: undefined,
     seller_display_phone: undefined,
     aggregator_display_phone: undefined,
   };

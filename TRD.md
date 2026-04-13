@@ -1,9 +1,16 @@
 # [APP_NAME]
 ## Technical Requirements Document
-**v4.0 · Minimalist Professional UI · Azure PostgreSQL · Clerk Auth · Ably Realtime · Cloudflare R2 Storage · WhatsApp OTP**
+**v4.1 · Minimalist Professional UI · Azure PostgreSQL · Custom JWT Auth · Ably Realtime · Cloudflare R2 Storage · WhatsApp OTP**
 
 > ⚠️ **APP NAME PLACEHOLDER NOTICE**
 > The name **"Sortt"** used throughout this document is a **placeholder only**. The final product name has not been decided. All references to "Sortt" should be read as `[APP_NAME]`. In code, always import from `constants/app.ts` — never hardcode the string. See MEMORY.md for full rebrand instructions.
+
+> 📋 **v4.1 CHANGE SUMMARY (from v4.0)**
+> - Complete removal of Clerk Auth. Migrated to Custom JWT via Upstash Redis + Express backend.
+> - Removed `clerk_user_id` entirely.
+> - Database Primary Keys updated from UUID to TEXT columns. All relationships verified.
+> - Added Leaflet dependency for Admin Map tracking.
+> - Testing suites removed prior to MVP push.
 
 > 📋 **v4.0 CHANGE SUMMARY (from v3.2)**
 > Supabase has been fully removed from this architecture. Reason: active ISP-level government block in India targeting `*.supabase.co` and `firebaseio.com` domains as of February 2026. All Supabase services (Auth, Realtime, Storage, Edge Functions, PostgreSQL) are replaced with India-accessible, non-blockable alternatives. PostGIS geospatial dependency removed and replaced with city-code/locality matching — appropriate for the single-city Hyderabad MVP pilot. Backend hosting moved from Render to Azure App Service (Central India). All other security controls, business logic, and UI rules are unchanged.

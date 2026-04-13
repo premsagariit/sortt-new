@@ -7,7 +7,7 @@
 > **v2.0 CHANGE NOTICE (from v1.0)**
 > Stack has changed. Supabase removed entirely (ISP block, Feb 2026). New stack:
 > - **Database:** Azure PostgreSQL Flexible Server B1ms (Central India — free on Azure for Students)
-> - **Auth:** Clerk (session management) + Meta WhatsApp OTP (delivery, called directly from Express)
+> - **Auth:** Custom JWT Auth + Meta WhatsApp OTP (delivery, called directly from Express)
 > - **Realtime:** Ably (via `IRealtimeProvider` — India edge nodes)
 > - **Storage:** Cloudflare R2 (via `IStorageProvider` — S3-compatible, India PoPs, zero egress fees)
 > - **Backend:** Express on Azure App Service (Central India — free tier)

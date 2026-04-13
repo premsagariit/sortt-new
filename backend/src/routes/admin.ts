@@ -437,4 +437,297 @@ router.get('/flagged', async (req: Request, res: Response) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/orders
+// All orders with filter ?status=&seller_id=&limit=&offset=
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/orders', async (req: Request, res: Response) => {
+  const { status, seller_id, limit = '50', offset = '0' } = req.query as Record<string, string>;
+  try {
+    const conditions: string[] = ['o.deleted_at IS NULL'];
+    const params: unknown[] = [];
+    if (status) { params.push(status); conditions.push(`o.status = $${params.length}`); }
+    if (seller_id) { params.push(seller_id); conditions.push(`o.seller_id = $${params.length}`); }
+
+    params.push(Number(limit), Number(offset));
+    const where = conditions.join(' AND ');
+
+    const [ordersRes, totalRes] = await Promise.all([
+      query(
+        `SELECT
+           o.id,
+           o.status,
+           o.created_at,
+           o.scheduled_at,
+           o.picked_up_at,
+           o.completed_at,
+           o.cancelled_at,
+           o.cancellation_reason,
+           o.amount_due,
+           o.pickup_address,
+           o.pickup_lat,
+           o.pickup_lng,
+           o.city_code,
+           o.seller_id,
+           o.aggregator_id,
+           sel.name AS seller_name,
+           sel.display_phone AS seller_phone,
+           ap.business_name AS aggregator_business_name,
+           agg.display_phone AS aggregator_phone,
+           ap.aggregator_type
+         FROM orders o
+         JOIN users sel ON sel.id = o.seller_id
+         LEFT JOIN aggregator_profiles ap ON ap.user_id = o.aggregator_id
+         LEFT JOIN users agg ON agg.id = o.aggregator_id
+         WHERE ${where}
+         ORDER BY o.created_at DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      ),
+      query(
+        `SELECT COUNT(*) AS total FROM orders o WHERE ${where}`,
+        params.slice(0, params.length - 2)
+      ),
+    ]);
+
+    return res.json({
+      orders: ordersRes.rows,
+      total: parseInt(totalRes.rows[0].total, 10),
+      limit: Number(limit),
+      offset: Number(offset),
+    });
+  } catch (err) {
+    console.error('[admin/orders]', err);
+    return res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/orders/locations  (must be BEFORE /orders/:id)
+// Live order pins for the map view (lat/lng + status colour)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/orders/locations', async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT
+         o.id, o.status, o.pickup_lat AS lat, o.pickup_lng AS lng,
+         o.created_at, o.city_code,
+         sel.name AS seller_name,
+         ap.business_name AS aggregator_name
+       FROM orders o
+       JOIN users sel ON sel.id = o.seller_id
+       LEFT JOIN aggregator_profiles ap ON ap.user_id = o.aggregator_id
+       WHERE o.pickup_lat IS NOT NULL
+         AND o.pickup_lng IS NOT NULL
+         AND o.deleted_at IS NULL
+         AND o.created_at > NOW() - INTERVAL '30 days'
+       ORDER BY o.created_at DESC
+       LIMIT 500`
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('[admin/orders/locations]', err);
+    return res.status(500).json({ error: 'Failed to fetch order locations' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/orders/:id
+// Full order details for dispute resolution + admin inspection
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/orders/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const adminUserId = req.user!.id;
+
+  try {
+    const [orderRes, itemsRes, timelineRes, mediasRes] = await Promise.all([
+      query(
+        `SELECT
+           o.id, o.status, o.created_at, o.scheduled_at,
+           o.picked_up_at, o.completed_at, o.cancelled_at,
+           o.cancellation_reason, o.amount_due, o.seller_note,
+           o.pickup_address, o.pickup_lat, o.pickup_lng, o.city_code,
+           o.preferred_pickup_window, o.aggregator_accepted_at,
+           o.seller_id, o.aggregator_id,
+           sel.name AS seller_name,
+           sel.display_phone AS seller_phone,
+           sel.created_at AS seller_joined_at,
+           sa.flat_number AS seller_flat, sa.street AS seller_street,
+           sa.area AS seller_area, sa.city AS seller_city,
+           sa.pincode AS seller_pincode,
+           ap.business_name AS aggregator_business_name,
+           ap.aggregator_type, ap.city_code AS aggregator_city,
+           ap.kyc_status AS aggregator_kyc_status,
+           agg.display_phone AS aggregator_phone,
+           agg.name AS aggregator_name,
+           CASE
+             WHEN o.pickup_lat IS NOT NULL AND o.pickup_lng IS NOT NULL
+                  AND ap.home_lat IS NOT NULL AND ap.home_lng IS NOT NULL
+             THEN round((point(o.pickup_lng, o.pickup_lat) <@> point(ap.home_lng, ap.home_lat)) * 1.60934, 2)
+           END AS distance_km
+         FROM orders o
+         JOIN users sel ON sel.id = o.seller_id
+         LEFT JOIN seller_addresses sa ON sa.seller_id = o.seller_id AND sa.is_primary = true
+         LEFT JOIN aggregator_profiles ap ON ap.user_id = o.aggregator_id
+         LEFT JOIN users agg ON agg.id = o.aggregator_id
+         WHERE o.id = $1`,
+        [id]
+      ),
+      query(
+        `SELECT oi.material_code, oi.estimated_weight_kg, oi.actual_weight_kg,
+                oi.unit_price_per_kg, oi.line_amount
+         FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.material_code`,
+        [id]
+      ),
+      query(
+        `SELECT status, changed_at, changed_by, note
+         FROM order_status_history WHERE order_id = $1 ORDER BY changed_at ASC`,
+        [id]
+      ),
+      query(
+        `SELECT id, media_type, storage_path, created_at
+         FROM order_media WHERE order_id = $1 ORDER BY created_at ASC`,
+        [id]
+      ),
+    ]);
+
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRes.rows[0];
+
+    // Generate signed URLs for media (5 min)
+    const media = await Promise.all(
+      mediasRes.rows.map(async (m: any) => ({
+        id: m.id,
+        media_type: m.media_type,
+        url: await storageProvider.getSignedUrl(m.storage_path, 300),
+        created_at: m.created_at,
+      }))
+    );
+
+    // Audit log (no tx needed for read)
+    await query(
+      `INSERT INTO admin_audit_log (actor_id, action, target_entity, target_id, metadata, created_at)
+       VALUES ($1, 'order_detail_viewed', 'orders', $2, $3, NOW())`,
+      [adminUserId, id, JSON.stringify({ context: 'admin_portal' })]
+    );
+
+    return res.json({
+      ...order,
+      items: itemsRes.rows,
+      timeline: timelineRes.rows,
+      media,
+    });
+  } catch (err) {
+    console.error('[admin/orders/:id]', err);
+    return res.status(500).json({ error: 'Failed to fetch order details' });
+  }
+});
+
+
+// (locations route was moved to before /orders/:id above)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/analytics
+// Platform-wide KPI trends for the analytics dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const [
+      dailyOrdersRes,
+      statusBreakdownRes,
+      cityBreakdownRes,
+      topSellersRes,
+      topAggregatorsRes,
+      hourlyDistributionRes,
+      revenueWeeklyRes,
+    ] = await Promise.all([
+      // Orders per day – last 30 days
+      query(`
+        SELECT
+          DATE(created_at AT TIME ZONE 'Asia/Kolkata') AS day,
+          COUNT(*) AS orders,
+          COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+          COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
+        FROM orders
+        WHERE created_at > NOW() - INTERVAL '30 days'
+          AND deleted_at IS NULL
+        GROUP BY day ORDER BY day ASC
+      `),
+      // Status distribution
+      query(`
+        SELECT status, COUNT(*) AS count
+        FROM orders WHERE deleted_at IS NULL
+        GROUP BY status ORDER BY count DESC
+      `),
+      // City breakdown
+      query(`
+        SELECT city_code, COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status='completed') AS completed
+        FROM orders WHERE deleted_at IS NULL
+        GROUP BY city_code ORDER BY total DESC
+      `),
+      // Top 10 sellers by order count
+      query(`
+        SELECT sel.id, sel.name, sel.display_phone,
+               COUNT(o.id) AS total_orders,
+               COUNT(o.id) FILTER (WHERE o.status='completed') AS completed_orders,
+               COALESCE(SUM(o.amount_due) FILTER (WHERE o.status='completed'), 0) AS total_gmv
+        FROM orders o JOIN users sel ON sel.id = o.seller_id
+        WHERE o.deleted_at IS NULL
+        GROUP BY sel.id, sel.name, sel.display_phone
+        ORDER BY total_orders DESC LIMIT 10
+      `),
+      // Top 10 aggregators by completed orders
+      query(`
+        SELECT agg.id, agg.name, ap.business_name, agg.display_phone,
+               COUNT(o.id) FILTER (WHERE o.status='completed') AS completed_orders,
+               COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating
+        FROM orders o
+        JOIN users agg ON agg.id = o.aggregator_id
+        LEFT JOIN aggregator_profiles ap ON ap.user_id = o.aggregator_id
+        LEFT JOIN ratings r ON r.order_id = o.id AND r.ratee_id = o.aggregator_id
+        WHERE o.status = 'completed' AND o.deleted_at IS NULL
+        GROUP BY agg.id, agg.name, ap.business_name, agg.display_phone
+        ORDER BY completed_orders DESC LIMIT 10
+      `),
+      // Hourly order distribution (0-23)
+      query(`
+        SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata')::int AS hour,
+               COUNT(*) AS orders
+        FROM orders WHERE deleted_at IS NULL
+          AND created_at > NOW() - INTERVAL '30 days'
+        GROUP BY hour ORDER BY hour ASC
+      `),
+      // Weekly GMV (last 12 weeks)
+      query(`
+        SELECT
+          DATE_TRUNC('week', completed_at AT TIME ZONE 'Asia/Kolkata') AS week_start,
+          COUNT(*) AS completed_orders,
+          COALESCE(SUM(amount_due), 0) AS gmv
+        FROM orders
+        WHERE status = 'completed' AND deleted_at IS NULL
+          AND completed_at > NOW() - INTERVAL '12 weeks'
+        GROUP BY week_start ORDER BY week_start ASC
+      `),
+    ]);
+
+    return res.json({
+      daily_orders: dailyOrdersRes.rows,
+      status_breakdown: statusBreakdownRes.rows,
+      city_breakdown: cityBreakdownRes.rows,
+      top_sellers: topSellersRes.rows,
+      top_aggregators: topAggregatorsRes.rows,
+      hourly_distribution: hourlyDistributionRes.rows,
+      revenue_weekly: revenueWeeklyRes.rows,
+    });
+  } catch (err) {
+    console.error('[admin/analytics]', err);
+    return res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
 export default router;

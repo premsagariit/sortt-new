@@ -1,6 +1,6 @@
 # [APP_NAME] — India's Scrap Marketplace
 
-> **Status:** Day 16 COMPLETE, Day 17 Security Audit & Monitoring ready to start (2026-04-11)  
+> **Status:** Day 17 IN PROGRESS: Security Audit, MVP Launch & Admin enhancements (2026-04-13)  
 > **Architecture:** pnpm Monorepo  
 > **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI, Azure Application Insights, Azure Monitor Availability Tests, PostHog Cloud, Microsoft Clarity, Sentry (mobile only).
 
@@ -87,7 +87,7 @@ pnpm dev:backend
 | **Web (Admin Only)** | Next.js 15, Tailwind CSS, Radix UI |
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
 | **Database** | Azure PostgreSQL, RLS, migration-driven schema |
-| **Auth** | Clerk (Phone OTP via WhatsApp Cloud API) |
+| **Auth** | Custom JWT (Phone OTP via WhatsApp Cloud API) |
 | **Observability** | Azure Application Insights (Express + Next.js), Azure Monitor Availability Tests |
 | **Analytics** | PostHog Cloud (product funnels), Microsoft Clarity (admin web behaviour), Sentry React Native SDK (mobile crash symbolication only) |
 | **Offline Handling** | `useNetworkStatus` (NetInfo), `OfflineAwareNavigator`, `AuthNetworkErrorScreen`, `NetworkErrorScreen` |

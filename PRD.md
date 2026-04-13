@@ -5,9 +5,14 @@
 > The name **"Sortt"** used throughout this document is a **placeholder only**. The final product name has not been decided. All references to "Sortt" in this document — including the vision statement, user-facing copy examples, and section headings — should be read as `[APP_NAME]`. See MEMORY.md for rebrand instructions.
 
 # PRODUCT REQUIREMENTS DOCUMENT (PRD)
-**Version 1.4 | MVP Release**
+**Version 1.5 | MVP Release**
 **Pilot City: Hyderabad, India**
 **February 2026**
+
+> 📋 **v1.5 CHANGE SUMMARY (from v1.4)**
+> - Authentication stack transitioned from Clerk to Custom JWT.
+> - Admin Dashboard extended with Leaflet mapping, advanced analytics and real-time detailed order resolution cards.
+> - Data masking updated for privacy using sequential indexing logic.
 
 > 📋 **v1.4 CHANGE SUMMARY (from v1.3)**
 > PRD audited and updated against TRD v4.1, PLAN.md v2.0 (Days 4–17), UI_REFERENCE.md v2.0, and MEMORY.md.

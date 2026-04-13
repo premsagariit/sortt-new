@@ -3,6 +3,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import crypto from 'crypto';
 import { query, withUser, pool } from '../../lib/db';
+import { generateOrderId } from '../../lib/idGenerator';
 import { DbOrder, buildOrderDto, OrderDtoViewerType } from '../../utils/orderDto';
 import { ALLOWED_TRANSITIONS, IMMUTABLE_STATUSES } from '../../utils/orderStateMachine';
 import { orderCreateLimiter, redis } from '../../lib/redis';
@@ -151,12 +152,30 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
           : { type: typeof rawPref === 'string' ? rawPref : 'anytime', scheduledDate: null, scheduledTime: null };
         const windowJson = JSON.stringify(prefObj);
 
+        // Generate per-user sequential order number using existing counter table schema
+        const sellerRow = await client.query(
+          `SELECT display_phone FROM users WHERE id = $1`, [userId]
+        );
+        const sellerPhone = sellerRow.rows[0]?.display_phone || '';
+        const counterRow = await client.query(
+          `INSERT INTO user_order_counters (user_id, next_value, updated_at)
+           VALUES ($1, 2, NOW())
+           ON CONFLICT (user_id) DO UPDATE
+             SET next_value = user_order_counters.next_value + 1,
+                 updated_at = NOW()
+           RETURNING next_value`,
+          [userId]
+        );
+        const orderSeq = (counterRow.rows[0]?.next_value ?? 1) - 1 || 1;
+        const customOrderId = generateOrderId(sellerPhone, orderSeq);
+
         const orderRes = await client.query(`
               INSERT INTO orders (
-                seller_id, city_code, pickup_address, pickup_locality, pickup_lat, pickup_lng, preferred_pickup_window, seller_note, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'created')
+                id, seller_id, city_code, pickup_address, pickup_locality, pickup_lat, pickup_lng, preferred_pickup_window, seller_note, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'created')
               RETURNING *
             `, [
+          customOrderId,
           userId,
           selectedAddress.city_code,
           fullPickupAddress,
@@ -228,7 +247,7 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
                   SELECT 1
                   FROM aggregator_order_dismissals dod
                   WHERE dod.aggregator_id = p.user_id
-                    AND dod.order_id = $3::uuid
+                    AND dod.order_id = $3
                 )
                 AND (
                   SELECT COUNT(DISTINCT m.material_code)

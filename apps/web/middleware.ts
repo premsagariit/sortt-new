@@ -8,7 +8,13 @@
  *    `admin_token` cookie (set by the login page client-side).
  *  - This middleware reads `admin_token` cookie, verifies the HS256
  *    JWT using JWT_SECRET, and redirects to /admin/login on failure.
- *  - Public route: /admin/login (no token required)
+ *
+ * Public routes (no token required):
+ *   '/', '/admin', '/admin/login', '/admin/create-password',
+ *   '/admin/forgot-password', '/admin/reset-password', '/admin/request-access'
+ *
+ * IP allowlist applies ONLY to portal routes:
+ *   /admin/kyc, /admin/disputes, /admin/prices, /admin/dashboard, /admin/flagged
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -21,40 +27,60 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(JWT_SECRET_RAW);
 }
 
-const PUBLIC_PATHS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password', '/admin/request-access'];
+/** Publicly accessible routes — no auth token required */
+const PUBLIC_PATHS = [
+  '/',
+  '/admin',
+  '/admin/login',
+  '/admin/create-password',
+  '/admin/forgot-password',
+  '/admin/reset-password',
+  '/admin/request-access',
+];
+
+/** Portal routes — require JWT AND are subject to IP allowlist */
+const PORTAL_PATHS = [
+  '/admin/kyc',
+  '/admin/disputes',
+  '/admin/prices',
+  '/admin/dashboard',
+  '/admin/flagged',
+];
 
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
+function isPortalRoute(pathname: string): boolean {
+  return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
 export default async function middleware(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
 
-  // ── 1. IP ALLOWLIST LOGIC (Gate G16.1) ──────────────────────────
-  const allowlistRaw = process.env.ADMIN_IP_ALLOWLIST ?? '';
-  const allowlist = allowlistRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // ── 1. IP ALLOWLIST — portal routes only (G16.1) ────────────────
+  if (isPortalRoute(pathname)) {
+    const allowlistRaw = process.env.ADMIN_IP_ALLOWLIST ?? '';
+    const allowlist = allowlistRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-  if (allowlist.length === 0 && process.env.NODE_ENV !== 'production') {
-    // no-op in dev
-  }
+    if (allowlist.length > 0) {
+      const clientIp =
+        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        req.headers.get('x-real-ip')?.trim() ??
+        '127.0.0.1';
 
-  if (allowlist.length > 0) {
-    const clientIp =
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      req.headers.get('x-real-ip')?.trim() ??
-      '127.0.0.1';
-
-    if (!allowlist.includes(clientIp)) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Access denied',
-          message: 'Your IP address is not authorised to access this resource.',
-        }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      );
+      if (!allowlist.includes(clientIp)) {
+        return new NextResponse(
+          JSON.stringify({
+            error: 'Access denied',
+            message: 'Your IP address is not authorised to access this resource.',
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
   }
   // ─────────────────────────────────────────────────────────────────

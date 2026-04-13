@@ -1,4 +1,10 @@
 Sortt
+├── Recent implementation updates (2026-04-13)
+│   ├── Auth Strategy: Migrated from Clerk to Custom JWT; completely purged clerk_user_id database and codebase records.
+│   ├── Database Core: Converted UUID primary keys to Text (strings) ensuring table integrity scaling.
+│   ├── Clean up: Purged non-essential testing files from backend to finalize MVP readiness.
+│   ├── Admin UI Overhaul: Added Leaflet maps, analytical trends, specific order filtering on cards, and complete end-to-end data views for Dispute resolution.
+│   ├── Data Masking: Updated privacy logic to extract phone number slices based on even-position count from start to finish.
 ├── Recent implementation updates (2026-04-05)
 │   ├── Day 16 completion delivered:
 │   │   ├── Admin Web Dashboard (`apps/web`) fully operational with live data.

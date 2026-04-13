@@ -16,13 +16,12 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- ------------------------------------------------------------
 -- USERS
--- Note: Auth sessions managed by Clerk; user records synced here on first login.
+-- Note: Auth sessions managed via custom JWT (OTP-based phone auth).
 -- phone_hash: HMAC-SHA256 of phone number — never raw phone (V24)
--- clerk_user_id: used for JWT cross-reference — never exposed in public view (V24)
+-- clerk_user_id was removed in migration 0009 (Clerk integration removed).
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
-  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  clerk_user_id     TEXT NOT NULL UNIQUE,
+  id                TEXT PRIMARY KEY,
   phone_hash        TEXT NOT NULL,
   phone_last4       TEXT NOT NULL,
   name              TEXT NOT NULL,
@@ -37,8 +36,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------
 -- USERS_PUBLIC VIEW
--- Excludes phone_hash and clerk_user_id — these are NEVER returned
--- to any client via this view (V24, V-CLERK-1)
+-- Excludes phone_hash — never returned to any client (V24)
 -- ------------------------------------------------------------
 CREATE OR REPLACE VIEW users_public AS
   SELECT

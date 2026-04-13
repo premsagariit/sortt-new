@@ -5,7 +5,15 @@
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 16 COMPLETE (2026-04-05), Day 17 READY TO START (Security & Launch)
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 17 IN PROGRESS (2026-04-13) (Security & Launch) | Custom JWT Migration Complete | Admin Dashboard Enhanced
+
+> ✅ **Implementation Sync Note (2026-04-13) — Custom JWT & Admin Enhancements**
+> - Refactored entire auth system: Removed Clerk and replaced with Custom JWT Auth.
+> - Removed clerk_user_id columns and codebase references.
+> - Converted Database Primary Keys (PKs) from UUID to \`text\` globally to resolve database inconsistencies.
+> - Updated Admin Dashboard: Leaflet maps integrated, active/completed orders specific rendering upon click, order details include distance and cancellation reasons.
+> - Data masking updated: Phone numbers extract per-user sequence using even indices from end-to-start (13579).
+> - Cleaned up testing suites and testing-related files for deployment readiness.
 
 > ✅ **Scope Sync Note (2026-04-05) — CI Restoration**
 > - All Day 16 verification gates are **PASS**.

@@ -242,7 +242,6 @@ router.get('/me', async (req, res) => {
 
     // Strip sensitive fields
     delete userObj.phone_hash;
-    delete userObj.clerk_user_id;
 
     res.json(userObj);
   } catch (error: any) {

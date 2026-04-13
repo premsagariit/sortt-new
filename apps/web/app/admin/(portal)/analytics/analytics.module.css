@@ -1,0 +1,75 @@
+.page { display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; }
+
+.header {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.title {
+  font-size: 1.5rem; font-weight: 700; margin: 0; color: #f1f5f9;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.subtitle { font-size: 0.875rem; color: #64748b; margin: 0.25rem 0 0; }
+.refresh {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  color: #94a3b8; border-radius: 8px; padding: 0.5rem 1rem;
+  font-size: 0.875rem; cursor: pointer; transition: all 0.2s;
+}
+.refresh:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loadingCenter { display: flex; justify-content: center; padding: 4rem; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+
+.kpiStrip {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem;
+}
+.statCard {
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 1.25rem;
+  display: flex; flex-direction: column; gap: 0.25rem;
+  transition: background 0.2s;
+}
+.statCard:hover { background: rgba(255,255,255,0.07); }
+.statTitle { font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.statValue { font-size: 1.75rem; font-weight: 800; color: #f1f5f9; }
+.statSub { font-size: 0.75rem; color: #94a3b8; }
+
+.twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 900px) { .twoCol { grid-template-columns: 1fr; } }
+
+.chartCard {
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; padding: 1.25rem;
+}
+.chartTitle {
+  font-size: 0.9375rem; font-weight: 600; color: #e2e8f0;
+  margin: 0 0 1rem; display: flex; align-items: center; gap: 0.5rem;
+}
+
+.tooltip {
+  background: #0f172a; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; padding: 0.625rem 0.875rem; font-size: 0.8125rem;
+}
+.tooltipLabel { color: #64748b; font-size: 0.75rem; margin: 0 0 0.25rem; }
+.tooltip p { margin: 0.1rem 0; }
+
+.pieWrapper { display: flex; justify-content: center; }
+
+.leaderboard { display: flex; flex-direction: column; gap: 0; }
+.leaderboardRow {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.625rem 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.leaderboardRow:last-child { border-bottom: none; }
+.rank { font-size: 0.875rem; font-weight: 700; width: 2rem; text-align: center; flex-shrink: 0; }
+.lbInfo { flex: 1; min-width: 0; }
+.lbName { display: block; font-size: 0.875rem; color: #e2e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbPhone { font-size: 0.75rem; color: #64748b; }
+.lbStats { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+.lbOrders { font-size: 0.8125rem; color: #a5b4fc; }
+.lbCompleted { font-size: 0.75rem; color: #34d399; }
