@@ -428,3 +428,10 @@ Sortt
 └── scraper # Python scraper service
     ├── .gitkeep # Keeps scraper directory tracked when empty
     └── main.py # Scraper entry script for external data ingestion
+
+## Recent Updates (Auth Identity Migration & System Reset)
+- Resolved critical user ID misformation during user registrations.
+- Refactored profile setup (both sellers and aggregators) to securely transition provisional 	mp_ IDs to structured deterministic IDs.
+- Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
+- Admin metrics accurately track deterministic IDs correctly without constraint errors.
+- UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.

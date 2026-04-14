@@ -528,3 +528,11 @@ These questions were identified in the TRD v4.1 patch session. They require prod
 | **OQ-3** | **Closed (scope update):** Web portal Ably key strategy is deferred until business/aggregator web UI resumes. Current Day 16 admin web scope does not require a client-side Ably key. | Deferred | Engineering + Product |
 | **OQ-4** | **Referral & rewards schema timing:** No `referral_code` or `referred_by` columns exist in `seller_profiles` schema. When does this need to be added — before or after MVP launch? Adding it post-launch requires a schema migration under live traffic. If pre-launch, it should be added to `migrations/0003_profiles.sql`. | Post-launch (or Day 4 if pre-launch) | Product |
 | **OQ-5** | **`account-type.tsx` vs `user-type.tsx` filename:** UI_REFERENCE.md §3 lists the file as `account-type.tsx`. PLAN.md §2.1 lists it as `user-type.tsx`. The actual filename on disk must be confirmed, and whichever doc is wrong must be corrected before Day 12 auth wiring (which hardcodes this route). Needs a 30-second `ls` check, not a design decision. | Day 12 | Engineering |
+
+
+## Recent Updates (Auth Identity Migration & System Reset)
+- Resolved critical user ID misformation during user registrations.
+- Refactored profile setup (both sellers and aggregators) to securely transition provisional 	mp_ IDs to structured deterministic IDs.
+- Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
+- Admin metrics accurately track deterministic IDs correctly without constraint errors.
+- UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.

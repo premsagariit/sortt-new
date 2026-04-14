@@ -2089,3 +2089,11 @@ export interface IMapProvider {
 
 *— End of [APP_NAME] TRD v4.0 —*
 *Supersedes TRD v3.2. Reason for major version bump: complete removal of Supabase dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Clerk + Ably + Cloudflare R2 + Express on Azure App Service.*
+
+
+## Recent Updates (Auth Identity Migration & System Reset)
+- Resolved critical user ID misformation during user registrations.
+- Refactored profile setup (both sellers and aggregators) to securely transition provisional 	mp_ IDs to structured deterministic IDs.
+- Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
+- Admin metrics accurately track deterministic IDs correctly without constraint errors.
+- UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
