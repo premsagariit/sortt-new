@@ -125,9 +125,9 @@ router.post('/profile', async (req, res) => {
   try {
     await query('BEGIN');
 
-    // ── ID rename: if provisional account (pending_s_...) and name is being set ──
+    // ── ID rename: if provisional account (tmp_...) and name is being set ──
     let finalUserId = userId;
-    if (name && userId.startsWith('pending_')) {
+    if (name && userId.startsWith('tmp_')) {
       // Fetch display_phone to rebuild proper suffix
       const phoneRes = await query(
         `SELECT display_phone, user_type FROM users WHERE id = $1`,
