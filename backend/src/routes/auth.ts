@@ -235,15 +235,16 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
         if (mode === 'signup') {
             const phoneLast4 = normalizedPhone.slice(-4);
-            // Provisional ID — uses phone suffix only; gets renamed to {name}_s_{suffix} on profile setup
-            const suffix = (await import('../lib/idGenerator')).sellerSuffix(normalizedPhone);
-            const provisionalId = `pending_s_${suffix}`;
+            // Provisional ID — short UUID; renamed to {name}_{s|a}_{suffix} when user completes profile
+            const provisionalId = `tmp_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+            // Placeholder name satisfies NOT NULL — overwritten during profile setup
+            const placeholderName = `user_${phoneLast4}`;
             try {
                 const insertResult = await query(
-                    `INSERT INTO users (id, phone_hash, phone_last4, user_type, is_active, display_phone, created_at, last_seen)
-                     VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
+                    `INSERT INTO users (id, phone_hash, phone_last4, user_type, is_active, name, display_phone, created_at, last_seen)
+                     VALUES ($1, $2, $3, $4, true, $5, $6, NOW(), NOW())
                      RETURNING id, user_type, is_active`,
-                    [provisionalId, phoneHmac, phoneLast4, 'seller', normalizedPhone]
+                    [provisionalId, phoneHmac, phoneLast4, 'seller', placeholderName, normalizedPhone]
                 );
                 userRecord = insertResult.rows[0];
                 isNewUser = true;

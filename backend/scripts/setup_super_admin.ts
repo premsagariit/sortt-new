@@ -34,11 +34,10 @@ async function run() {
     console.log('🔄 Starting super admin fix...');
     await client.query('BEGIN');
 
-    // ── Delete existing admin users only ────────────────────────
-    console.log('🗑️  Removing existing admin accounts...');
-    await client.query(`DELETE FROM admin_audit_log WHERE actor_id IN (SELECT id FROM users WHERE user_type = 'admin')`);
-    await client.query(`DELETE FROM users WHERE user_type = 'admin'`);
-    console.log('✅ Old admin accounts removed.');
+    // ── Delete ALL existing users ───────────────────────────────
+    console.log('🗑️  Removing all existing data (requested by user)...');
+    await client.query(`TRUNCATE TABLE users CASCADE`);
+    console.log('✅ All users removed.');
 
     // ── Admin account details ───────────────────────────────────
     const name        = 'Prem Sagar';

@@ -359,8 +359,54 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
     try {
         await query('BEGIN');
 
+        // ── ID rename: if provisional account (tmp_...) and name/business_name is being set ──
+        let finalUserId = userId;
+        const targetName = name || business_name;
+        if (targetName && userId.startsWith('tmp_')) {
+            const phoneRes = await query(
+                `SELECT display_phone FROM users WHERE id = $1`,
+                [userId]
+            );
+            if ((phoneRes.rowCount ?? 0) > 0) {
+                const { display_phone } = phoneRes.rows[0];
+                const { sanitizeName, aggregatorSuffix } = require('../lib/idGenerator');
+                const namePart = sanitizeName(targetName);
+                const suffix = aggregatorSuffix(display_phone);
+                const newId = `${namePart}_a_${suffix}`;
+
+                const collision = await query(`SELECT id FROM users WHERE id = $1`, [newId]);
+                if ((collision.rowCount ?? 0) === 0) {
+                    await query(`UPDATE users SET id = $1 WHERE id = $2`, [newId, userId]);
+                    const fkTables = [
+                        ['seller_profiles', 'user_id'],
+                        ['aggregator_profiles', 'user_id'],
+                        ['seller_addresses', 'seller_id'],
+                        ['aggregator_availability', 'user_id'],
+                        ['aggregator_material_rates', 'aggregator_id'],
+                        ['aggregator_order_dismissals', 'aggregator_id'],
+                        ['device_tokens', 'user_id'],
+                        ['notifications', 'user_id'],
+                        ['ratings', 'ratee_id'],
+                        ['ratings', 'rater_id'],
+                        ['admin_audit_log', 'actor_id'],
+                        ['orders', 'seller_id'],
+                        ['orders', 'aggregator_id'],
+                        ['order_media', 'uploaded_by'],
+                    ];
+                    for (const [table, col] of fkTables) {
+                        await query(
+                            `UPDATE ${table} SET "${col}" = $1 WHERE "${col}" = $2`,
+                            [newId, userId]
+                        ).catch(() => {});
+                    }
+                    finalUserId = newId;
+                    console.log(`[ID-RENAME] ${userId} → ${newId}`);
+                }
+            }
+        }
+
         if (name) {
-            await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+            await query('UPDATE users SET name = $1 WHERE id = $2', [name, finalUserId]);
         }
 
         if (typeof email === 'string' && email.trim().length > 0) {
@@ -370,7 +416,7 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
                  SET email = $1,
                      email_verified_at = NULL
                  WHERE id = $2`,
-                [normalizedEmail, userId]
+                [normalizedEmail, finalUserId]
             );
         }
 
@@ -380,11 +426,12 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
              ON CONFLICT (user_id) DO UPDATE SET
                 business_name = EXCLUDED.business_name,
                 city_code = EXCLUDED.city_code`,
-            [userId, business_name, city_code]
+            [finalUserId, business_name, city_code]
         );
 
         await query('COMMIT');
-        res.json({ success: true });
+        // Return id_changed so frontend can update its store if needed
+        res.json({ success: true, id_changed: finalUserId !== userId ? finalUserId : undefined });
     } catch (e: any) {
         await query('ROLLBACK');
         console.error('Profile POST error:', e);
@@ -415,12 +462,60 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
     console.log('[DIAG] PATCH /api/aggregators/profile', diagPayload);
 
     try {
+        await query('BEGIN');
+
         const updateFields: string[] = [];
         const values: any[] = [];
         let placeholderIdx = 1;
 
+        // ── ID rename: if provisional account (tmp_...) and name/business_name is being set ──
+        let finalUserId = userId;
+        const targetName = name || business_name;
+        if (targetName && userId.startsWith('tmp_')) {
+            const phoneRes = await query(
+                `SELECT display_phone FROM users WHERE id = $1`,
+                [userId]
+            );
+            if ((phoneRes.rowCount ?? 0) > 0) {
+                const { display_phone } = phoneRes.rows[0];
+                const { sanitizeName, aggregatorSuffix } = require('../lib/idGenerator');
+                const namePart = sanitizeName(targetName);
+                const suffix = aggregatorSuffix(display_phone);
+                const newId = `${namePart}_a_${suffix}`;
+
+                const collision = await query(`SELECT id FROM users WHERE id = $1`, [newId]);
+                if ((collision.rowCount ?? 0) === 0) {
+                    await query(`UPDATE users SET id = $1 WHERE id = $2`, [newId, userId]);
+                    const fkTables = [
+                        ['seller_profiles', 'user_id'],
+                        ['aggregator_profiles', 'user_id'],
+                        ['seller_addresses', 'seller_id'],
+                        ['aggregator_availability', 'user_id'],
+                        ['aggregator_material_rates', 'aggregator_id'],
+                        ['aggregator_order_dismissals', 'aggregator_id'],
+                        ['device_tokens', 'user_id'],
+                        ['notifications', 'user_id'],
+                        ['ratings', 'ratee_id'],
+                        ['ratings', 'rater_id'],
+                        ['admin_audit_log', 'actor_id'],
+                        ['orders', 'seller_id'],
+                        ['orders', 'aggregator_id'],
+                        ['order_media', 'uploaded_by'],
+                    ];
+                    for (const [table, col] of fkTables) {
+                        await query(
+                            `UPDATE ${table} SET "${col}" = $1 WHERE "${col}" = $2`,
+                            [newId, userId]
+                        ).catch(() => {});
+                    }
+                    finalUserId = newId;
+                    console.log(`[ID-RENAME] ${userId} → ${newId}`);
+                }
+            }
+        }
+
         if (name !== undefined) {
-            await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+            await query('UPDATE users SET name = $1 WHERE id = $2', [name, finalUserId]);
         }
 
         if (typeof email === 'string' && email.trim().length > 0) {
@@ -430,7 +525,7 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
                  SET email = $1,
                      email_verified_at = NULL
                  WHERE id = $2`,
-                [normalizedEmail, userId]
+                [normalizedEmail, finalUserId]
             );
         }
 
@@ -459,10 +554,11 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         }
 
         if (updateFields.length === 0) {
-            return res.json({ success: true, message: 'No fields to update' });
+            await query('COMMIT');
+            return res.json({ success: true, message: 'No fields to update', id_changed: finalUserId !== userId ? finalUserId : undefined });
         }
 
-        values.push(userId);
+        values.push(finalUserId);
         const queryStr = `
             UPDATE aggregator_profiles 
             SET ${updateFields.join(', ')}
@@ -470,8 +566,10 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
         `;
 
         await query(queryStr, values);
-        res.json({ success: true });
+        await query('COMMIT');
+        res.json({ success: true, id_changed: finalUserId !== userId ? finalUserId : undefined });
     } catch (e: any) {
+        await query('ROLLBACK');
         console.error('Profile PATCH error:', e);
         Sentry.captureException(e);
         res.status(500).json({ error: 'Failed to update profile' });
