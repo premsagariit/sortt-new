@@ -235,15 +235,15 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
         if (mode === 'signup') {
             const phoneLast4 = normalizedPhone.slice(-4);
-            const tempDisplayName = `User ${phoneLast4}`;
-            // All new users start as 'seller'; if they become aggregator later the id stays
-            const customUserId = generateUserId(tempDisplayName, normalizedPhone, 'seller');
+            // Provisional ID — uses phone suffix only; gets renamed to {name}_s_{suffix} on profile setup
+            const suffix = (await import('../lib/idGenerator')).sellerSuffix(normalizedPhone);
+            const provisionalId = `pending_s_${suffix}`;
             try {
                 const insertResult = await query(
-                    `INSERT INTO users (id, phone_hash, phone_last4, user_type, is_active, name, display_phone, created_at, last_seen)
-                     VALUES ($1, $2, $3, $4, true, $5, $6, NOW(), NOW())
+                    `INSERT INTO users (id, phone_hash, phone_last4, user_type, is_active, display_phone, created_at, last_seen)
+                     VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
                      RETURNING id, user_type, is_active`,
-                    [customUserId, phoneHmac, phoneLast4, 'seller', tempDisplayName, normalizedPhone]
+                    [provisionalId, phoneHmac, phoneLast4, 'seller', normalizedPhone]
                 );
                 userRecord = insertResult.rows[0];
                 isNewUser = true;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../lib/db';
 import { normalizeLanguage } from '../utils/language';
 import * as Sentry from '@sentry/node';
+import { sanitizeName, sellerSuffix, aggregatorSuffix } from '../lib/idGenerator';
 
 const router = Router();
 
@@ -124,7 +125,59 @@ router.post('/profile', async (req, res) => {
   try {
     await query('BEGIN');
 
-    if (name) {
+    // ── ID rename: if provisional account (pending_s_...) and name is being set ──
+    let finalUserId = userId;
+    if (name && userId.startsWith('pending_')) {
+      // Fetch display_phone to rebuild proper suffix
+      const phoneRes = await query(
+        `SELECT display_phone, user_type FROM users WHERE id = $1`,
+        [userId]
+      );
+      if ((phoneRes.rowCount ?? 0) > 0) {
+        const { display_phone, user_type } = phoneRes.rows[0];
+        const namePart = sanitizeName(name);
+        const typeChar = user_type === 'aggregator' ? 'a' : 's';
+        const suffix = user_type === 'aggregator'
+          ? aggregatorSuffix(display_phone)
+          : sellerSuffix(display_phone);
+        const newId = `${namePart}_${typeChar}_${suffix}`;
+
+        // Check for collision
+        const collision = await query(`SELECT id FROM users WHERE id = $1`, [newId]);
+        if ((collision.rowCount ?? 0) === 0) {
+          // Rename: update PK + cascade all FK tables
+          await query(`UPDATE users SET id = $1, name = $2 WHERE id = $3`, [newId, name, userId]);
+          // Cascade — all FKs that reference users.id
+          const fkTables = [
+            ['seller_profiles', 'user_id'],
+            ['aggregator_profiles', 'user_id'],
+            ['seller_addresses', 'seller_id'],
+            ['aggregator_availability', 'user_id'],
+            ['aggregator_material_rates', 'aggregator_id'],
+            ['aggregator_order_dismissals', 'aggregator_id'],
+            ['device_tokens', 'user_id'],
+            ['notifications', 'user_id'],
+            ['ratings', 'ratee_id'],
+            ['ratings', 'rater_id'],
+            ['admin_audit_log', 'actor_id'],
+            ['orders', 'seller_id'],
+            ['orders', 'aggregator_id'],
+            ['order_media', 'uploaded_by'],
+          ];
+          for (const [table, col] of fkTables) {
+            await query(
+              `UPDATE ${table} SET "${col}" = $1 WHERE "${col}" = $2`,
+              [newId, userId]
+            ).catch(() => { /* table may not exist yet, that's fine */ });
+          }
+          finalUserId = newId;
+          console.log(`[ID-RENAME] ${userId} → ${newId}`);
+        } else {
+          // Collision — just set the name, keep old id
+          await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
+        }
+      }
+    } else if (name) {
       await query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
     }
 
@@ -135,7 +188,7 @@ router.post('/profile', async (req, res) => {
          SET email = $1,
              email_verified_at = NULL
          WHERE id = $2`,
-        [normalizedEmail, userId]
+        [normalizedEmail, finalUserId]
       );
     }
 
@@ -149,12 +202,13 @@ router.post('/profile', async (req, res) => {
            gstin = COALESCE(EXCLUDED.gstin, seller_profiles.gstin),
            locality = COALESCE(EXCLUDED.locality, seller_profiles.locality),
            city_code = COALESCE(EXCLUDED.city_code, seller_profiles.city_code)`,
-        [userId, profile_type, business_name, gstin, locality, city_code]
+        [finalUserId, profile_type, business_name, gstin, locality, city_code]
       );
     }
 
     await query('COMMIT');
-    res.json({ success: true });
+    // Return new ID so the mobile app can update its local JWT reference if needed
+    res.json({ success: true, id: finalUserId, id_changed: finalUserId !== userId });
   } catch (e: any) {
     await query('ROLLBACK');
     console.error('Profile update error:', e);
