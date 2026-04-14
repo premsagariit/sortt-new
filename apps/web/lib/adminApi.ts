@@ -173,6 +173,26 @@ export interface AdminAnalytics {
   revenue_weekly: Array<{ week_start: string; completed_orders: number; gmv: number }>;
 }
 
+export type DateRangeKey = 'today' | '2days' | 'week' | 'month' | 'all' | 'custom';
+
+export interface RegisteredUser {
+  id: string;
+  name: string;
+  user_type: 'seller' | 'aggregator';
+  phone_last4: string;
+  email: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface UserRegistrationAnalytics {
+  range: DateRangeKey;
+  total: number;
+  sellers: number;
+  aggregators: number;
+  users: RegisteredUser[];
+}
+
 // ─── API object ───────────────────────────────────────────────────
 
 export const adminApi = {
@@ -222,4 +242,12 @@ export const adminApi = {
 
   // Analytics
   getAnalytics: () => adminFetch<AdminAnalytics>('/api/admin/analytics'),
+  getRegistrationAnalytics: (range: DateRangeKey, from?: string, to?: string) => {
+    const qs = new URLSearchParams({ range });
+    if (range === 'custom' && from && to) {
+      qs.set('from', from);
+      qs.set('to', to);
+    }
+    return adminFetch<UserRegistrationAnalytics>(`/api/admin/analytics/users?${qs}`);
+  },
 };

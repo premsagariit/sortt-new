@@ -13,7 +13,9 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "install:all": "pnpm install",
-    "start": "node backend/dist/index.js"
+    "start": "node backend/dist/index.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "keywords": [],
   "author": "",
@@ -30,5 +32,10 @@
       "react-dom": "19.1.0",
       "expo-web-browser": "~15.0.10"
     }
+  },
+  "dependencies": {
+    "expo": "~54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

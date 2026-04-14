@@ -730,4 +730,82 @@ router.get('/analytics', async (req: Request, res: Response) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/analytics/users
+// User registration analytics with date range filtering
+// Query params:
+//   range: 'today' | '2days' | 'week' | 'month' | 'all' | 'custom'
+//   from: ISO date string (required for custom)
+//   to:   ISO date string (required for custom)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/analytics/users', async (req: Request, res: Response) => {
+  const { range = 'all', from, to } = req.query as Record<string, string>;
+
+  let whereClause = '';
+  const params: any[] = [];
+
+  if (range === 'today') {
+    whereClause = `AND created_at >= NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '1 day'`;
+  } else if (range === '2days') {
+    whereClause = `AND created_at >= NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '2 days'`;
+  } else if (range === 'week') {
+    whereClause = `AND created_at >= NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '7 days'`;
+  } else if (range === 'month') {
+    whereClause = `AND created_at >= NOW() AT TIME ZONE 'Asia/Kolkata' - INTERVAL '30 days'`;
+  } else if (range === 'custom' && from && to) {
+    whereClause = `AND created_at >= $1::timestamptz AND created_at < ($2::date + INTERVAL '1 day')::timestamptz`;
+    params.push(from, to);
+  }
+  // range === 'all' → no filter
+
+  try {
+    const [countRes, detailRes] = await Promise.all([
+      // Summary count by user_type
+      query(
+        `SELECT user_type,
+                COUNT(*) AS count,
+                DATE(MIN(created_at) AT TIME ZONE 'Asia/Kolkata') AS earliest,
+                DATE(MAX(created_at) AT TIME ZONE 'Asia/Kolkata') AS latest
+         FROM users
+         WHERE user_type IN ('seller', 'aggregator') ${whereClause}
+         GROUP BY user_type`,
+        params
+      ),
+      // Detailed user list
+      query(
+        `SELECT id, name, user_type, phone_last4, email, is_active,
+                created_at AT TIME ZONE 'Asia/Kolkata' AS created_at
+         FROM users
+         WHERE user_type IN ('seller', 'aggregator') ${whereClause}
+         ORDER BY created_at DESC
+         LIMIT 200`,
+        params
+      ),
+    ]);
+
+    const sellersRow = countRes.rows.find((r: any) => r.user_type === 'seller') ?? { count: 0 };
+    const aggregatorsRow = countRes.rows.find((r: any) => r.user_type === 'aggregator') ?? { count: 0 };
+
+    return res.json({
+      range,
+      total: Number(sellersRow.count) + Number(aggregatorsRow.count),
+      sellers: Number(sellersRow.count),
+      aggregators: Number(aggregatorsRow.count),
+      users: detailRes.rows.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        user_type: u.user_type,
+        phone_last4: u.phone_last4,
+        email: u.email ?? null,
+        is_active: u.is_active,
+        created_at: u.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[admin/analytics/users]', err);
+    return res.status(500).json({ error: 'Failed to fetch user analytics' });
+  }
+});
+
 export default router;

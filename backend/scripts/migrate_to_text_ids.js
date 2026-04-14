@@ -315,6 +315,8 @@ async function run() {
                is_manual_override, source, scraped_at
         FROM price_index
         ORDER BY city_code, material_code, scraped_at DESC`);
+      await c.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agg_rating_stats ON aggregator_rating_stats(aggregator_id)`);
+      await c.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_current_price_index ON current_price_index(city_code, material_code)`);
 
       console.log('🔒  [Phase 3] Recreating RLS policies...');
       for (const sql of POLICIES)

@@ -39,6 +39,7 @@ temp/
 ./agent
 .antigravityignore
 .antigravityrules
+.code-review-graph
 r.txt
 adapters/
 
@@ -59,6 +60,12 @@ user_data_delete.sql
 .agent/
 .claude/
 .venv/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+auth_flow.md
+run.md
+
 
 implementationPlan.md
 

@@ -6,9 +6,11 @@
  * USER ID FORMAT  : {first_name}_{s|a}_{phone_digit_suffix}
  * ORDER ID FORMAT : s_{seller_suffix}_{per_user_order_number}
  *
- * Phone digit suffix rule (1-indexed positions from RIGHT end):
- *   Seller  → even positions (2,4,6,8,10) from end = reversed[1,3,5,7,9]
- *   Aggregator → odd positions (1,3,5,7,9) from end = reversed[0,2,4,6,8]
+ * Phone digit suffix rule (positions from RIGHT end, 1-indexed):
+ *   Seller     → even positions (2,4,6,8,10) from end = reversed array indices [1,3,5,7,9]
+ *                e.g. phone "9876543210", reversed = "0123456789" → idx 1,3,5,7,9 → "13579"
+ *   Aggregator → odd positions  (1,3,5,7,9) from end = reversed array indices [0,2,4,6,8]
+ *                e.g. phone "9876543210", reversed = "0123456789" → idx 0,2,4,6,8 → "02468"
  *
  * Example: phone = "+919876543210" → local = "9876543210"
  *   reversed = "0123456789"
@@ -22,27 +24,45 @@ export function localPhone(phone: string): string {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
-/** Extract the 5-digit suffix for a seller (even positions from end) */
+/**
+ * Extract the 5-digit suffix for a SELLER.
+ * Uses even positions from end (2nd,4th,6th,8th,10th) = reversed indices [1,3,5,7,9].
+ * e.g. phone "9876543210" → reversed "0123456789" → indices 1,3,5,7,9 → "13579"
+ */
 export function sellerSuffix(phone: string): string {
   const reversed = localPhone(phone).split('').reverse().join('');
   return [1, 3, 5, 7, 9].map((i) => reversed[i] ?? '0').join('');
 }
 
-/** Extract the 5-digit suffix for an aggregator (odd positions from end) */
+/**
+ * Extract the 5-digit suffix for an AGGREGATOR.
+ * Uses odd positions from end (1st,3rd,5th,7th,9th) = reversed indices [0,2,4,6,8].
+ * e.g. phone "9876543210" → reversed "0123456789" → indices 0,2,4,6,8 → "02468"
+ */
 export function aggregatorSuffix(phone: string): string {
   const reversed = localPhone(phone).split('').reverse().join('');
   return [0, 2, 4, 6, 8].map((i) => reversed[i] ?? '0').join('');
 }
 
-/** Sanitize display name to lowercase alphanumeric + underscore, first word only */
+/**
+ * Sanitize display name for use in user ID.
+ * Converts full name to lowercase, replaces spaces with underscores, strips special chars.
+ * e.g. "Prem Sagar" → "prem_sagar", "User 7207" → "user_7207"
+ */
 export function sanitizeName(rawName: string): string {
-  const first = rawName.split(/\s+/)[0] ?? 'user';
-  return first.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+  const cleaned = rawName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')  // remove special chars but keep spaces
+    .replace(/\s+/g, '_')          // spaces → underscores
+    .replace(/^_+|_+$/g, '');      // strip leading/trailing underscores
+  return cleaned || 'user';
 }
 
 /**
  * Generate a unique user ID.
- * @param name       User's display name (can be temp like "User 2745")
+ * Format: {name}_{s|a}_{phone_digit_suffix}
+ * @param name       User's display name from the `name` column (e.g. "Prem Sagar")
  * @param phone      Normalized phone e.g. "+919876543210"
  * @param userType   'seller' | 'aggregator' | 'admin'
  */

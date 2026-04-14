@@ -133,10 +133,9 @@ router.post('/profile', async (req, res) => {
       await query(
         `UPDATE users
          SET email = $1,
-             email_normalized = $2,
              email_verified_at = NULL
-         WHERE id = $3`,
-        [email.trim(), normalizedEmail, userId]
+         WHERE id = $2`,
+        [normalizedEmail, userId]
       );
     }
 

@@ -377,7 +377,7 @@ Switch providers via environment variables: `MAP_PROVIDER`, `REALTIME_PROVIDER`,
 - OTP length: **6 digits minimum** — enforced in backend generation/validation (V6).
 - Meta requirements: WhatsApp Business Account (WABA) + approved `authentication` category template. The authentication template automatically qualifies for the free 1,000/month quota.
 - WhatsApp OTP template format: `"Your {{APP_NAME}} verification code is {{1}}. Valid for 10 minutes."` — `{{APP_NAME}}` must be replaced with the final approved app name before submitting to Meta for template approval. The template name itself is set via `META_OTP_TEMPLATE_NAME` env var (see §5). Do NOT hardcode the app name in this string in code — import `APP_NAME` from `constants/app.ts`.
-- **Fallback plan at scale:** If WhatsApp OTP fails delivery (user has no WhatsApp), surface a "Resend via SMS" option in the app UI that calls a separate rate-limited SMS fallback endpoint. Fallback SMS provider TBD (e.g., MSG91) — implement only when free quota is regularly exceeded.
+- **Fallback plan:** We use exclusively Meta WhatsApp OTP. No SMS fallback provider (e.g., AuthKey.io or MSG91) is integrated or planned at this time.
 
 ### 3.6 Order Status State Machine
 Allowed transitions only:
@@ -489,7 +489,7 @@ SUPABASE_URL
 SUPABASE_ANON_KEY
 SUPABASE_SERVICE_KEY          # Server-only. NEVER in client bundle or NEXT_PUBLIC_*
 SUPABASE_WEBHOOK_SECRET       # HMAC secret for DB webhook signature verification (A2)
-SUPABASE_HOOK_SECRET          # HMAC secret for Supabase Auth Send SMS Hook → /api/auth/whatsapp-otp
+SUPABASE_HOOK_SECRET          # HMAC secret for custom OTP delivery Hook → /api/auth/whatsapp-otp
 
 # Custom Backend
 JWT_SECRET                    # Mirror of Supabase JWT secret
@@ -571,7 +571,6 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 │   │   │   ├── ui/               # Design system components
 │   │   │   └── domain/           # Feature-specific components
 │   │   ├── lib/
-│   │   │   ├── clerk.ts          # Clerk client configuration
 │   │   │   ├── api.ts            # Custom backend API client
 │   │   │   └── notifications.ts  # Expo push token registration (dual-token)
 │   │   ├── store/                # Zustand state stores
@@ -595,7 +594,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 │   │   │   └── hookHmac.ts       # Supabase Auth Hook HMAC validation (SUPABASE_HOOK_SECRET)
 │   │   ├── routes/
 │   │   │   └── auth/
-│   │   │       └── whatsappOtp.ts  # POST /api/auth/whatsapp-otp — Supabase Send SMS Hook handler
+│   │   │       └── whatsappOtp.ts  # POST /api/auth/whatsapp-otp — Custom OTP delivery handler
 │   │   ├── storage/              # IStorageProvider implementation
 │   │   └── utils/
 │   │       └── rateLimit.ts      # Upstash Redis rate limiters

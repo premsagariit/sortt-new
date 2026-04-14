@@ -1205,9 +1205,10 @@
 > **Rule:** L-gates are hard stops. No real user traffic until every item is ✅.
 
 ### 17.1 Full Security Audit (~60 min)
-- [ ] **A1** — Clerk JWT middleware: 401 without token on all non-exempt routes (automated test).
-- [ ] **A3** — Clerk JWT expiry: confirm 1-hour expiry. Test `signOutOtherSessions()` clears all sessions.
-- [ ] **R1** — `business_members` RLS: test all 3 roles (admin/operator/viewer) with real Clerk JWTs.
+- [ ] **A1** — Custom JWT middleware: 401 without token on all non-exempt routes. Ensure automated test uses actual JWT secret for custom bearer token validation, not Clerk's SDK.
+- [ ] **A3** — Custom JWT expiry: confirm expiry. Test sign out clears all sessions.
+- [ ] **R1** — `business_members` RLS: test all 3 roles (admin/operator/viewer) with real Custom JWTs.
+- [ ] **V-SCHEMA-1** — PK Migration: Query `information_schema.columns` to verify `id` column is `text` (not `uuid`) for `users`, `orders`, `order_items`, `disputes`.
 - [ ] **R2** — Separate INSERT/SELECT RLS policies on `orders` confirmed in migration file.
 - [ ] **R3** — `order_status_history.changed_by` never NULL — grep codebase + DB query: `SELECT COUNT(*) FROM order_status_history WHERE changed_by IS NULL` → 0.
 - [ ] **RA1** — Gemini circuit breaker: Redis counter 1,201 → `manual_entry_required: true`. Confirmed.
@@ -1226,8 +1227,8 @@
 - [ ] **X2** — Price scraper sanity bounds: feed rate 200% above normal → not written to DB.
 - [ ] **X3** — grep codebase for `bcrypt` in OTP paths → 0 results. HMAC-SHA256 confirmed throughout.
 - [ ] **X4** — Admin audit log: every admin action generates a row in `admin_audit_log`.
-- [ ] **V-CLERK-1** — `clerk_user_id` absent from all API response fixtures. Unit test asserts.
-- [ ] **V-CLERK-2** — `user_type` re-fetched from DB: stale cache test confirms wrong type rejected after 60s.
+- [ ] **V-AUTH-1** — `clerk_user_id` is absent from DB schema AND codebase (`grep -r "clerk_user_id" backend/ apps/` → 0 results).
+- [ ] **V-AUTH-2** — `@clerk/clerk-sdk-node` and `@clerk/clerk-expo` have zero imports remaining in the codebase.
 - [ ] **V-OTP-1** — OTP one-time use: Redis key deleted on first use. Second attempt → 400.
 - [ ] **V13** — `PATCH status=completed` → 400 in production. Integration test confirmed.
 - [ ] **V18** — EXIF strip: upload GPS-tagged JPEG → output file has no GPS in production build.
@@ -1237,7 +1238,11 @@
 - [ ] **V27** — Invoice file key: two completions → two different randomised keys.
 - [ ] **V32** — Ably channel names: HMAC suffix present on all private channels (Ably dashboard inspection).
 - [ ] **V34** — `helmet` headers: `curl -I <azure-backend-url>` shows X-Frame-Options, HSTS, nosniff.
-- [ ] **V35** — `kyc_status` blocklisted from all non-admin routes AND DB trigger active.
+- [ ] **V35** — `kyc_status` blocklisted from non-admin routes + DB trigger. Confirm admin routes properly set `app.is_admin_context = 'true'` via Custom JWT middleware.
+- [ ] **V6** — OTP length: `POST /api/auth/request-otp` with a 5-digit OTP attempt → rejected.
+- [ ] **V8** — Aggregator ownership: `POST /api/orders/:id/verify-otp` with different aggregator's JWT → 403.
+- [ ] **V17** — Rates cache headers: `curl -I /api/rates` → `Cache-Control: public, max-age=300` and `ETag` present.
+- [ ] **V-MASK-1** — Data masking logic: Verify phone number display logic (even-position digit extraction) is active.
 
 ### 17.2 Monitoring Setup (~25 min)
 - [ ] Application Insights: wire Express + Next.js telemetry using `APPLICATIONINSIGHTS_CONNECTION_STRING`. Trigger backend and web test exceptions; verify traces/exceptions in Azure.
@@ -1245,20 +1250,24 @@
 - [ ] Microsoft Clarity: add Clarity script wiring to `apps/web/app/layout.tsx` and verify admin page sessions/heatmap ingestion.
 - [ ] PostHog: confirm product funnel events fire in production: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
 - [ ] Sentry (mobile only): trigger test React Native crash and verify symbolicated event in Sentry.
+- [ ] Sentry (backend): verify `SENTRY_DSN_BACKEND` is set in Azure App Service application settings and backend is reporting.
 - [ ] Ably Dashboard: alert rule set at 150 connections (75% of 200 free limit).
 - [ ] Upstash Dashboard: Meta OTP conversation counter visible. Alert configured at 900/month.
 - [ ] Azure Monitor: DB connection count and query performance visible in Azure Portal.
 
 ### 17.3 Pre-Launch Checklists (~20 min)
 - [ ] **Meta WhatsApp**: WABA registered + business verified. Phone number OTP-verified. `authentication` category template status = **APPROVED**. Template name matches `META_OTP_TEMPLATE_NAME` env var.
-- [ ] **Clerk**: India enabled in SMS allowlist. Production Clerk instance configured. `CLERK_SECRET_KEY` (production) set in Azure App Service.
-- [ ] **Environment**: all env vars populated in Azure App Service, Vercel (production), and Clerk production. Zero placeholder values.
+- [ ] **Meta OTP**: Meta WhatsApp Cloud API production configured. API keys set in Azure App Service.
+- [ ] **Environment**: all env vars populated in Azure App Service and Vercel (production). Zero placeholder values.
 - [ ] All 12 migration files applied to Azure PostgreSQL **production** instance.
 - [ ] `cities` table seeded with Hyderabad (`HYD`).
 
 ### 17.4 Final Build & Deploy (~15 min)
 - [ ] `eas build --profile production` — Android APK + iOS IPA.
 - [ ] Azure App Service: confirm "Always On" setting active (prevents cold starts).
+- [ ] Web App Deployment: Run `vercel deploy --prod` from `apps/web/` and verify admin routes load on production URL.
+- [ ] Vercel Edge Middleware: Verify IP allowlist is active on production web URL.
+- [ ] **G16.9** — Re-verify security headers on Vercel production URL after deployment.
 - [ ] DNS: `[APP_DOMAIN]` and `admin.[APP_DOMAIN]` → Vercel.
 - [ ] `APP_NAME` and `APP_DOMAIN` constants updated from placeholder if final brand name decided.
 
@@ -1269,7 +1278,7 @@
 - [ ] **L2** — Zero open BLOCK-level findings from any agent in any previous session.
 - [ ] **L3** — WhatsApp OTP template: status = APPROVED in Meta Business Manager.
 - [ ] **L4** — Azure PostgreSQL: all 12 migrations applied, all RLS enabled, triggers active.
-- [ ] **L5** — `CLERK_SECRET_KEY` absent from all deployed client bundles (`grep` production build output).
+- [ ] **L5** — Auth secrets absent from client bundles (`JWT_SECRET` must not appear in `apps/mobile/.env` or `EXPO_PUBLIC_*`).
 - [ ] **L6** — Sentry receiving events from production React Native app only (test event confirmed).
 - [ ] **L7** — Azure Monitor Availability Tests + Ably monitoring active on production URLs.
 - [ ] **L8** — Application Insights receiving backend + admin web telemetry (test exceptions and traces confirmed).

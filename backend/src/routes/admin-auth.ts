@@ -81,7 +81,7 @@ router.post('/login', async (req: Request, res: Response) => {
         const userResult = await query(
             `SELECT id, user_type, password_hash, is_active, password_change_required
              FROM users
-             WHERE email_normalized = $1
+             WHERE email = $1
              LIMIT 1`,
             [normalizedEmail]
         );
@@ -183,7 +183,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
         const normalizedEmail = email.toLowerCase().trim();
 
         const user = await query(
-            `SELECT id FROM users WHERE email_normalized = $1 AND user_type = 'admin'`,
+            `SELECT id FROM users WHERE email = $1 AND user_type = 'admin'`,
             [normalizedEmail]
         );
         if ((user.rowCount ?? 0) === 0) {
@@ -227,7 +227,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
              SET password_hash = $1,
                  password_change_required = false,
                  password_updated_at = NOW()
-             WHERE email_normalized = $2 AND user_type = 'admin'`,
+             WHERE email = $2 AND user_type = 'admin'`,
             [hash, email]
         );
 

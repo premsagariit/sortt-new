@@ -96,7 +96,7 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
         </div>
       </div>
 
-      <nav className="flex-1 py-4 overflow-x-hidden">
+      <nav className="flex-1 py-4 overflow-x-hidden overflow-y-auto no-scrollbar">
         <div className={`px-4 pb-2 text-[9px] font-bold text-white/30 uppercase tracking-widest ${collapsed ? 'text-center' : ''}`}>
           {collapsed ? '—' : 'Management'}
         </div>
@@ -177,7 +177,7 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
         {isMobileMenuOpen && (
           <div className="fixed inset-0 z-40 md:hidden">
             <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
-            <aside className="absolute left-0 top-0 h-full w-64 bg-navy flex flex-col shadow-2xl overflow-y-auto">
+            <aside className="absolute left-0 top-0 h-full w-64 bg-navy flex flex-col shadow-2xl overflow-y-auto no-scrollbar">
               <NavContent collapsed={false} />
             </aside>
           </div>
@@ -254,7 +254,7 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
           </header>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-bg p-4 md:p-8">
+          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-bg p-4 md:p-8 no-scrollbar">
             <div className="max-w-7xl mx-auto w-full">
               {children}
             </div>
