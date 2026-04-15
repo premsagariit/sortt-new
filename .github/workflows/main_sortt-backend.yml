@@ -1,7 +1,6 @@
 name: Build and deploy Node.js app to Azure Web App - sortt-backend
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AZURE_WEBAPP_NAME: sortt-backend
 
 on:
@@ -32,15 +31,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24.x
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.30.3
 
@@ -66,7 +65,7 @@ jobs:
 
       - name: Azure Login (legacy OIDC secret style)
         if: ${{ env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != '' }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}
           tenant-id: ${{ env.AZURE_TENANT_ID }}
@@ -74,7 +73,7 @@ jobs:
 
       - name: Azure Login (service principal JSON fallback)
         if: ${{ env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON != '' }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           creds: ${{ env.AZURE_CREDENTIALS_JSON }}
 
