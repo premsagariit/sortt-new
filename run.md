@@ -28,3 +28,5 @@ pnpm exec expo run:android --no-bundler
 ```
 
 Then keep using only the first two blocks for normal daily reruns.
+
+Try untill the app opens.
