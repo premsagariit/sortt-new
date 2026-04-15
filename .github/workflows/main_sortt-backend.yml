@@ -1,7 +1,8 @@
-name: Build and deploy Node.js app to Azure Web App - sortt-backend-fpe6c8bdbnd0fpg2
+name: Build and deploy Node.js app to Azure Web App - sortt-backend
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AZURE_WEBAPP_NAME: sortt-backend
 
 on:
   push:
@@ -81,7 +82,7 @@ jobs:
         if: ${{ env.AZURE_PUBLISH_PROFILE != '' && env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' }}
         uses: azure/webapps-deploy@v3
         with:
-          app-name: sortt-backend-fpe6c8bdbnd0fpg2
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ env.AZURE_PUBLISH_PROFILE }}
           package: release.zip
 
@@ -89,7 +90,7 @@ jobs:
         if: ${{ env.AZURE_CLIENT_ID != '' || env.AZURE_CREDENTIALS_JSON != '' }}
         uses: azure/webapps-deploy@v3
         with:
-          app-name: sortt-backend-fpe6c8bdbnd0fpg2
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
           package: release.zip
 
       - name: Fail with clear credential setup message
