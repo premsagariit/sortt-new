@@ -1,5 +1,8 @@
 name: Build and deploy Node.js app to Azure Web App - sortt-backend-fpe6c8bdbnd0fpg2
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches:
@@ -51,9 +54,33 @@ jobs:
           cd release
           zip -r ../release.zip .
 
-      - name: Deploy to Azure Web App
+      - name: Validate Azure deploy secrets
+        env:
+          AZURE_WEBAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+        run: |
+          if [ -z "$AZURE_WEBAPP_PUBLISH_PROFILE" ] && [ -z "$AZURE_CREDENTIALS" ]; then
+            echo "::error::Missing Azure deploy secret. Add either AZURE_WEBAPP_PUBLISH_PROFILE or AZURE_CREDENTIALS in repo settings."
+            exit 1
+          fi
+
+      - name: Azure Login (service principal)
+        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE == '' && secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App (publish profile)
+        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE != '' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: sortt-backend-fpe6c8bdbnd0fpg2
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
+
+      - name: Deploy to Azure Web App (azure/login)
+        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE == '' && secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: sortt-backend-fpe6c8bdbnd0fpg2
           package: release.zip
