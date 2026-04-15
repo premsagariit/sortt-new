@@ -1,0 +1,59 @@
+name: Build and deploy Node.js app to Azure Web App - sortt-backend-fpe6c8bdbnd0fpg2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - packages/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/main_sortt-backend.yml
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend dependencies and backend
+        run: |
+          pnpm --filter @sortt/maps build
+          pnpm --filter @sortt/realtime build
+          pnpm --filter @sortt/storage build
+          pnpm --filter @sortt/analysis build
+          pnpm --filter backend build
+
+      - name: Create deployment package
+        run: |
+          mkdir -p release
+          cp -R backend release/backend
+          cp -R packages release/packages
+          cp package.json pnpm-lock.yaml pnpm-workspace.yaml release/
+          cd release
+          zip -r ../release.zip .
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: sortt-backend-fpe6c8bdbnd0fpg2
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
