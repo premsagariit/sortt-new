@@ -22,6 +22,12 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A }}
+      AZURE_TENANT_ID: ${{ secrets.AZUREAPPSERVICE_TENANTID_1B224F6A492B4A5EBF38EFC55F89FEC6 }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DBEA10DC933642F29D45F2302830F36F }}
+      AZURE_CREDENTIALS_JSON: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
 
     steps:
       - name: Checkout
@@ -58,36 +64,36 @@ jobs:
           zip -r ../release.zip .
 
       - name: Azure Login (legacy OIDC secret style)
-        if: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A != '' && secrets.AZUREAPPSERVICE_TENANTID_1B224F6A492B4A5EBF38EFC55F89FEC6 != '' && secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DBEA10DC933642F29D45F2302830F36F != '' }}
+        if: ${{ env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != '' }}
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_1B224F6A492B4A5EBF38EFC55F89FEC6 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DBEA10DC933642F29D45F2302830F36F }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Azure Login (service principal JSON fallback)
-        if: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A == '' && secrets.AZURE_CREDENTIALS != '' }}
+        if: ${{ env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON != '' }}
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          creds: ${{ env.AZURE_CREDENTIALS_JSON }}
 
       - name: Deploy to Azure Web App (publish profile)
-        if: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE != '' && secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A == '' && secrets.AZURE_CREDENTIALS == '' }}
+        if: ${{ env.AZURE_PUBLISH_PROFILE != '' && env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: sortt-backend-fpe6c8bdbnd0fpg2
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          publish-profile: ${{ env.AZURE_PUBLISH_PROFILE }}
           package: release.zip
 
       - name: Deploy to Azure Web App (azure/login)
-        if: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A != '' || secrets.AZURE_CREDENTIALS != '' }}
+        if: ${{ env.AZURE_CLIENT_ID != '' || env.AZURE_CREDENTIALS_JSON != '' }}
         uses: azure/webapps-deploy@v3
         with:
           app-name: sortt-backend-fpe6c8bdbnd0fpg2
           package: release.zip
 
       - name: Fail with clear credential setup message
-        if: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3610773F6F2B4CD18830681681F0BB0A == '' && secrets.AZURE_CREDENTIALS == '' && secrets.AZURE_WEBAPP_PUBLISH_PROFILE == '' }}
+        if: ${{ env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' && env.AZURE_PUBLISH_PROFILE == '' }}
         run: |
           echo "::error::No deploy credentials found."
           echo "::error::Add one of:"
