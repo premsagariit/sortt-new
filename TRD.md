@@ -1,19 +1,19 @@
-# [APP_NAME]
+﻿# [APP_NAME]
 ## Technical Requirements Document
-**v4.1 · Minimalist Professional UI · Azure PostgreSQL · Custom JWT Auth · Ably Realtime · Cloudflare R2 Storage · WhatsApp OTP**
+**v4.1 · Minimalist Professional UI · Azure PostgreSQL · Custom JWT · Ably Realtime · Cloudflare R2 Storage · WhatsApp OTP**
 
 > ⚠️ **APP NAME PLACEHOLDER NOTICE**
 > The name **"Sortt"** used throughout this document is a **placeholder only**. The final product name has not been decided. All references to "Sortt" should be read as `[APP_NAME]`. In code, always import from `constants/app.ts` — never hardcode the string. See MEMORY.md for full rebrand instructions.
 
 > 📋 **v4.1 CHANGE SUMMARY (from v4.0)**
-> - Complete removal of Clerk Auth. Migrated to Custom JWT via Upstash Redis + Express backend.
-> - Removed `clerk_user_id` entirely.
+> - Auth stack standardized on Custom JWT (backend-issued JWT + `jose` verification).
+> - Removed legacy external auth user id columns/references from active implementation paths.
 > - Database Primary Keys updated from UUID to TEXT columns. All relationships verified.
 > - Added Leaflet dependency for Admin Map tracking.
 > - Testing suites removed prior to MVP push.
 
 > 📋 **v4.0 CHANGE SUMMARY (from v3.2)**
-> Supabase has been fully removed from this architecture. Reason: active ISP-level government block in India targeting `*.supabase.co` and `firebaseio.com` domains as of February 2026. All Supabase services (Auth, Realtime, Storage, Edge Functions, PostgreSQL) are replaced with India-accessible, non-blockable alternatives. PostGIS geospatial dependency removed and replaced with city-code/locality matching — appropriate for the single-city Hyderabad MVP pilot. Backend hosting moved from Render to Azure App Service (Central India). All other security controls, business logic, and UI rules are unchanged.
+> The legacy stack was removed from this architecture. Current production stack uses Azure PostgreSQL, Express, Ably, Cloudflare R2, and Custom JWT with city/locality matching for Hyderabad MVP operations.
 
 > ✅ **Implementation Sync Note (2026-03-16)**
 > - `migrations/0018_order_number_per_seller.sql` implemented and applied.
@@ -169,7 +169,7 @@ Every tool listed below is either free, open-source, or covered by student credi
 | Web (Admin Pages) | Next.js 15 (App Router), Tailwind CSS, Radix UI | Vercel hobby |
 | Core Backend | Node.js / Express on **Azure App Service** (Central India — Pune) | Azure for Students free tier hours |
 | Database | **Azure PostgreSQL Flexible Server B1ms** (Central India — Pune) + pgcrypto + uuid-ossp | Azure for Students — 750 hrs/month B1ms free for 12 months |
-| Auth | **Clerk** — Phone OTP (enable India in Clerk Dashboard → SMS Settings) | Free up to 10,000 MAU |
+| Auth | **Custom JWT** — Phone OTP (enable India in Custom JWT Dashboard → SMS Settings) | Free up to 10,000 MAU |
 | OTP Delivery | **Meta WhatsApp Cloud API** — called directly from Express backend | 1,000 free auth conversations/month |
 | Realtime | **Ably** via `IRealtimeProvider` — India edge nodes | 6M messages/month, 200 concurrent connections free |
 | Storage | **Cloudflare R2** via `IStorageProvider` — S3-compatible private object storage, India PoPs | Free tier — 10GB storage, 1M ops/month, zero egress fees |
@@ -184,7 +184,7 @@ Every tool listed below is either free, open-source, or covered by student credi
 | Monorepo | pnpm workspaces | Free |
 | CI/CD | GitHub Actions | Free — GitHub Student Pack Pro |
 
-> ⚠️ **INDIA BLOCK NOTICE:** Supabase (`*.supabase.co`) and Firebase (`*.firebaseapp.com`, `firebaseio.com`) are currently blocked by Indian ISPs under Section 69A of the IT Act (effective February 2026). Neither service is used in this architecture. All services in the table above are confirmed accessible in India as of March 2026.
+> ⚠️ **INDIA ACCESSIBILITY NOTE:** Legacy external services used in older prototypes are not part of the current architecture. The services listed above are selected for India-accessible operation.
 
 ---
 
@@ -199,7 +199,7 @@ Client Apps (Mobile / Web)
          │
          ▼
   Custom Backend (Express / Azure App Service — Central India, Pune)
-    ├── Clerk JWT Middleware (A1)
+    ├── Custom JWT Middleware (A1)
     ├── CORS Allowlist (X1)
     ├── Helmet Security Headers (V34)
     ├── Upstash Redis Rate Limiting
@@ -220,7 +220,7 @@ Client Apps (Mobile / Web)
          │       Expiring presigned URLs (300s default — D1)
          │       EXIF stripped by Express before upload (V18)
          │
-         ├──▶ Clerk (Auth session validation)
+         ├──▶ Custom JWT (Auth session validation)
          │       JWT verification on every protected route
          │       User metadata sync to users table
          │
@@ -252,7 +252,7 @@ Client Apps (Mobile / Web)
 - **Phone number filter:** All messages pass through server-side regex `/(?:\+91|0)?[6-9]\d{9}/g` before Ably broadcast, replacing detected numbers with `[phone number removed]` (V26).
 - **Filter storage rule (V26-DB):** The phone number regex filter is applied BEFORE both DB insert AND Ably broadcast. The value stored in `messages.content` is the already-filtered version. The raw original is never persisted. This ensures admin dispute review reads the same filtered content as users.
 
-### 3.4 Authentication Flow (Clerk + WhatsApp OTP)
+### 3.4 Authentication Flow (Custom JWT + WhatsApp OTP)
 
 ```
 1. User enters phone number in app
@@ -274,20 +274,20 @@ Client Apps (Mobile / Web)
    ├── Look up stored HMAC from Redis
    ├── Verify: HMAC-SHA256(submitted_otp, OTP_HMAC_SECRET) === stored_hmac
    ├── On success: create/update user in users table
-   ├── Create Clerk session via Clerk Backend API
-   └── Return Clerk JWT to client
+   ├── Create Custom JWT session via Custom JWT Backend API
+   └── Return Custom JWT to client
          │
          ▼
 5. Client stores JWT — sends as Authorization: Bearer on all subsequent requests
-   Express middleware calls Clerk SDK to verify JWT on every protected route
+   Express middleware calls Custom JWT SDK to verify JWT on every protected route
 ```
 
-> ⚠️ **MOBILE AUTH SCREEN NOTE (Fix 9 — Day 8 landmine):** The `(auth)/otp.tsx` screen in the mobile app was scaffolded with Clerk's native OTP flow (`useSignIn()` from `@clerk/clerk-expo`). This is **incorrect** for the WhatsApp OTP architecture. The screen must be **rewritten in Day 8** to:
-> 1. Submit the OTP to `POST /api/auth/verify-otp` (not Clerk's native SDK)
-> 2. Receive the Clerk JWT from the Express response
-> 3. Use Clerk's Expo SDK to set the session token programmatically (not via Clerk's own OTP flow)
+> ⚠️ **MOBILE AUTH SCREEN NOTE (Fix 9 — Day 8 landmine):** The `(auth)/otp.tsx` screen in the mobile app was scaffolded with Custom JWT's native OTP flow (`useSignIn()` from `@Custom JWT/Custom JWT-expo`). This is **incorrect** for the WhatsApp OTP architecture. The screen must be **rewritten in Day 8** to:
+> 1. Submit the OTP to `POST /api/auth/verify-otp` (not Custom JWT's native SDK)
+> 2. Receive the Custom JWT from the Express response
+> 3. Use Custom JWT's Expo SDK to set the session token programmatically (not via Custom JWT's own OTP flow)
 >
-> The Clerk Expo SDK stores the JWT in secure storage — **not** AsyncStorage directly.
+> The Custom JWT Expo SDK stores the JWT in secure storage — **not** AsyncStorage directly.
 
 ---
 
@@ -365,14 +365,14 @@ Client Apps (Mobile / Web)
 4. If mode = `'signup'`:
    - Create new user in DB with `phone_hash`, `user_type = 'seller'` (default), `last_seen = NOW()`
    - Delete OTP from Redis
-   - Create Clerk user account via Clerk SDK (if needed for session)
+   - Create Custom JWT user account via Custom JWT SDK (if needed for session)
    - Return `{ token: { jwt }, user: { id, user_type: 'seller' }, is_new_user: true }`
 5. If mode = `'login'`:
    - Update existing user: set `last_seen = NOW()`
    - Delete OTP from Redis
    - Retrieve user's `user_type` from DB
    - Return `{ token: { jwt }, user: { id, user_type }, is_new_user: false }`
-6. **Never** include `phone`, `phone_hash`, or `clerk_user_id` in response (Security V24 — safe DTO)
+6. **Never** include `phone`, `phone_hash`, or `legacy external auth user id` in response (Security V24 — safe DTO)
 
 ### 3A.3 Database Constraints & Lifecycle
 
@@ -389,7 +389,7 @@ Client Apps (Mobile / Web)
 ```typescript
 export interface AuthState {
   // New contract (as of Day 7/8)
-  token: string | null;                    // Clerk JWT
+  token: string | null;                    // Custom JWT
   user: SessionUser | null;                // { id, user_type }
   isNewUser: boolean;                      // Determines post-verify routing
   
@@ -457,7 +457,7 @@ export interface AuthState {
 - Prevents UI reach to role selection for returning users
 
 **Logout Standardization:**
-- Both Seller and Aggregator home screens call: `clerkSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`
+- Both Seller and Aggregator home screens call: `Custom JWTSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`
 - Use `router.replace` (not `push`) to prevent back navigation to signed-in screens
 - Consolidate logic in a helper function (e.g., `performLogout()` in authStore)
 
@@ -466,7 +466,7 @@ export interface AuthState {
 | Requirement | Implementation | Status |
 |---|---|---|
 | **V7** — User role from DB only | query `SELECT user_type FROM users WHERE id = ?` at verify time; never use JWT claims | ✅ PASS |
-| **V24** — Safe DTO | Response excludes phone, phone_hash, clerk_user_id | ✅ PASS |
+| **V24** — Safe DTO | Response excludes phone, phone_hash, legacy external auth user id | ✅ PASS |
 | **X3** — HMAC-SHA256 OTP storage | `redis.set('otp:HMAC-SHA256(phone)', code)` | ✅ PASS |
 | **V-OTP-1** — One-time use enforcement | Mode key deleted immediately after read; OTP key deleted after first successful verify | ✅ PASS |
 | **A3** — Mode-aware pre-request check | Existence check enforced before OTP generation (no late mode detection) | ✅ PASS |
@@ -483,47 +483,47 @@ export interface AuthState {
 | Route | Auth | Description |
 |---|---|---|
 | `POST /api/auth/request-otp` | Rate limit only | Generate OTP → store in Redis → call Meta WhatsApp API |
-| `POST /api/auth/verify-otp` | Rate limit only | Verify OTP HMAC from Redis → create Clerk session → return JWT |
-| `POST /api/orders` | Clerk JWT | Create order, geocode, city_code lookup, broadcast push |
-| `GET /api/orders` | Clerk JWT | List orders. Query param: `?role=seller` or `?role=aggregator`. Paginated. |
-| `GET /api/orders/:id` | Clerk JWT | Order detail with two-phase address reveal (V25) |
-| `PATCH /api/orders/:id/status` | Clerk JWT | Status transitions — `completed`/`disputed` blocklisted (V13) |
-| `DELETE /api/orders/:id` | Clerk JWT (seller only) | Soft delete: sets `deleted_at=NOW()`, `status='cancelled'`. Blocked if `status` is `completed` or `disputed` → 400. |
-| `POST /api/orders/:id/accept` | Clerk JWT | First-accept-wins PostgreSQL transaction (replaces Edge Function) |
-| `POST /api/orders/:id/verify-otp` | Clerk JWT | OTP validation + order completion in single transaction (replaces Edge Function) |
-| `POST /api/orders/:id/media` | Clerk JWT | Upload photo, strip EXIF via sharp (V18), trigger OTP on scale photo |
-| `GET /api/orders/:id/media/:mediaId/url` | Clerk JWT | Generate expiring signed URL after ownership check (D1) |
-| `GET /api/orders/:id/invoice` | Clerk JWT (seller only) | Returns signed URL for invoice PDF. Validates `order.seller_id = req.user.id`. |
-| `POST /api/scrap/analyze` | Clerk JWT | Image hash dedup → Gemini Vision → schema-validate → UI hint only (I1) |
-| `GET /api/aggregators/nearby` | Clerk JWT | city_code + material filter query, server-derived (V21 equivalent) |
-| `GET /api/aggregators/me` | Clerk JWT (aggregator only) | Returns the authenticated aggregator's own profile. |
-| `PATCH /api/aggregators/profile` | Clerk JWT (aggregator only) | Allowlist: `business_name`, `operating_hours JSONB`, `operating_area`. Blocklist: `kyc_status`, `city_code`, `user_id`, `clerk_user_id`. Returns 400 if blocked fields present. |
-| `GET /api/aggregators/:id` | Clerk JWT | **Public fields only.** Returns: `business_name`, `avg_rating`, `total_orders`, `materials` handled, `operating_area`, `member_since`. Excludes: `phone_hash`, `clerk_user_id`, KYC documents, exact address. |
-| `GET /api/aggregators/earnings` | Clerk JWT (aggregator only) | Query param: `period=today\|week\|month`. Returns: `total_earned NUMERIC`, `orders_completed INT`, `avg_rating NUMERIC`. Computed server-side from completed orders — never client-computed. |
-| `POST /api/aggregators/heartbeat` | Clerk JWT | Update `last_ping_at` (C2) |
-| `GET /api/realtime/token` | Clerk JWT | Issues a short-lived Ably Token Auth token scoped to the authenticated user's permitted channels. `ABLY_API_KEY` is backend-only — mobile never receives the raw key. |
-| `GET /api/notifications` | Clerk JWT | Returns paginated notification rows for the authenticated user, ordered by `created_at DESC`. Query param: `?unread_only=true`. |
-| `PATCH /api/notifications/:id/read` | Clerk JWT (self only) | Sets `read_at = NOW()` on a notification owned by the authenticated user. |
-| `POST /api/messages` | Clerk JWT | Phone number regex filter applied BEFORE DB insert and Ably publish (V26, V26-DB) |
-| `GET /api/messages/:orderId` | Clerk JWT (order party only) | Returns paginated chat history for an order. |
-| `POST /api/ratings` | Clerk JWT | Only callable within 24hrs of completion |
-| `POST /api/disputes` | Clerk JWT (order party only) | Body: `{ order_id, issue_type, description, order_item_id? }`. Atomically sets `order.status = 'disputed'`. Returns 409 if order already has an open dispute. |
-| `GET /api/disputes/:id` | Clerk JWT (order party or admin) | Returns dispute detail including evidence list. |
-| `POST /api/disputes/:id/evidence` | Clerk JWT (order party only) | Multipart file upload. EXIF stripped via `sharp` before storage. Stored via `IStorageProvider`. |
-| `PATCH /api/sellers/profile` | Clerk JWT (seller only) | Allowlist: `name`, `locality`, `gstin`, `business_name`, `recurring_schedule`. Blocklist: `user_type`, `city_code`, `clerk_user_id`. |
-| `GET /api/sellers/earnings` | Clerk JWT (seller only) | Returns seller transaction history. Query params: `period=today\|week\|month`, `page`, `limit`. Returns paginated list of completed orders with `total_amount`, `material_breakdown`, `completed_at`. |
+| `POST /api/auth/verify-otp` | Rate limit only | Verify OTP HMAC from Redis → create Custom JWT session → return JWT |
+| `POST /api/orders` | Custom JWT | Create order, geocode, city_code lookup, broadcast push |
+| `GET /api/orders` | Custom JWT | List orders. Query param: `?role=seller` or `?role=aggregator`. Paginated. |
+| `GET /api/orders/:id` | Custom JWT | Order detail with two-phase address reveal (V25) |
+| `PATCH /api/orders/:id/status` | Custom JWT | Status transitions — `completed`/`disputed` blocklisted (V13) |
+| `DELETE /api/orders/:id` | Custom JWT (seller only) | Soft delete: sets `deleted_at=NOW()`, `status='cancelled'`. Blocked if `status` is `completed` or `disputed` → 400. |
+| `POST /api/orders/:id/accept` | Custom JWT | First-accept-wins PostgreSQL transaction (replaces Edge Function) |
+| `POST /api/orders/:id/verify-otp` | Custom JWT | OTP validation + order completion in single transaction (replaces Edge Function) |
+| `POST /api/orders/:id/media` | Custom JWT | Upload photo, strip EXIF via sharp (V18), trigger OTP on scale photo |
+| `GET /api/orders/:id/media/:mediaId/url` | Custom JWT | Generate expiring signed URL after ownership check (D1) |
+| `GET /api/orders/:id/invoice` | Custom JWT (seller only) | Returns signed URL for invoice PDF. Validates `order.seller_id = req.user.id`. |
+| `POST /api/scrap/analyze` | Custom JWT | Image hash dedup → Gemini Vision → schema-validate → UI hint only (I1) |
+| `GET /api/aggregators/nearby` | Custom JWT | city_code + material filter query, server-derived (V21 equivalent) |
+| `GET /api/aggregators/me` | Custom JWT (aggregator only) | Returns the authenticated aggregator's own profile. |
+| `PATCH /api/aggregators/profile` | Custom JWT (aggregator only) | Allowlist: `business_name`, `operating_hours JSONB`, `operating_area`. Blocklist: `kyc_status`, `city_code`, `user_id`, `legacy external auth user id`. Returns 400 if blocked fields present. |
+| `GET /api/aggregators/:id` | Custom JWT | **Public fields only.** Returns: `business_name`, `avg_rating`, `total_orders`, `materials` handled, `operating_area`, `member_since`. Excludes: `phone_hash`, `legacy external auth user id`, KYC documents, exact address. |
+| `GET /api/aggregators/earnings` | Custom JWT (aggregator only) | Query param: `period=today\|week\|month`. Returns: `total_earned NUMERIC`, `orders_completed INT`, `avg_rating NUMERIC`. Computed server-side from completed orders — never client-computed. |
+| `POST /api/aggregators/heartbeat` | Custom JWT | Update `last_ping_at` (C2) |
+| `GET /api/realtime/token` | Custom JWT | Issues a short-lived Ably Token Auth token scoped to the authenticated user's permitted channels. `ABLY_API_KEY` is backend-only — mobile never receives the raw key. |
+| `GET /api/notifications` | Custom JWT | Returns paginated notification rows for the authenticated user, ordered by `created_at DESC`. Query param: `?unread_only=true`. |
+| `PATCH /api/notifications/:id/read` | Custom JWT (self only) | Sets `read_at = NOW()` on a notification owned by the authenticated user. |
+| `POST /api/messages` | Custom JWT | Phone number regex filter applied BEFORE DB insert and Ably publish (V26, V26-DB) |
+| `GET /api/messages/:orderId` | Custom JWT (order party only) | Returns paginated chat history for an order. |
+| `POST /api/ratings` | Custom JWT | Only callable within 24hrs of completion |
+| `POST /api/disputes` | Custom JWT (order party only) | Body: `{ order_id, issue_type, description, order_item_id? }`. Atomically sets `order.status = 'disputed'`. Returns 409 if order already has an open dispute. |
+| `GET /api/disputes/:id` | Custom JWT (order party or admin) | Returns dispute detail including evidence list. |
+| `POST /api/disputes/:id/evidence` | Custom JWT (order party only) | Multipart file upload. EXIF stripped via `sharp` before storage. Stored via `IStorageProvider`. |
+| `PATCH /api/sellers/profile` | Custom JWT (seller only) | Allowlist: `name`, `locality`, `gstin`, `business_name`, `recurring_schedule`. Blocklist: `user_type`, `city_code`, `legacy external auth user id`. |
+| `GET /api/sellers/earnings` | Custom JWT (seller only) | Returns seller transaction history. Query params: `period=today\|week\|month`, `page`, `limit`. Returns paginated list of completed orders with `total_amount`, `material_breakdown`, `completed_at`. |
 | `GET /api/rates` | Public | `current_price_index` view with Cache-Control + ETag (V17) |
-| `GET /api/admin/*` | Clerk JWT + DB role check | Admin operations only — DB-verified `user_type=admin` (V12) |
+| `GET /api/admin/*` | Custom JWT + DB role check | Admin operations only — DB-verified `user_type=admin` (V12) |
 
 ### 4.2 First-Accept-Wins Lock (Express Route — Replaces Edge Function)
 
 ```typescript
 // POST /api/orders/:id/accept
-// Clerk JWT middleware runs first — req.user.id is verified aggregator ID
+// Custom JWT middleware runs first — req.user.id is verified aggregator ID
 
-app.post('/api/orders/:orderId/accept', clerkJwtMiddleware, async (req, res) => {
+app.post('/api/orders/:orderId/accept', Custom JWTJwtMiddleware, async (req, res) => {
   const { orderId } = req.params;
-  const aggregatorId = req.user.id; // From verified Clerk JWT
+  const aggregatorId = req.user.id; // From verified Custom JWT
 
   const client = await pool.connect(); // Get dedicated connection for transaction
   try {
@@ -580,9 +580,9 @@ app.post('/api/orders/:orderId/accept', clerkJwtMiddleware, async (req, res) => 
 
 ```typescript
 // POST /api/orders/:id/verify-otp
-// Clerk JWT middleware runs first
+// Custom JWT middleware runs first
 
-app.post('/api/orders/:orderId/verify-otp', clerkJwtMiddleware, async (req, res) => {
+app.post('/api/orders/:orderId/verify-otp', Custom JWTJwtMiddleware, async (req, res) => {
   const { orderId } = req.params;
   const { otp, snapshotHmac } = req.body;
   const aggregatorId = req.user.id;
@@ -648,7 +648,7 @@ app.post('/api/orders/:orderId/verify-otp', clerkJwtMiddleware, async (req, res)
 });
 ```
 
-### 4.4 Direct WhatsApp OTP Dispatch (Replaces Supabase Auth Send SMS Hook)
+### 4.4 Direct WhatsApp OTP Dispatch (Replaces legacy stack Auth Send SMS Hook)
 
 ```typescript
 // POST /api/auth/request-otp
@@ -826,7 +826,7 @@ Monitor Ably connection count in the Ably Dashboard. Free tier provides 200 conc
 
 Mobile clients use **Ably Token Auth** exclusively:
 
-1. Mobile calls `GET /api/realtime/token` with a valid Clerk JWT
+1. Mobile calls `GET /api/realtime/token` with a valid Custom JWT
 2. Express backend generates a short-lived Ably token using `ABLY_API_KEY` (backend-only)
 3. The token is scoped to only the channels the authenticated user is permitted to access
 4. Mobile initialises `Ably.Realtime({ authUrl: '/api/realtime/token', authHeaders: { Authorization: bearerToken } })`
@@ -836,7 +836,7 @@ Mobile clients use **Ably Token Auth** exclusively:
 // GET /api/realtime/token — backend implementation
 import Ably from 'ably/promises';
 
-app.get('/api/realtime/token', clerkJwtMiddleware, async (req, res) => {
+app.get('/api/realtime/token', Custom JWTJwtMiddleware, async (req, res) => {
   const rest = new Ably.Rest({ key: process.env.ABLY_API_KEY });
   const userId = req.user.id;
 
@@ -919,7 +919,7 @@ export interface IMapProvider {
 
 All tables in Azure PostgreSQL Flexible Server B1ms (Central India — Pune). `uuid-ossp` for UUID primary keys. `pgcrypto` for phone number encryption. All tables have Row Level Security enabled.
 
-> **RLS + Clerk JWT Pattern:** Since this architecture does not use Supabase Auth, `auth.uid()` is not available. Instead, the Express backend sets `SET LOCAL app.current_user_id = $userId` on each connection before executing queries. RLS policies use `current_app_user_id()` — a custom helper function — to enforce row-level ownership.
+> **RLS + Custom JWT Pattern:** Since this architecture does not use legacy stack Auth, `auth.uid()` is not available. Instead, the Express backend sets `SET LOCAL app.current_user_id = $userId` on each connection before executing queries. RLS policies use `current_app_user_id()` — a custom helper function — to enforce row-level ownership.
 
 ### 8.0 Helper Functions (migration 0002 — must be first object created)
 
@@ -936,10 +936,10 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 ### 8.1 Core Tables
 
 ```sql
--- Users (auth session managed by Clerk — user record synced here on first login)
+-- Users (auth session managed by Custom JWT — user record synced here on first login)
 CREATE TABLE users (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  clerk_user_id   TEXT NOT NULL UNIQUE, -- Clerk's user ID for JWT cross-reference
+  legacy external auth user id   TEXT NOT NULL UNIQUE, -- Custom JWT's user ID for JWT cross-reference
   phone_hash      TEXT NOT NULL,        -- HMAC-SHA256 of phone number
   phone_last4     TEXT NOT NULL,        -- Display-only
   name            TEXT NOT NULL,
@@ -949,9 +949,9 @@ CREATE TABLE users (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Safe view — phone_hash and clerk_user_id are NEVER returned via this view (V24)
+-- Safe view — phone_hash and legacy external auth user id are NEVER returned via this view (V24)
 -- Included columns: id, name, phone_last4, user_type, is_active, preferred_language, created_at
--- Explicitly EXCLUDED: phone_hash, clerk_user_id (PII/auth identifiers)
+-- Explicitly EXCLUDED: phone_hash, legacy external auth user id (PII/auth identifiers)
 -- Target migration: 0002_rls_policies.sql (after users table exists)
 CREATE VIEW users_public AS
   SELECT id, name, phone_last4, user_type, is_active, preferred_language, created_at
@@ -1069,7 +1069,7 @@ CREATE TABLE order_status_history (
   order_id    UUID NOT NULL REFERENCES orders(id),
   old_status  TEXT,
   new_status  TEXT NOT NULL,
-  changed_by  UUID,           -- Actor user ID from Clerk JWT — never auto-populated
+  changed_by  UUID,           -- Actor user ID from Custom JWT — never auto-populated
   note        TEXT,
   created_at  TIMESTAMPTZ DEFAULT NOW()  -- Always DB-set, never client-supplied (V30)
 );
@@ -1384,15 +1384,15 @@ CREATE INDEX idx_status_history_order_id ON order_status_history (order_id, crea
 
 ## 9. Scheduled Jobs — node-cron on Express Backend
 
-> ⚠️ **v4.0 CHANGE:** pg_cron has been removed (pg_cron requires Supabase Pro or a manually-managed PostgreSQL extension). All cron jobs now run via `node-cron` on the Express backend. The message partition job is the only exception — it runs as a startup check on each Express deploy.
+> ⚠️ **v4.0 CHANGE:** pg_cron has been removed (pg_cron requires legacy stack Pro or a manually-managed PostgreSQL extension). All cron jobs now run via `node-cron` on the Express backend. The message partition job is the only exception — it runs as a startup check on each Express deploy.
 
 ```typescript
 // backend/src/scheduler.ts
 import cron from 'node-cron';
-import appInsights from 'applicationinsights';
+import appInsights from 'sentry';
 
 // RULE (Fix 14): ALL cron callbacks must be wrapped in try/catch.
-// On failure: capture exception to Application Insights with job name + timestamp.
+// On failure: capture exception to Sentry with job name + timestamp.
 // Never let a cron failure propagate to the Express process (no unhandled rejections).
 
 // Aggregator online culling — every 5 minutes (C2)
@@ -1472,7 +1472,7 @@ sortt-app/
 ├── apps/
 │   ├── mobile/                       # Expo React Native app
 │   │   ├── app/                      # Expo Router screens
-│   │   │   ├── _layout.tsx           # Root layout — font loading, SplashScreen gate, Clerk provider
+│   │   │   ├── _layout.tsx           # Root layout — font loading, SplashScreen gate, Custom JWT provider
 │   │   │   ├── index.tsx             # Root route — renders SplashAnimation, routes to auth or home
 │   │   │   ├── (auth)/               # Login, OTP entry
 │   │   │   ├── (seller)/             # Seller tab group
@@ -1482,7 +1482,7 @@ sortt-app/
 │   │   │   ├── ui/                   # Design system components (unchanged)
 │   │   │   └── domain/               # Feature-specific components
 │   │   ├── lib/
-│   │   │   ├── clerk.ts              # Clerk client (replaces supabase.ts)
+│   │   │   ├── Custom JWT.ts              # Custom JWT client (replaces legacy auth client)
 │   │   │   ├── api.ts                # Custom backend API client
 │   │   │   └── notifications.ts      # Expo push token registration (dual-token)
 │   │   ├── store/                    # Zustand state stores
@@ -1493,13 +1493,13 @@ sortt-app/
 ├── packages/
 │   ├── maps/                         # IMapProvider abstraction
 │   ├── realtime/                     # IRealtimeProvider → AblyRealtimeProvider
-│   ├── auth/                         # IAuthProvider → ClerkAuthProvider
+│   ├── auth/                         # IAuthProvider → Custom JWTAuthProvider
 │   ├── storage/                      # IStorageProvider → R2StorageProvider
 │   └── analysis/                     # IAnalysisProvider abstraction
 ├── backend/                          # Node.js/Express — Azure App Service (Central India)
 │   └── src/
 │       ├── middleware/
-│       │   ├── auth.ts               # Clerk JWT verification middleware (A1)
+│       │   ├── auth.ts               # Custom JWT verification middleware (A1)
 │       │   ├── cors.ts               # CORS allowlist (X1)
 │       │   └── security.ts           # Helmet + scrub env from errors (V34, D3)
 │       ├── routes/
@@ -1514,7 +1514,7 @@ sortt-app/
 │       ├── storage/                  # IStorageProvider → Cloudflare R2 implementation
 │       └── utils/
 │           └── rateLimit.ts          # Upstash Redis rate limiters
-├── migrations/                       # Plain SQL migration files (replaces supabase/migrations)
+├── migrations/                       # Plain SQL migration files (historically replaced legacy migrations)
 │   ├── 0001_initial_schema.sql
 │   ├── 0002_rls_policies.sql
 │   └── 0003_indexes_and_triggers.sql
@@ -1561,8 +1561,8 @@ These rules apply to every agent in every session:
 - Never hardcode API keys in any agent session. Reference environment variables only.
 - All agents must import colours and spacing exclusively from `constants/tokens.ts` — never hardcode hex values.
 - All agents must use DM Sans and DM Mono. No other typefaces.
-- No agent may call Meta WhatsApp API, Ably, Cloudflare R2 SDK, Clerk, or Google Maps directly — only through the provider abstraction packages in `packages/`.
-- No agent may import or reference `@supabase/supabase-js` or any Supabase package anywhere in the codebase.
+- No agent may call Meta WhatsApp API, Ably, Cloudflare R2 SDK, Custom JWT, or Google Maps directly — only through the provider abstraction packages in `packages/`.
+- No agent may import or reference `legacy stack SDK` or any legacy stack package anywhere in the codebase.
 - On Days 1–3 (UI-only phase): no agent makes any backend or third-party API calls from the mobile app. All screen data is hardcoded fixture data. Real wiring begins Day 5.
 - Backend agents (Days 5–8): always call `SET LOCAL app.current_user_id = $userId` before DB queries in protected routes.
 
@@ -1575,17 +1575,17 @@ These rules apply to every agent in every session:
 | 1–3 | UI Foundation (all screens, static data) | React Native, Expo Router, Zustand, Design System |
 | 4 | Database schema (PostgreSQL) — initial tables + extensions | `uuid-ossp`, `pgcrypto`, migrations 0001–0003 |
 | 5 | RLS policies + triggers + indexes + materialized views | PostgreSQL RLS, functions, 0002–0006 migrations |
-| 6 | Express backend foundation + auth wiring (WhatsApp OTP) | Express, Clerk JWT, Upstash Redis, Meta WhatsApp API |
+| 6 | Express backend foundation + auth wiring (WhatsApp OTP) | Express, Custom JWT, Upstash Redis, Meta WhatsApp API |
 | 7 | Core API routes — orders, profiles, rates, push dispatch | pg pool, Expo push, auth middleware, node-cron setup |
 | 8 | Atomic operations — first-accept-wins, OTP verify, media | `FOR UPDATE SKIP LOCKED`, Cloudflare R2, sharp EXIF strip |
 | 9 | Realtime (Ably token auth), chat, notifications | IRealtimeProvider, token auth endpoint, notifications API |
 | 10 | Disputes system, ratings, order lifecycle completion | disputes/evidence routes, 24hr rating window, status machine |
 | 11 | AI scrap analysis (Gemini Vision), invoice PDF generation | `IAnalysisProvider`, Gemini Flash, pdf-lib, GST format |
-| 12 | Mobile auth wiring — `otp.tsx` rewrite (WhatsApp flow) | Clerk Expo SDK, `POST /api/auth/*` integration |
+| 12 | Mobile auth wiring — `otp.tsx` rewrite (WhatsApp flow) | Custom JWT Expo SDK, `POST /api/auth/*` integration |
 | 13 | Provider abstraction swap tests (Ola Maps, Soketi) | `IMapProvider`, `IRealtimeProvider`, env-var-driven swaps |
 | 14 | Admin web panel + IP security | Next.js 15, Vercel Edge Middleware, IP allowlist |
 | 15 | Business Mode APIs + GST invoices (mobile surfaces active; web deferred) | `business_members`, role RLS, `PATCH /api/sellers/profile` |
-| 16 | EAS build, E2E testing, telemetry stack, performance audit | Detox/Playwright, Jest coverage, Azure Monitor + Application Insights review |
+| 16 | EAS build, E2E testing, telemetry stack, performance audit | Detox/Playwright, Jest coverage, Azure Monitor + Sentry review |
 | 17 | Security audit, penetration testing, launch readiness | All V-series + X-series checks, admin audit log review |
 
 ---
@@ -1597,7 +1597,7 @@ These rules apply to every agent in every session:
 | Test Type | Scope | Tool |
 |---|---|---|
 | Unit | Route handlers, RLS policies, status machine, no `phone_hash` in responses (V24) | Jest |
-| Integration | Order lifecycle, first-accept-wins race, OTP binding (C1), Clerk JWT validation | Jest + Supertest |
+| Integration | Order lifecycle, first-accept-wins race, OTP binding (C1), Custom JWT validation | Jest + Supertest |
 | E2E | Seller listing → aggregator accepts → WhatsApp OTP → receipt generated | Detox / Playwright |
 | Security | IMMUTABLE_STATUSES enforcement (V13), `kyc_status` block (V35), CORS allowlist (X1) | Jest |
 
@@ -1612,10 +1612,10 @@ These rules apply to every agent in every session:
 
 | Tool | Purpose | Free Tier |
 |---|---|---|
-| Azure Application Insights | Error tracking + distributed tracing for Express + Next.js | Included with Azure ingestion quotas |
+| Azure Sentry | Error tracking + distributed tracing for Express + Next.js | Included with Azure ingestion quotas |
 | Sentry (Mobile only) | Crash reporting + symbolication for React Native | 5K errors/month |
-| PostHog Cloud | User funnel analytics (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) | 1M events/month |
-| Microsoft Clarity | Admin web behavioural analytics (session replay + heatmaps) | Included (project-level quotas apply) |
+| Disabled | User funnel analytics (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) | 1M events/month |
+| Disabled | Admin web behavioural analytics (session replay + heatmaps) | Included (project-level quotas apply) |
 | Azure Monitor Availability Tests | Synthetic uptime checks for backend `/health` + admin web URL | Included with Azure Monitor |
 | Azure Monitor | Backend memory/CPU, DB connections, query performance | Included with Azure for Students |
 | Ably Dashboard | Realtime connection count — alert at 150 (75% of 200 free) | Included |
@@ -1627,7 +1627,7 @@ These rules apply to every agent in every session:
 |---|---|---|---|
 | Azure PostgreSQL B1ms | 750 hrs/month (12 months) | 744 hrs | ~1% |
 | Ably Realtime | 200 conns, 6M msgs/month | ~100 peak conns | 50% |
-| Clerk Auth | 10,000 MAU | ~2,000 active users | 80% |
+| Custom JWT | 10,000 MAU | ~2,000 active users | 80% |
 | Cloudflare R2 | 10GB storage, 1M operations/month | ~200 uploads | ample |
 | Gemini Flash Vision | 1,500 req/day | ~200/day | 87% |
 | Upstash Redis | 10,000 req/day | ~3,000/day | 70% |
@@ -1645,7 +1645,7 @@ These rules apply to every agent in every session:
 -- INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note)
 -- VALUES ($order_id, $old_status, $new_status, $req.user.id, $note);
 -- created_at is DEFAULT NOW() — never supplied by client (V30)
--- changed_by comes from Clerk JWT, never from DB trigger (R3)
+-- changed_by comes from Custom JWT, never from DB trigger (R3)
 ```
 
 ### 13.2 Materialized Views
@@ -1703,25 +1703,25 @@ await createNextMonthMessagePartition();
 
 ### 14.1 Authentication Bypass Risks
 
-#### A1 — Clerk JWT Verification Middleware
+#### A1 — Custom JWT Verification Middleware
 
-**Requirement:** All protected routes must validate the Clerk JWT before any business logic executes.
+**Requirement:** All protected routes must validate the Custom JWT before any business logic executes.
 
 **Implementation:**
 ```typescript
 // middleware/auth.ts
-import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
+import { Custom JWTExpressRequireAuth } from '@Custom JWT/Custom JWT-sdk-node';
 
-export const clerkJwtMiddleware = ClerkExpressRequireAuth({
+export const Custom JWTJwtMiddleware = Custom JWTExpressRequireAuth({
   onError: (err, req, res) => res.status(401).json({ error: 'Unauthorised' })
 });
 
-// Attach internal user record to req.user after Clerk validation
+// Attach internal user record to req.user after Custom JWT validation
 export const attachInternalUser = async (req, res, next) => {
-  const { userId: clerkUserId } = req.auth;
+  const { userId: Custom JWTUserId } = req.auth;
   const { rows } = await db.query(
-    'SELECT * FROM users WHERE clerk_user_id = $1 AND is_active = true',
-    [clerkUserId]
+    'SELECT * FROM users WHERE legacy external auth user id = $1 AND is_active = true',
+    [Custom JWTUserId]
   );
   if (!rows.length) return res.status(401).json({ error: 'User not found' });
   req.user = rows[0]; // Internal users row — includes user_type, is_active
@@ -1740,7 +1740,7 @@ Any future webhook integrations (payment gateway, Meta webhook events) must vali
 
 #### A3 — Session Policy
 
-Clerk JWT access tokens expire in 1 hour. Refresh tokens expire in 7 days. Admin panel enforces 15-minute inactivity re-auth. "Sign out all devices" clears all Clerk sessions for the user.
+Custom JWT access tokens expire in 1 hour. Refresh tokens expire in 7 days. Admin panel enforces 15-minute inactivity re-auth. "Sign out all devices" clears all Custom JWT sessions for the user.
 
 ---
 
@@ -1766,7 +1766,7 @@ Also add backend assertion: `if (req.user.id !== order.seller_id) return res.sta
 
 #### R3 — Order Status History Actor Tracking
 
-The Express backend explicitly INSERTs `changed_by = req.user.id` from the Clerk JWT into `order_status_history`. No trigger or `current_app_user_id()` is used for this field — it is always application-provided.
+The Express backend explicitly INSERTs `changed_by = req.user.id` from the Custom JWT into `order_status_history`. No trigger or `current_app_user_id()` is used for this field — it is always application-provided.
 
 ---
 
@@ -1778,7 +1778,7 @@ Per-user rate limiting: max 10 Gemini requests per user per hour (Upstash Redis)
 
 #### RA2 — WhatsApp OTP Flooding
 
-Rate limiting on `POST /api/auth/request-otp`: max 3 OTP requests per phone per 10-minute window, max 10 per day. Running daily conversation counter in Upstash Redis — alert via Azure Monitor/Application Insights when counter reaches 900 (90% of 1,000 free monthly quota).
+Rate limiting on `POST /api/auth/request-otp`: max 3 OTP requests per phone per 10-minute window, max 10 per day. Running daily conversation counter in Upstash Redis — alert via Azure Monitor/Sentry when counter reaches 900 (90% of 1,000 free monthly quota).
 
 #### RA3 — Order Spam
 
@@ -1814,7 +1814,7 @@ All push notification bodies use generic copy. See §5.2 for approved/forbidden 
 
 #### D3 — Environment Variable Leak in Error Logs
 
-Global Express error handler scrubs `process.env` before Application Insights capture. Git pre-commit hook (`git-secrets`) fails if any secret pattern is found in source code.
+Global Express error handler scrubs `process.env` before Sentry capture. Git pre-commit hook (`git-secrets`) fails if any secret pattern is found in source code.
 
 ---
 
@@ -1865,13 +1865,13 @@ Vercel Edge Middleware IP allowlist on all `/admin/*` routes. 15-minute inactivi
 
 ### 14.8 Security Controls Specific to v4.0 Stack
 
-#### V-CLERK-1 — clerk_user_id Must Never Appear in API Responses
+#### V-Custom JWT-1 — legacy external auth user id Must Never Appear in API Responses
 
-The `clerk_user_id` field on the `users` table must never appear in any API response DTO. It is an internal cross-reference only. The `users_public` view excludes it. Add a unit test asserting no response fixture contains `clerk_user_id`.
+The `legacy external auth user id` field on the `users` table must never appear in any API response DTO. It is an internal cross-reference only. The `users_public` view excludes it. Add a unit test asserting no response fixture contains `legacy external auth user id`.
 
-#### V-CLERK-2 — user_type Must Always Be Re-Fetched from DB
+#### V-Custom JWT-2 — user_type Must Always Be Re-Fetched from DB
 
-On every privileged route, `req.user.user_type` and `req.user.is_active` come from the `attachInternalUser` middleware which queries the DB — not from the Clerk JWT claims. Cache DB result in Upstash Redis for max 60 seconds per user. This prevents a banned aggregator from using their old JWT.
+On every privileged route, `req.user.user_type` and `req.user.is_active` come from the `attachInternalUser` middleware which queries the DB — not from the Custom JWT claims. Cache DB result in Upstash Redis for max 60 seconds per user. This prevents a banned aggregator from using their old JWT.
 
 #### V-OTP-1 — OTP State Lives in Redis, Not Only in DB
 
@@ -1908,7 +1908,7 @@ Additional requirements:
 - All scraper outbound HTTP requests must pass through an IP validation step before the request is made
 - Block RFC 1918 private IP ranges: `10.x.x.x`, `172.16.x.x–172.31.x.x`, `192.168.x.x`
 - Block loopback: `127.x.x.x` and `::1`
-- If the target URL resolves to a private IP, abort the request and log to Application Insights before sending
+- If the target URL resolves to a private IP, abort the request and log to Sentry before sending
 - The allowlist is a compile-time constant — not a database table, not an env var
 
 ---
@@ -1923,14 +1923,14 @@ Additional requirements:
 | Gemini Vision calls | ~180/day | ~1,800/day | Free tier (1,500/day) exceeded at ~75K DAU |
 | WhatsApp OTP conversations | ~300/month | ~3,000/month | Free tier (1,000/month) exceeded at ~1K DAU |
 | Azure PostgreSQL B1ms | Adequate | Upgrade to B2ms | ~₹9,030/month — migrate to DO at that point |
-| Clerk MAU | ~2,000 | ~20,000 | Pro plan needed above 10K MAU |
+| Custom JWT MAU | ~2,000 | ~20,000 | Pro plan needed above 10K MAU |
 
 ### 15.2 Lock-In Risk Register
 
 | Component | Lock-In Type | Trigger | Mitigation | Status |
 |---|---|---|---|---|
 | Ably Realtime | Cost ceiling | 30K DAU | `IRealtimeProvider` — swap to Soketi or Pusher | Interface built |
-| Clerk Auth | Phone hash coupling | Auth migration | `IAuthProvider` — re-enrollment required on swap | Interface built |
+| Custom JWT | Phone hash coupling | Auth migration | `IAuthProvider` — re-enrollment required on swap | Interface built |
 | Cloudflare R2 | S3 key format (standard) | Storage migration | `IStorageProvider` — S3-compatible, trivial to migrate to AWS S3 Mumbai if India jurisdiction lock required | Interface built |
 | Gemini Vision | Cost ceiling | 75K DAU | `IAnalysisProvider` — swap to OpenAI Vision | Interface built |
 | Expo Push Tokens | Token format | Native push migration | Dual-token storage (Expo + FCM/APNs raw tokens) | Build from Day 1 |
@@ -1990,9 +1990,9 @@ export interface IMapProvider {
 
 | Package | Purpose | Notes |
 |---|---|---|
-| `@clerk/clerk-sdk-node` | Clerk JWT verification on backend | Replaces Supabase Auth |
-| `@clerk/clerk-expo` | Clerk session management on mobile | Replaces Supabase JS client auth |
-| `ably` | Realtime WebSockets via IRealtimeProvider | Replaces Supabase Realtime |
+| `@Custom JWT/Custom JWT-sdk-node` | Custom JWT verification on backend | Replaces legacy stack Auth |
+| `@Custom JWT/Custom JWT-expo` | Custom JWT session management on mobile | Replaces legacy stack JS client auth |
+| `ably` | Realtime WebSockets via IRealtimeProvider | Replaces legacy stack Realtime |
 | `@aws-sdk/client-s3` | Cloudflare R2 / S3-compatible storage via `IStorageProvider` | S3 SDK used for R2 (same SDK works for AWS S3 Mumbai swap) |
 | `@aws-sdk/s3-request-presigner` | Presigned URL generation (D1 — 300s default expiry) | — |
 | `expo` SDK 51+ | React Native framework | — |
@@ -2013,18 +2013,18 @@ export interface IMapProvider {
 | `next@15` | Web app framework | — |
 | `@google/generative-ai` | Gemini API client | Via `IAnalysisProvider` |
 | `pg` | PostgreSQL client | Azure PostgreSQL connection |
-| `jose` | JWT utilities if needed beyond Clerk | — |
+| `jose` | JWT utilities if needed beyond Custom JWT | — |
 
 **Removed from v3.2:**
-- `@supabase/supabase-js` — removed entirely. No Supabase dependency anywhere.
+- `legacy stack SDK` — removed entirely. No legacy stack dependency anywhere.
 - `bcryptjs` — replaced by `crypto` built-in HMAC-SHA256 (X3)
 
 ### B. Environment Variables
 
 | Variable | Location | Purpose |
 |---|---|---|
-| `CLERK_SECRET_KEY` | **Backend only** | Clerk backend API key — NEVER in client bundle |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Client apps | Clerk publishable key — safe for client use |
+| `JWT_SECRET` | **Backend only** | Custom JWT backend API key — NEVER in client bundle |
+| `NEXT_PUBLIC_Custom JWT_PUBLISHABLE_KEY` | Client apps | Custom JWT publishable key — safe for client use |
 | `DATABASE_URL` | Backend only | Azure PostgreSQL connection string (SSL required) |
 | `ABLY_API_KEY` | **Backend only** | Ably server API key — NEVER in client bundle |
 | ~~`NEXT_PUBLIC_ABLY_KEY`~~ | ~~Client apps~~ | **DEPRECATED for mobile** — mobile uses Ably Token Auth via `GET /api/realtime/token`. Removed from mobile `.env`. Not needed for current admin web scope. |
@@ -2043,24 +2043,24 @@ export interface IMapProvider {
 | `UPSTASH_REDIS_REST_URL` | Backend only | Upstash Redis REST URL |
 | `UPSTASH_REDIS_REST_TOKEN` | Backend only | Upstash Redis REST token |
 | `GEMINI_API_KEY` | Backend only | Google Gemini API key |
-| `GOOGLE_MAPS_API_KEY` | Backend + Mobile | Via `IMapProvider` |
+| `OLA_MAPS_API_KEY` | Backend + Mobile | Via `IMapProvider` |
 | `MAP_PROVIDER` | Backend + Mobile | `"google"` or `"ola"` |
 | `EXPO_ACCESS_TOKEN` | Backend only | Expo server SDK token for push dispatch |
 | `REALTIME_PROVIDER` | All | `"ably"` (default) — switches `IRealtimeProvider` |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Backend + Web | Azure Application Insights connection string for Express + Next.js telemetry |
-| `SENTRY_DSN_MOBILE` | Mobile only | Sentry DSN for React Native crash tracking and symbolication |
-| `POSTHOG_API_KEY` | Mobile + Web | PostHog analytics API key |
-| `POSTHOG_HOST` | Mobile + Web | PostHog API host. Default: `https://app.posthog.com` |
-| `NEXT_PUBLIC_CLARITY_PROJECT_ID` | Web only | Microsoft Clarity project ID for admin behavioural analytics |
+| `SENTRY_DSN` | Backend + Web | Azure Sentry connection string for Express + Next.js telemetry |
+| `SENTRY_DSN` | Mobile only | Sentry DSN for React Native crash tracking and symbolication |
+| `PRODUCT_ANALYTICS_API_KEY` | Mobile + Web | product analytics API key |
+| `PRODUCT_ANALYTICS_HOST` | Mobile + Web | product analytics API host. Default: `(disabled)` |
+| `NEXT_PUBLIC_BEHAVIOR_ANALYTICS_PROJECT_ID` | Web only | Disabled project ID for admin behavioural analytics |
 | `ADMIN_IP_ALLOWLIST` | Vercel (web) only | Comma-separated IP allowlist for `/admin/*` routes. Read by Vercel Edge Middleware. |
 | `PHONE_HASH_SECRET` | Backend only | HMAC secret used to hash phone numbers before storing as `phone_hash`. Distinct from `OTP_HMAC_SECRET`. |
 
 **Removed from v3.2:**
-- `SUPABASE_URL` — removed
-- `SUPABASE_ANON_KEY` — removed
-- `SUPABASE_SERVICE_KEY` — removed (this key must never reappear anywhere)
-- `SUPABASE_WEBHOOK_SECRET` — removed
-- `SUPABASE_HOOK_SECRET` — removed
+- `legacy stack_URL` — removed
+- `legacy stack_ANON_KEY` — removed
+- `legacy stack_SERVICE_KEY` — removed (this key must never reappear anywhere)
+- `legacy stack_WEBHOOK_SECRET` — removed
+- `legacy stack_HOOK_SECRET` — removed
 
 ---
 
@@ -2068,18 +2068,18 @@ export interface IMapProvider {
 
 ### SP1 — Bidirectional Seller & Aggregator Phone Exposure (2026-03-17, BLOCK Revision)
 
-**Summary:** Expose both seller and aggregator phone numbers to order parties only after the order reaches `accepted` status or beyond. Fetch from Clerk at acceptance time, cache in `users.display_phone`, and expose bidirectionally via DTO.
+**Summary:** Expose both seller and aggregator phone numbers to order parties only after the order reaches `accepted` status or beyond. Fetch from Custom JWT at acceptance time, cache in `users.display_phone`, and expose bidirectionally via DTO.
 
 **Decisions implemented:**
 
 | Rule | Detail |
 |---|---|
 | SP1-1 | Raw phone numbers **never** stored on `orders`. One copy per user: `users.display_phone` (VARCHAR 20, nullable). Both seller and aggregator have their own row. |
-| SP1-2 | **WARN 1 (synchronous):** Both `display_phone` values are populated **at acceptance time BEFORE COMMIT** via synchronous Clerk API calls in the accept route transaction. Non-fatal — if Clerk returns no phone for either party, that party's `display_phone` remains NULL. |
+| SP1-2 | **WARN 1 (synchronous):** Both `display_phone` values are populated **at acceptance time BEFORE COMMIT** via synchronous Custom JWT API calls in the accept route transaction. Non-fatal — if Custom JWT returns no phone for either party, that party's `display_phone` remains NULL. |
 | SP1-3 | **canSeePhone guard:** `buildOrderDto` exposes both `seller_phone` and `aggregator_phone` only when `status ∉ {created, cancelled}` AND `requestingUserId ∈ {seller_id, aggregator_id}`. All other requests receive both fields as `null`. |
 | SP1-4 | **Asymmetric visibility:** Aggregator sees `seller_phone` (their counterparty's phone). Seller sees `aggregator_phone` (their counterparty's phone). Neither sees their own phone exposed in the DTO. |
 | SP1-5 | Database fields `seller_display_phone` and `aggregator_display_phone` are always stripped from the DTO `return` object — clients never receive raw column names. |
-| SP1-6 | `phone_hash` and `clerk_user_id` continue to be stripped (V24 unchanged). |
+| SP1-6 | `phone_hash` and `legacy external auth user id` continue to be stripped (V24 unchanged). |
 | SP1-7 | **BLOCK revision - UI bidirectional:** `PhoneCall` icon + `Linking.openURL('tel:...')` rendered in both order detail screens post-acceptance: aggregator's seller card shows `seller_phone`, seller's aggregator card shows `aggregator_phone`. Icon completely absent (not disabled) if phone is `null`. |
 | SP1-8 | DPDP compliance: two phone copies in `users.display_phone` (one per user) — erasure request requires two UPDATEs: `UPDATE users SET display_phone = NULL WHERE id = seller_id; UPDATE users SET display_phone = NULL WHERE id = aggregator_id`. |
 
@@ -2088,7 +2088,7 @@ export interface IMapProvider {
 ---
 
 *— End of [APP_NAME] TRD v4.0 —*
-*Supersedes TRD v3.2. Reason for major version bump: complete removal of Supabase dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Clerk + Ably + Cloudflare R2 + Express on Azure App Service.*
+*Supersedes TRD v3.2. Reason for major version bump: complete removal of legacy stack dependency due to India ISP block (Feb 2026). Stack: Azure PostgreSQL + Custom JWT + Ably + Cloudflare R2 + Express on Azure App Service.*
 
 
 ## Recent Updates (Auth Identity Migration & System Reset)
@@ -2097,3 +2097,7 @@ export interface IMapProvider {
 - Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
 - Admin metrics accurately track deterministic IDs correctly without constraint errors.
 - UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
+
+
+
+

@@ -1,4 +1,4 @@
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 
 type Coordinate = {
   latitude: number;
@@ -13,64 +13,45 @@ type OpenExternalDirectionsInput = {
   errorBody?: string;
 };
 
-const buildOlaDirectionsUrl = ({ destination, origin, waypoints = [] }: OpenExternalDirectionsInput): string => {
-  const params = new URLSearchParams();
-  params.set('destination', `${destination.latitude},${destination.longitude}`);
-  params.set('travel_mode', 'driving');
+const buildAndroidGeoUrl = ({ destination }: OpenExternalDirectionsInput): string =>
+  `geo:${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}`;
 
-  if (origin) {
-    params.set('origin', `${origin.latitude},${origin.longitude}`);
-  }
+const buildAndroidGoogleNavUrl = ({ destination }: OpenExternalDirectionsInput): string =>
+  `google.navigation:q=${destination.latitude},${destination.longitude}&mode=d`;
 
-  if (waypoints.length > 0) {
-    const value = waypoints.map((item) => `${item.latitude},${item.longitude}`).join('|');
-    params.set('waypoints', value);
-  }
-
-  return `https://maps.olamaps.io/directions?${params.toString()}`;
-};
-
-const buildGoogleDirectionsUrl = ({ destination, origin, waypoints = [] }: OpenExternalDirectionsInput): string => {
-  const params = new URLSearchParams();
-  params.set('api', '1');
-  params.set('destination', `${destination.latitude},${destination.longitude}`);
-  params.set('travelmode', 'driving');
-
-  if (origin) {
-    params.set('origin', `${origin.latitude},${origin.longitude}`);
-  }
-
-  if (waypoints.length > 0) {
-    params.set('waypoints', waypoints.map((item) => `${item.latitude},${item.longitude}`).join('|'));
-  }
-
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
-};
-
-const buildMapMyIndiaDirectionsUrl = ({ destination, origin }: OpenExternalDirectionsInput): string => {
+const buildAppleMapsUrl = ({ destination, origin }: OpenExternalDirectionsInput): string => {
   const params = new URLSearchParams();
   params.set('daddr', `${destination.latitude},${destination.longitude}`);
-
+  params.set('dirflg', 'd');
   if (origin) {
     params.set('saddr', `${origin.latitude},${origin.longitude}`);
   }
-
-  return `https://maps.mapmyindia.com/directions?${params.toString()}`;
+  return `maps://?${params.toString()}`;
 };
 
-const buildGeoDirectionsUrl = ({ destination }: OpenExternalDirectionsInput): string => {
-  return `geo:${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}`;
+const buildGoogleMapsIosUrl = ({ destination, origin }: OpenExternalDirectionsInput): string => {
+  const params = new URLSearchParams();
+  params.set('daddr', `${destination.latitude},${destination.longitude}`);
+  params.set('directionsmode', 'driving');
+  if (origin) {
+    params.set('saddr', `${origin.latitude},${origin.longitude}`);
+  }
+  return `comgooglemaps://?${params.toString()}`;
 };
 
 export async function openExternalDirections(input: OpenExternalDirectionsInput): Promise<void> {
-  // Open one directions URL and let the OS route it to user-selected apps.
-  // On Android this triggers the native chooser when no default app is set.
-  const targets = [
-    buildOlaDirectionsUrl(input),
-    buildGoogleDirectionsUrl(input),
-    buildMapMyIndiaDirectionsUrl(input),
-    buildGeoDirectionsUrl(input),
-  ];
+  // Native app deep links first (no website redirect).
+  const targets = Platform.select<string[]>({
+    android: [
+      buildAndroidGeoUrl(input),
+      buildAndroidGoogleNavUrl(input),
+    ],
+    ios: [
+      buildAppleMapsUrl(input),
+      buildGoogleMapsIosUrl(input),
+    ],
+    default: [buildAndroidGeoUrl(input)],
+  }) ?? [buildAndroidGeoUrl(input)];
 
   for (const url of targets) {
     try {

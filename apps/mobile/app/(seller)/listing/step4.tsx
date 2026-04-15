@@ -308,9 +308,7 @@ export default function Step4Screen() {
               <View style={styles.rowContent}>
                 <Text variant="label" color={colors.navy}>Pickup Window</Text>
                 <Text variant="caption" color={colors.slate}>
-                  {pickupType === 'scheduled' 
-                    ? `${scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''} · ${TIMES.find(t => t.value === scheduledTime)?.label || scheduledTime}` 
-                    : 'Drop-off any time'}
+                  {scheduledDate ? new Date(scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''} · {TIMES.find(t => t.value === scheduledTime)?.label || scheduledTime}
                 </Text>
               </View>
               <Pressable onPress={() => router.push('/(seller)/listing/step3')}>

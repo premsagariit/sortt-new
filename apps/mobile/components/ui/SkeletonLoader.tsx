@@ -21,6 +21,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, ViewStyle } from 'react-native';
 import { colors, radius } from '../../constants/tokens';
+import { boneyard } from '../../lib/boneyard';
 
 export type SkeletonVariant = 'card' | 'list' | 'header';
 
@@ -46,14 +47,14 @@ export function SkeletonLoader({
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
-          toValue:         0.4,
-          duration:        600,
+          toValue:         boneyard.minOpacity,
+          duration:        boneyard.halfCycleMs,
           easing:          (t) => 1 - Math.pow(1 - t, 3), // ease-out cubic
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue:         1,
-          duration:        600,
+          duration:        boneyard.halfCycleMs,
           easing:          (t) => 1 - Math.pow(1 - t, 3), // ease-out cubic
           useNativeDriver: true,
         }),

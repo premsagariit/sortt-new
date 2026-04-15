@@ -13,6 +13,7 @@ import {
   ArrowLeft, User, Truck, MapPin, Clock, Package, CheckCircle,
   XCircle, Phone, Calendar, Scale, CreditCard, Image as ImageIcon,
 } from 'lucide-react';
+import { BoneyardDetailPage } from '@/components/ui/Boneyard';
 import styles from './order-detail.module.css';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -64,12 +65,7 @@ export default function OrderDetailPage() {
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  if (loading) return (
-    <div className={styles.center}>
-      <div className={styles.spinner} />
-      <span>Loading order…</span>
-    </div>
-  );
+  if (loading) return <BoneyardDetailPage />;
 
   if (error || !order) return (
     <div className={styles.center}>

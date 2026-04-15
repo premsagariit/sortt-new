@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { adminApi, type FlaggedAggregator } from '../../../../lib/adminApi';
+import { BoneyardCardList } from '@/components/ui/Boneyard';
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -108,19 +109,7 @@ export default function FlaggedPage() {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white border border-border rounded-2xl p-5 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-border flex-shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-border rounded w-1/3" />
-                  <div className="h-3 bg-border rounded w-2/3" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <BoneyardCardList rows={3} />
       )}
 
       {/* Empty state */}

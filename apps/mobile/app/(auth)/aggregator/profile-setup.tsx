@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../../components/ui/Typography';
@@ -12,6 +12,7 @@ import { colors, spacing } from '../../../constants/tokens';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { safeBack } from '../../../utils/navigation';
 import { api } from '../../../lib/api';
+import { useAuthStore } from '../../../store/authStore';
 
 /**
  * Aggregator Profile Setup — Step 1 of 3
@@ -23,24 +24,52 @@ export default function AggregatorProfileSetup() {
     fullName, businessName, aggregatorType, primaryArea,
     operatingHours, operatingDays, setProfile
   } = useAggregatorStore();
+  const { token, setSession, user } = useAuthStore((s) => ({
+    token: s.token,
+    setSession: s.setSession,
+    user: s.user,
+  }));
 
   const isNextDisabled = !fullName || !aggregatorType || !primaryArea;
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleNext = async () => {
+    // Guard: must have a valid auth token before hitting protected endpoints
+    const currentToken = useAuthStore.getState().token;
+    if (!currentToken) {
+      Alert.alert('Session Error', 'Your session expired. Please go back and verify your phone again.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await api.post('/api/aggregators/profile', {
+      const profileRes = await api.post('/api/aggregators/profile', {
         name: fullName,
         business_name: businessName || fullName,
+        aggregator_type: aggregatorType,
         city_code: 'HYD', // Hardcoded for MVP
       });
+
+      // If the backend renamed the provisional ID, update token + user ID in auth store.
+      // The backend issues a fresh JWT for the new permanent ID to prevent stale-sub errors
+      // on subsequent requireAuth lookups (the old tmp_ ID no longer exists in the DB).
+      const idChanged: string | undefined = profileRes.data?.id_changed;
+      const freshToken: string | undefined = profileRes.data?.new_token;
+      if (idChanged && user) {
+        const tokenToUse = freshToken || currentToken;
+        console.log('[ProfileSetup] ID renamed to', idChanged, '— swapping token and updating auth store');
+        setSession({ token: tokenToUse, user: { ...user, id: idChanged }, isNewUser: false });
+      }
+
       await api.patch('/api/aggregators/profile', {
+        aggregator_type: aggregatorType,
         operating_hours: { days: operatingDays, from: operatingHours.from, to: operatingHours.to }
       });
       router.push('/(auth)/aggregator/area-setup' as any);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to create profile:', e);
+      const errMsg = e?.response?.data?.error || 'Failed to save profile. Please try again.';
+      Alert.alert('Error', errMsg);
     } finally {
       setIsLoading(false);
     }

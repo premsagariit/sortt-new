@@ -1,15 +1,15 @@
-# [APP_NAME] — AGENT MEMORY & ARCHITECTURE RULES
+﻿# [APP_NAME] — AGENT MEMORY & ARCHITECTURE RULES
 > ⚠️ **APP NAME PLACEHOLDER NOTICE**
 > The name **"Sortt"** used throughout this document and all project documents is a **placeholder only**.
 > The final product name has not been decided.
 > **To rebrand:** change `APP_NAME`, `APP_DOMAIN`, and `APP_SLUG` in `apps/mobile/constants/app.ts` and `apps/web/constants/app.ts`. Update `META_OTP_TEMPLATE_NAME` env var and resubmit the WhatsApp template to Meta. Rename the root directory. All other references in code will inherit from those two files automatically.
 > Agents must never hardcode the string `"Sortt"` in any generated code. Always import from `constants/app.ts`.
 
-**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 17 IN PROGRESS (2026-04-13) (Security & Launch) | Custom JWT Migration Complete | Admin Dashboard Enhanced
+**Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 17 IN PROGRESS (2026-04-13) (Security & Launch) | JWT Migration Complete | Admin Dashboard Enhanced
 
 > ✅ **Implementation Sync Note (2026-04-13) — Custom JWT & Admin Enhancements**
-> - Refactored entire auth system: Removed Clerk and replaced with Custom JWT Auth.
-> - Removed clerk_user_id columns and codebase references.
+> - Refactored entire auth system to a consolidated Custom JWT flow and removed legacy external auth dependencies.
+> - Removed legacy external auth user id columns and codebase references.
 > - Converted Database Primary Keys (PKs) from UUID to \`text\` globally to resolve database inconsistencies.
 > - Updated Admin Dashboard: Leaflet maps integrated, active/completed orders specific rendering upon click, order details include distance and cancellation reasons.
 > - Data masking updated: Phone numbers extract per-user sequence using even indices from end-to-start (13579).
@@ -40,7 +40,7 @@
 > - Autocomplete suggestions should show locality + city + state + country, but selected chips and stored values should remain locality-only.
 > - Seller browse search is tokenized across name, locality, and material type fields and should keep an explicit "No results found" empty state.
 
-> ℹ️ **Archive note:** If any older Supabase references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Clerk + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
+> ℹ️ **Archive note:** If any older legacy stack references appear in legacy/archive sections below, treat them as historical context only. Current implementation authority is Custom JWT + Ably + Cloudflare R2 + Azure PostgreSQL + Express/node-cron.
 
 > ✅ **Implementation Sync Note (2026-03-27) — Day 15 Complete**
 > - `packages/analysis/src/providers/GeminiVisionProvider.ts` implemented with env-driven model selection (`GEMINI_MODEL`, default `gemini-2.5-flash`).
@@ -169,7 +169,7 @@ Days 1–3  → UI shells (static, mock data)        [GATE PASSED 2026-03-01]
 Days 4–5  → Database + PostgreSQL schema         [GATE PASSED 2026-03-08]
 Day 6     → Express backend foundation           [GATE PASSED 2026-03-09]
 Day 7     → Auth routes + OTP + Scheduler        [GATE PASSED 2026-03-09]
-Day 8     → Mobile auth wiring + Clerk           [GATE PASSED 2026-03-10]
+Day 8     → Mobile auth wiring + Custom JWT           [GATE PASSED 2026-03-10]
 Day 9     → Core order routes                    [GATE PASSED 2026-03-13]
 Days 10–12 → Supporting routes + mobile API wiring + atomic ops [GATE PASSED]
 Day 13    → Ably realtime + push notifications   [GATE PASSED 2026-03-20]
@@ -185,7 +185,7 @@ Business/aggregator web remains deferred; admin web remains the active web scope
 **Rules that follow from this:**
 - Never start work on a later day's tasks until the current day's Verification Gate is fully passed.
 - Never attempt parallel workstreams — all agents work on the same day's tasks in sequence.
-- The static UI screens on Days 2–3 use hardcoded fixture data only — no Supabase calls, no Express calls, no real auth. That wiring happens on Days 5–7.
+- The static UI screens on Days 2–3 use hardcoded fixture data only — no legacy stack calls, no Express calls, no real auth. That wiring happens on Days 5–7.
 - TRD §10.1 configuration rules (no hardcoded API keys, provider abstraction usage, etc.) remain valid and in force — only the §10.2 workstream table is superseded.
 
 ---
@@ -201,19 +201,19 @@ Business/aggregator web remains deferred; admin web remains the active web scope
 | Core Backend | Node.js / Express on Azure App Service | All non-atomic business logic |
 | Atomic Operations | Express PostgreSQL Transactions | v2.0 update: replaces Edge Functions |
 | Database | Azure PostgreSQL Flexible Server | Central India region (CentralIndia) |
-| Realtime | Ably via `IRealtimeProvider` | v2.0 update: replaces Supabase |
-| Auth | Clerk + WhatsApp OTP | Session management via Clerk |
+| Realtime | Ably via `IRealtimeProvider` | v2.0 update: replaces legacy stack |
+| Auth | Custom JWT + WhatsApp OTP | Session management via Custom JWT |
 | Push Notifications | Expo Push Service (server SDK) | NOT raw FCM/APNs — but dual-token storage required |
 | Rate Limiting | Upstash Redis via `@upstash/ratelimit` + `express-rate-limit` | Required from day 1 for horizontal scale |
 | AI — Image Analysis | Gemini Flash Vision (via `IAnalysisProvider`) | 1,500 req/day free cap — enforce circuit breaker |
 | AI — Price Scraper | Python scraper (`scraper/main.py`) scheduled via node-cron in backend | Writes to `price_index` table with sanity checks |
 | Maps / Geocoding | Ola Maps API via `IMapProvider` + MapLibre tiles on mobile | Keep `MAP_PROVIDER`/`EXPO_PUBLIC_MAP_PROVIDER` env-driven |
 | PDF Generation | `pdf-lib` + `@pdf-lib/fontkit` | GST invoices — Native canvas instructions; `puppeteer` removed due to Azure limits |
-| Error Tracking (Backend/Web) | Azure Application Insights | Exception tracking + distributed tracing for Express/Next.js |
-| Error Tracking (Mobile) | Sentry React Native SDK | Mobile crash tracking + symbolication only |
+| Error Tracking (Backend/Web) | Azure Sentry | Exception tracking + distributed tracing for Express/Next.js |
+| Error Tracking (Mobile) | Sentry | Mobile crash tracking + symbolication only |
 | Uptime Monitoring | Azure Monitor Availability Tests | Replaces UptimeRobot synthetic checks |
-| Product Analytics | PostHog Cloud | Funnel events (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) |
-| Behavioral Analytics (Admin Web) | Microsoft Clarity | Session replay + click/scroll heatmaps for admin UX |
+| Product Analytics | Disabled | Funnel events (`listing_started`, `listing_submitted`, `order_accepted`, `order_completed`) |
+| Behavioral Analytics (Admin Web) | Disabled | Session replay + click/scroll heatmaps for admin UX |
 | Icons | Phosphor Icons (MIT) — outline, 1.5px stroke | Filled variant for active nav states only |
 | State Management | Zustand | No Redux, no Context API for global state |
 | Monorepo | pnpm workspaces | packages: `maps`, `realtime`, `auth`, `storage`, `analysis` |
@@ -332,7 +332,7 @@ All vendor calls MUST go through these interfaces in `packages/`:
 packages/
   maps/        → IMapProvider     (Google Maps / Ola Maps)
   realtime/    → IRealtimeProvider (Ably / Soketi)
-  auth/        → IAuthProvider    (Clerk Auth)
+  auth/        → IAuthProvider    (Custom JWT)
   storage/     → IStorageProvider (Cloudflare R2 / S3)
   analysis/    → IAnalysisProvider (Gemini Vision / OpenAI Vision)
 ```
@@ -445,7 +445,7 @@ Allowed transitions only:
 ### Data Exposure
 - **D1:** Private storage buckets + signed URLs only (see §3.9 above).
 - **D2:** Generic push notification bodies (see §3.8 above).
-- **D3:** Global Express error handler scrubs `process.env` before Application Insights capture. `git-secrets` pre-commit hook.
+- **D3:** Global Express error handler scrubs `process.env` before Sentry capture. `git-secrets` pre-commit hook.
 
 ### Client Trust
 - **C1:** OTP confirms WEIGHT AND AMOUNT — not just physical presence. Seller must review full transaction summary before OTP entry. `/verify-pickup-otp` receives HMAC-bound snapshot of order items.
@@ -463,7 +463,7 @@ Allowed transitions only:
 - **V7:** Privileged routes re-fetch `user_type` + `is_active` from DB, never trust JWT claim.
 - **V8:** `/verify-pickup-otp` checks `orders.aggregator_id = auth.uid()` inside the same FOR UPDATE transaction.
 - **V9:** WhatsApp OTP delivery is system-initiated only and server-controlled from backend auth/order flows. No client-callable endpoint may directly trigger unrestricted OTP delivery.
-- **V12:** `CLERK_SECRET_KEY` and other server secrets are server-only and must never appear in mobile/web public env vars or client bundles.
+- **V12:** `JWT_SECRET` and other server secrets are server-only and must never appear in mobile/web public env vars or client bundles.
 - **V13:** `IMMUTABLE_STATUSES = ['completed', 'disputed']` in backend status update route (see §3.6).
 - **V15b:** Image hash deduplication (SHA-256 → Redis cache, 24hr TTL) before Gemini call + global circuit breaker.
 - **V17:** `Cache-Control: public, max-age=300, stale-while-revalidate=600` + ETag on `GET /api/rates`.
@@ -484,15 +484,15 @@ Allowed transitions only:
 ## 5. Environment Variables Reference (All Required)
 
 ```
-# Supabase
-SUPABASE_URL
-SUPABASE_ANON_KEY
-SUPABASE_SERVICE_KEY          # Server-only. NEVER in client bundle or NEXT_PUBLIC_*
-SUPABASE_WEBHOOK_SECRET       # HMAC secret for DB webhook signature verification (A2)
-SUPABASE_HOOK_SECRET          # HMAC secret for custom OTP delivery Hook → /api/auth/whatsapp-otp
+# legacy stack
+legacy stack_URL
+legacy stack_ANON_KEY
+legacy stack_SERVICE_KEY          # Server-only. NEVER in client bundle or NEXT_PUBLIC_*
+legacy stack_WEBHOOK_SECRET       # HMAC secret for DB webhook signature verification (A2)
+legacy stack_HOOK_SECRET          # HMAC secret for custom OTP delivery Hook → /api/auth/whatsapp-otp
 
 # Custom Backend
-JWT_SECRET                    # Mirror of Supabase JWT secret
+JWT_SECRET                    # Mirror of legacy stack JWT secret
 OTP_HMAC_SECRET               # HMAC-SHA256 key for OTP hashing (X3, V6)
 
 # Upstash Redis
@@ -510,25 +510,25 @@ META_OTP_TEMPLATE_NAME        # Approved authentication template name (e.g. "[ap
 META_API_VERSION              # e.g. "v19.0" — pin to a specific version, update deliberately
 
 # Maps
-GOOGLE_MAPS_API_KEY
-MAP_PROVIDER                  # "google" | "ola" — switches IMapProvider impl
+OLA_MAPS_API_KEY
+MAP_PROVIDER                  # "ola" — switches IMapProvider impl
 
 # Push
 EXPO_ACCESS_TOKEN
 
 # Observability / Analytics
-APPLICATIONINSIGHTS_CONNECTION_STRING
+SENTRY_DSN
 SENTRY_DSN_MOBILE            # Mobile-only Sentry DSN (React Native crash symbolication)
-POSTHOG_API_KEY              # Product analytics (funnels)
-POSTHOG_HOST                 # PostHog host, default https://app.posthog.com
-NEXT_PUBLIC_CLARITY_PROJECT_ID  # Admin web behavioral analytics (Clarity)
+PRODUCT_ANALYTICS_API_KEY    # Optional: product analytics (currently disabled in runtime)
+PRODUCT_ANALYTICS_HOST       # Optional: product analytics host (currently disabled)
+NEXT_PUBLIC_BEHAVIOR_ANALYTICS_PROJECT_ID  # Optional: admin behavior analytics project id (currently disabled)
 
 # Ably
 ABLY_API_KEY                  # Backend-only. NEVER in mobile env/bundle.
 EXPO_PUBLIC_ABLY_AUTH_URL     # Mobile token endpoint: ${EXPO_PUBLIC_API_URL}/api/realtime/token
 
 # Provider Switches
-REALTIME_PROVIDER             # "supabase" | "ably" | "soketi"
+REALTIME_PROVIDER             # "ably" | "soketi"
 
 # Python Price Scraper
 GEMINI_API_KEY_SCRAPER        # Can share with main key or be separate
@@ -542,7 +542,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 | Threshold | What Breaks | Mitigation Required |
 |---|---|---|
 | **1,000 OTPs/month** | Meta free WhatsApp auth conversation quota exhausted | Enable paid Meta billing (~₹0.4–0.6/conversation for India) |
-| **30K DAU** | Supabase Realtime 1,000 conn ceiling | Swap `IRealtimeProvider` to Ably/Soketi |
+| **30K DAU** | legacy stack Realtime 1,000 conn ceiling | Swap `IRealtimeProvider` to Ably/Soketi |
 | **75K DAU** | Gemini free tier 1,500 req/day exceeded | Enable paid Gemini — per-user limits already in place |
 | **City 2 launch** | `city TEXT` column inconsistencies in price index | `cities` reference table migration (14.6.9) |
 | **City 2 launch** | Single-city price scraper breaks | Extend scraper for per-city source URLs |
@@ -591,14 +591,14 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 │   │   │   ├── auth.ts           # JWT verification (A1)
 │   │   │   ├── cors.ts           # CORS allowlist (X1)
 │   │   │   ├── webhookHmac.ts    # DB webhook HMAC validation (A2)
-│   │   │   └── hookHmac.ts       # Supabase Auth Hook HMAC validation (SUPABASE_HOOK_SECRET)
+│   │   │   └── hookHmac.ts       # legacy stack Auth Hook HMAC validation (legacy stack_HOOK_SECRET)
 │   │   ├── routes/
 │   │   │   └── auth/
 │   │   │       └── whatsappOtp.ts  # POST /api/auth/whatsapp-otp — Custom OTP delivery handler
 │   │   ├── storage/              # IStorageProvider implementation
 │   │   └── utils/
 │   │       └── rateLimit.ts      # Upstash Redis rate limiters
-├── supabase/
+├── legacy stack/
 │   ├── migrations/               # All DDL migrations
 │   └── functions/
 │       ├── accept-order/         # Edge Function 1
@@ -609,7 +609,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 
 ---
 
-## 8. pg_cron Jobs (All Required — Supabase Pro tier)
+## 8. pg_cron Jobs (All Required — legacy stack Pro tier)
 
 | Job Name | Schedule | Description |
 |---|---|---|
@@ -619,7 +619,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
 | `cleanup-otp-log` | Nightly 02:00 UTC | Deletes `otp_log` rows where `expires_at < NOW() - 7 days` |
 | `culling-offline-aggregators` | Every 5 min | Sets `is_online=false` where `last_ping_at < NOW() - 5 min` (C2) |
 
-> `create-message-partition` MUST stay as pg_cron (must run even if backend is down). Others can move to `node-cron` on custom backend to reduce Supabase Pro dependency (14.6.8).
+> `create-message-partition` MUST stay as pg_cron (must run even if backend is down). Others can move to `node-cron` on custom backend to reduce legacy stack Pro dependency (14.6.8).
 
 ---
 
@@ -639,7 +639,7 @@ PRICE_SCRAPER_WEBHOOK_URL     # Endpoint to POST scraped results to backend
   - `apps/web/` — package.json (Next.js 15, Tailwind, Radix UI), tsconfig.json, `tailwind.config.ts` (imports from tokens.ts — no hex duplication)
   - `backend/` — package.json (Express, helmet, Upstash, sharp, pdf-lib, expo-server-sdk), tsconfig.json (CommonJS, outDir: dist), `src/index.ts` stub
   - `packages/maps|realtime|auth|storage|analysis/` — each has `package.json` + `src/index.ts` stub (Day 8 implementation)
-  - `supabase/migrations/`, `supabase/functions/accept-order/`, `supabase/functions/verify-pickup-otp/` — `.gitkeep` only
+  - `legacy stack/migrations/`, `legacy stack/functions/accept-order/`, `legacy stack/functions/verify-pickup-otp/` — `.gitkeep` only
   - `apps/mobile/constants/tokens.ts` — SINGLE SOURCE OF TRUTH for all hex values (MEMORY.md §2 exact values)
   - `apps/mobile/constants/app.ts` — SINGLE SOURCE OF TRUTH for APP_NAME, APP_DOMAIN, APP_SLUG (all placeholders)
   - `apps/web/constants/tokens.ts` + `apps/web/constants/app.ts` — mirror copies of above
@@ -705,13 +705,13 @@ Affects: apps/mobile/app/_layout.tsx
 
 - **[2026-03-17] PostgreSQL UNIQUE Constraint + Application-Level Mode Validation = Defense in Depth:** The DB constraint (`UNIQUE(phone_hash)`) and application-level mode existence checks both prevent double-signup race conditions. Do NOT omit one for the sake of simplicity. The DB constraint catches concurrent HTTP requests that both pass the app-level check; the app-level check ensures fail-fast 404/409 responses. Query: `SELECT rowCount ?? 0 > 0` (null-safety fix for pg library) to determine existence. Affects: `backend/src/routes/auth.ts`, migration `0022_unique_phone_hash.sql`.
 
-- **[2026-03-17] Response DTO — Explicit Field Exclusion (Security V24):** The OTP verify response **must not** include `phone`, `phone_hash`, `clerk_user_id`, or any sensitive identifiers. Response contract: `{ token: { jwt }, user: { id, user_type }, is_new_user }` (4 fields only). This forces all routing logic to depend on the `is_new_user` flag (not on checking if user_type exists) and prevents leaking auth metadata. Build the DTO by explicitly selecting fields, not by spreading and deleting. Affects: `backend/src/routes/auth.ts` line ~120.
+- **[2026-03-17] Response DTO — Explicit Field Exclusion (Security V24):** The OTP verify response **must not** include `phone`, `phone_hash`, `legacy external auth user id`, or any sensitive identifiers. Response contract: `{ token: { jwt }, user: { id, user_type }, is_new_user }` (4 fields only). This forces all routing logic to depend on the `is_new_user` flag (not on checking if user_type exists) and prevents leaking auth metadata. Build the DTO by explicitly selecting fields, not by spreading and deleting. Affects: `backend/src/routes/auth.ts` line ~120.
 
 - **[2026-03-17] Post-Verify Routing — Three Branches via is_new_user + user_type:** After OTP verify, route based on two pieces of state: (1) `is_new_user` from the response, (2) `user_type` from the response. Three branches: new user → role selection screen; returning seller → seller home (skip onboarding); returning aggregator → aggregator home (skip onboarding). This pattern requires the mobile app to store both flags in auth state and read them immediately after `setSession()`. Affects: `apps/mobile/app/(auth)/phone.tsx` lines ~180–210, the post-verify callback.
 
 - **[2026-03-17] Returning User Guard — isNewUser Redirect Pattern:** The `/(auth)/user-type` screen must redirect users with `isNewUser: false` directly to their role-specific home. This prevents UI reach (user sees a role selection screen but already has a role). Pattern in `user-type.tsx`: `useEffect(() => { if (!isNewUser) router.replace(userType === 'aggregator' ? '/(aggregator)/home' : '/(seller)/home'); }, [isNewUser])`. Guard must run on every render, not just mount, to catch updates to isNewUser. Affects: `apps/mobile/app/(auth)/user-type.tsx`.
 
-- **[2026-03-17] Logout Handler Standardization:** Both Seller and Aggregator home screens must call the same logout sequence: `clerkSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`. The order is critical: Clerk signs out first (invalidates JWT), then app state is cleared, then router navigates off the screen. Use `router.replace` not `push` to prevent going back. Consolidate logout logic into a helper function in authStore (e.g., `performLogout()`) to avoid duplication across two home screens. Affects: `apps/mobile/app/(seller)/home.tsx`, `apps/mobile/app/(aggregator)/home.tsx`, `apps/mobile/store/authStore.ts`.
+- **[2026-03-17] Logout Handler Standardization:** Both Seller and Aggregator home screens must call the same logout sequence: `Custom JWTSignOut()` → `clearSession()` → `router.replace('/(auth)/phone')`. The order is critical: Custom JWT signs out first (invalidates JWT), then app state is cleared, then router navigates off the screen. Use `router.replace` not `push` to prevent going back. Consolidate logout logic into a helper function in authStore (e.g., `performLogout()`) to avoid duplication across two home screens. Affects: `apps/mobile/app/(seller)/home.tsx`, `apps/mobile/app/(aggregator)/home.tsx`, `apps/mobile/store/authStore.ts`.
 
 - **[2026-02-27] UI reference HTML overrides in-progress screen designs:** `sortt_seller_ui.html` was introduced as the canonical visual spec. It reveals: (1) Seller tab bar is Home/Orders/Browse/Profile — not Home/My Orders/Prices/Profile; (2) Aggregator has 5 tabs not 4; (3) Greeting strip is a separate navy View above the scroll container; (4) NavBar needs a light variant; (5) 6 new colour tokens and 6 material-bg tokens are required. All screens currently in progress (home.tsx, prices.tsx) must be rebuilt to match the HTML reference before proceeding. tokens.ts must be updated first.Affects: tokens.ts, TabBar.tsx, NavBar.tsx, all seller and aggregator screens.
 
@@ -832,7 +832,7 @@ Do not delete old entries. Append only.
 | Without memory discipline | With memory discipline |
 |---|---|
 | Agent scans all 50+ files to find the colour tokens | Agent reads §2 — done in 10 seconds |
-| Agent calls `supabase.storage` directly | Agent reads §3.1 — uses IStorageProvider |
+| Agent calls `legacy stack.storage` directly | Agent reads §3.1 — uses IStorageProvider |
 | Agent uses Twilio for OTP | Agent reads §3.5 — uses WhatsApp hook |
 | Agent trusts JWT `user_type` claim | Agent reads §3.5 — re-fetches from DB |
 | Agent ships `phone_hash` in API response | Agent reads §3.7 / §4 D2 — blocked |
@@ -885,7 +885,7 @@ Do not delete old entries. Append only.
 
 - **[2026-03-09] Partition RLS Inheritance:** Enabling Row Level Security (`ALTER TABLE parent ENABLE ROW LEVEL SECURITY`) on a partitioned parent table does NOT automatically enable it on existing child partition tables. `rowsecurity=false` will remain on the partitions. You must explicitly run `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every individual partition table. Affects: `migrations/0009_rls.sql`.
 
-- **[2026-03-09] Clerk Middleware Secret Requirement:** `ClerkExpressRequireAuth()` throws a fatal error if `CLERK_SECRET_KEY` is missing from the environment, crashing the server. In phased deployments where secrets are not yet injected, explicitly check for `process.env.CLERK_SECRET_KEY` and gracefully return a 401 to prevent the app from failing to boot. Affects: `backend/src/middleware/auth.ts`.
+- **[2026-03-09] Custom JWT Middleware Secret Requirement:** `Custom JWTExpressRequireAuth()` throws a fatal error if `JWT_SECRET` is missing from the environment, crashing the server. In phased deployments where secrets are not yet injected, explicitly check for `process.env.JWT_SECRET` and gracefully return a 401 to prevent the app from failing to boot. Affects: `backend/src/middleware/auth.ts`.
 
 - **[2026-03-09] Azure App Service Node.js Version Match:** The GitHub Actions workflow `setup-node` version must exactly match the Node LTS version provisioned on the Azure App Service (e.g., `24.x`). Mismatches cause silent deployment or startup failures in Kudu. Affects: `.github/workflows/main_sortt-backend.yml`.
 
@@ -893,11 +893,11 @@ Do not delete old entries. Append only.
 
 - **[2026-03-09, updated 2026-03-10] HMAC-SHA256 for OTP Hashing:** Raw OTPs must never be persisted. Only the HMAC-SHA256 hash (using `OTP_HMAC_SECRET`) should be stored in Redis for verification. The `otp_log` table should store only the `phone_hash` and `expires_at`, with `otp_hmac` made nullable and kept empty to prevent any leakage of verification material in the audit log. Verification is purely Redis-driven via TTL. Affects: `backend/src/routes/auth.ts`.
 
-- **[2026-03-10] Auth Router Mounting Order:** The `authRouter` (containing `/request-otp` and `/verify-otp`) must be mounted in `index.ts` BEFORE the global Clerk `authMiddleware`. This ensures that public OTP routes are accessible without a JWT. Additionally, these routes should be explicitly listed in the middleware exemption list in `middleware/auth.ts` as a secondary guard. Affects: `backend/src/index.ts`, `backend/src/middleware/auth.ts`.
+- **[2026-03-10] Auth Router Mounting Order:** The `authRouter` (containing `/request-otp` and `/verify-otp`) must be mounted in `index.ts` BEFORE the global Custom JWT `authMiddleware`. This ensures that public OTP routes are accessible without a JWT. Additionally, these routes should be explicitly listed in the middleware exemption list in `middleware/auth.ts` as a secondary guard. Affects: `backend/src/index.ts`, `backend/src/middleware/auth.ts`.
 
 - **[2026-03-20] Day 13 channel contract fix (V32):** Mobile must subscribe using backend-provided full channel tokens (`orderChannelToken`, `chatChannelToken`) and must never build private channel names from raw `orderId`. This eliminates channel-pattern drift and keeps backend `channelHelper.ts` as source of truth. Affects: `apps/mobile/hooks/useOrderChannel.ts`, `backend/src/utils/channelHelper.ts`, `backend/src/utils/orderDto.ts`.
 
-- **[2026-03-20] Ably Token Auth hard rule:** `ABLY_API_KEY` remains backend-only; mobile authenticates only via `GET /api/realtime/token` using Clerk JWT. `EXPO_PUBLIC_ABLY_AUTH_URL` is allowed in mobile env; `EXPO_PUBLIC_ABLY_KEY` must not be used. Affects: `backend/src/routes/realtime.ts`, `backend/src/lib/realtime.ts`, `apps/mobile/lib/realtime.ts`, `apps/mobile/.env.example`.
+- **[2026-03-20] Ably Token Auth hard rule:** `ABLY_API_KEY` remains backend-only; mobile authenticates only via `GET /api/realtime/token` using Custom JWT. `EXPO_PUBLIC_ABLY_AUTH_URL` is allowed in mobile env; `EXPO_PUBLIC_ABLY_KEY` must not be used. Affects: `backend/src/routes/realtime.ts`, `backend/src/lib/realtime.ts`, `apps/mobile/lib/realtime.ts`, `apps/mobile/.env.example`.
 
 - **[2026-03-20] Realtime cleanup pattern on app background:** Closing the singleton Ably client via `disconnectRealtime()` in root AppState handler is the stable cleanup pattern; listener-only cleanup on individual screens is not sufficient for background lifecycle culling. Affects: `apps/mobile/app/_layout.tsx`, `apps/mobile/lib/realtime.ts`.
 
@@ -913,11 +913,11 @@ Do not delete old entries. Append only.
 
 - **[2026-03-10] Selfie Card Labeling:** To reduce user friction, the selfie upload card must be labeled "Your Photo" with the instructional subtext "Clear selfie facing the camera". This is more intuitive for non-technical users than "Selfie". Affects: `apps/mobile/app/(auth)/aggregator/kyc.tsx`.
 
-- **[2026-03-11] Clerk Token Lifecycle Constraints:** Do not cache the Clerk token persistently in Zustand's `authStore.clerkToken` across app reloads, as the token is short-lived. Instead, retrieve the session token dynamically using `await clerk.session?.getToken()` on every authenticated API request via a functional getter in the API interceptor, or maintain it synchronously via Clerk's active session state. Only store non-expired data into the `authStore`. Affects: `apps/mobile/lib/api.ts`, `apps/mobile/store/authStore.ts`.
+- **[2026-03-11] Custom JWT Token Lifecycle Constraints:** Do not cache the Custom JWT token persistently in Zustand's `authStore.Custom JWTToken` across app reloads, as the token is short-lived. Instead, retrieve the session token dynamically using `await Custom JWT.session?.getToken()` on every authenticated API request via a functional getter in the API interceptor, or maintain it synchronously via Custom JWT's active session state. Only store non-expired data into the `authStore`. Affects: `apps/mobile/lib/api.ts`, `apps/mobile/store/authStore.ts`.
 
 - **[2026-03-13] aggregator_profiles has no locality column:** Use `operating_area` instead for aggregator profiles. Affects: `aggregator_profiles` schema and queries.
 - **[2026-03-13] preferred_pickup_window is JSONB:** Always wrap `pickup_preference` as `JSON.stringify({ type: value })` before INSERT into `preferred_pickup_window`. Affects: `orders` INSERT logic.
-- **[2026-03-13] Clerk Auth Middleware redirection:** `clerkMiddleware()` and `requireAuth()` from `@clerk/express` can redirect on invalid tokens. Use `createClerkClient().verifyToken()` directly for API backends to ensure 401 responses. Affects: `backend/src/middleware/auth.ts`.
+- **[2026-03-13] Custom JWT Middleware redirection:** `Custom JWTMiddleware()` and `requireAuth()` from `@Custom JWT/express` can redirect on invalid tokens. Use `createCustom JWTClient().verifyToken()` directly for API backends to ensure 401 responses. Affects: `backend/src/middleware/auth.ts`.
 - **[2026-03-13] verify-otp response shape:** The `verify-otp` endpoint returns `{ token: { jwt: "..." } }` not `{ token: "..." }`. Access the JWT as `response.token.jwt`. Affects: Mobile auth flow.
 - **[2026-03-13] otp_log.otp_hmac contents:** The `otp_log.otp_hmac` column stores status strings like `otp_sent`, `otp_verified`, `otp_failed` rather than the actual HMAC hash. Affects: `otp_log` auditing.
 - **[2026-03-13] POST /api/orders response shape:** The response for order creation is wrapped as `{ order: {...} }` rather than a flat object. Affects: Order creation DTO mapping.
@@ -960,10 +960,10 @@ Do not delete old entries. Append only.
 - **[2026-03-31] Dispute mobile screen shipped as mock:** Shared dispute UI used `setTimeout` mock submit, wrong issue enums, missing maxLength, no inline error, and raw back navigation. Fixed to call `/api/disputes` through shared API client, use exact issue enums, enforce 2000-char input cap, render inline errors, and use `safeBack(fallbackRoute)`. Root cause: UI scaffold not converted to production API integration. Affects: `apps/mobile/app/(shared)/dispute.tsx`.
 - **[2026-03-31] Dispute entry-point gaps in order detail screens:** Required raise-dispute entry points were missing in scoped seller/aggregator detail files. Added completed-status-gated dispute actions with explicit route params and fallback navigation. Root cause: dispute CTA placement focused on alternate receipt flows, leaving scoped detail surfaces incomplete. Affects: `apps/mobile/app/(seller)/order/[id].tsx`, `apps/mobile/app/(aggregator)/active-order-detail.tsx`.
 - **[2026-03-31] Error response stack leakage in dev paths:** API could return stack traces for malformed requests in non-production environments. Fixed global error handler to return sanitized error bodies without stack in all environments, preserving 4xx vs 5xx semantics. Root cause: debug-oriented non-prod branch leaked internals. Affects: `backend/src/middleware/errorHandler.ts`.
-- **[2026-03-31] Startup diagnostics secret-prefix exposure:** Boot logs printed partial secret prefixes for Clerk keys. Replaced with boolean configured/missing diagnostics only. Root cause: convenience debugging log was not security-hardened. Affects: `backend/src/index.ts`.
+- **[2026-03-31] Startup diagnostics secret-prefix exposure:** Boot logs printed partial secret prefixes for Custom JWT keys. Replaced with boolean configured/missing diagnostics only. Root cause: convenience debugging log was not security-hardened. Affects: `backend/src/index.ts`.
 
 - **[2026-04-04] Admin UI Design System Alignment:** Migrated all admin modules (`login`, `layout`, `kyc`, `disputes`) to use semantic Tailwind tokens from `apps/web/constants/tokens.ts`. Removed all hardcoded hex values to ensure design system consistency. Affects: `apps/web/app/admin/*`.
-- **[2026-04-04] Image Optimization & Next.js Compliance:** Replaced all legacy `<img>` tags with Next.js `<Image />` component across the admin dashboard. Configured `remotePatterns` in `next.config.ts` to allow optimized image fetching from Cloudflare R2 and Clerk. Affects: `apps/web/app/admin/*`, `apps/web/next.config.ts`.
+- **[2026-04-04] Image Optimization & Next.js Compliance:** Replaced all legacy `<img>` tags with Next.js `<Image />` component across the admin dashboard. Configured `remotePatterns` in `next.config.ts` to allow optimized image fetching from Cloudflare R2 and Custom JWT. Affects: `apps/web/app/admin/*`, `apps/web/next.config.ts`.
 - **[2026-04-04] Admin Icon Type Safety:** Resolved strict TypeScript linting errors in admin navigation and components by explicitly importing and applying `IconWeight` types from `phosphor-react`. Affects: `apps/web/app/admin/layout.tsx`, `apps/web/app/admin/kyc/page.tsx`.
 - **[2026-04-04] Repository Cleanup (Ready for Launch):** Executed a full cleanup of temporary `.tmp` JWTs, standalone test scripts, and integration logs from both root and backend directories to finalize the project state for Day 17 Security Audit.
 
@@ -997,3 +997,7 @@ Sortt uses three distinct levels of pricing to manage marketplace expectations a
 - Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
 - Admin metrics accurately track deterministic IDs correctly without constraint errors.
 - UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
+
+
+
+

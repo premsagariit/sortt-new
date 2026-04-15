@@ -397,7 +397,7 @@ export default function SellerOrderReceiptScreen() {
               phone={order.aggregatorPhone || null}
               role="Aggregator"
               userType="aggregator"
-              onChat={order.aggregatorId ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
+                onChat={order.aggregatorId && order.status !== 'completed' ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
               unreadCount={chatUnread}
             />
           </View>

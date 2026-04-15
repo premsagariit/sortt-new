@@ -26,6 +26,7 @@ export interface AggregatorProfile {
   name: string | null;
   email: string | null;
   businessName: string | null;
+  aggregatorType: 'shop' | 'mobile' | null;
   operatingArea: string | null;
   operatingHours: any | null;
   kycStatus: string | null;
@@ -191,7 +192,7 @@ interface AggregatorStoreState {
   /** GET /api/aggregators/earnings?period=... */
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates name, business_name, operating_area */
-  updateProfile: (payload: { name?: string; email?: string | null; business_name?: string; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
+  updateProfile: (payload: { name?: string; email?: string | null; business_name?: string; aggregator_type?: 'shop' | 'mobile' | null; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
   updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -677,6 +678,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       const operatingHours = payload.operating_hours ?? payload.aggregator_operating_hours ?? null;
       const operatingArea = payload.operating_area ?? payload.aggregator_locality ?? null;
       const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
+      const aggregatorType = payload.aggregator_type ?? payload.aggregatorType ?? null;
       const cityCode = payload.city_code ?? payload.aggregator_city_code ?? null;
       const kycStatus = payload.kyc_status ?? payload.aggregator_kyc_status ?? null;
 
@@ -707,6 +709,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
           name,
           email,
           businessName,
+          aggregatorType,
           operatingArea: primaryAreaText,
           operatingHours: { ...operatingHours, days: parsedSchedule },
           kycStatus,
@@ -811,6 +814,11 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       }
       if (payload.business_name !== undefined) {
         set({ businessName: payload.business_name });
+      }
+      if (payload.aggregator_type !== undefined) {
+        set((state) => ({
+          profile: state.profile ? { ...state.profile, aggregatorType: payload.aggregator_type ?? null } : state.profile,
+        }));
       }
       if (payload.operating_area !== undefined) {
         const areasArray = Array.isArray(payload.operating_area)

@@ -8,16 +8,15 @@ import { Nut, FileText, Drop, Laptop, TShirt, Brandy, Package } from 'phosphor-r
 export const MATERIAL_META: Record<MaterialCode, {
   title: string;
   subtitle: string;
-  minWeight: string;
   Icon: any;
 }> = {
-  metal: { title: 'Metal', subtitle: 'Iron, copper, aluminium', minWeight: 'Min. 1 kg', Icon: Nut },
-  paper: { title: 'Paper', subtitle: 'Newspaper, cardboard', minWeight: 'Min. 2 kg', Icon: FileText },
-  plastic: { title: 'Plastic', subtitle: 'PET, HDPE, other', minWeight: 'Min. 1 kg', Icon: Drop },
-  ewaste: { title: 'E-Waste', subtitle: 'Electronics, cables', minWeight: 'Min. 0.5 kg', Icon: Laptop },
-  fabric: { title: 'Fabric', subtitle: 'Clothes, textile', minWeight: 'Min. 1 kg', Icon: TShirt },
-  glass: { title: 'Glass', subtitle: 'Bottles, flat glass', minWeight: 'Min. 2 kg', Icon: Brandy },
-  custom: { title: 'Other', subtitle: 'Miscellaneous scrap', minWeight: 'Min. 1 kg', Icon: Package },
+  metal: { title: 'Metal', subtitle: 'Iron, copper, aluminium', Icon: Nut },
+  paper: { title: 'Paper', subtitle: 'Newspaper, cardboard', Icon: FileText },
+  plastic: { title: 'Plastic', subtitle: 'PET, HDPE, other', Icon: Drop },
+  ewaste: { title: 'E-Waste', subtitle: 'Electronics, cables', Icon: Laptop },
+  fabric: { title: 'Fabric', subtitle: 'Clothes, textile', Icon: TShirt },
+  glass: { title: 'Glass', subtitle: 'Bottles, flat glass', Icon: Brandy },
+  custom: { title: 'Other', subtitle: 'Miscellaneous scrap', Icon: Package },
 };
 
 interface MaterialCardProps {
@@ -50,9 +49,6 @@ export function MaterialCard({ code, isSelected, onPress }: MaterialCardProps) {
       </Text>
       <Text variant="caption" style={styles.subtitle} numberOfLines={1}>
         {meta.subtitle}
-      </Text>
-      <Text variant="caption" style={styles.minWeight}>
-        {meta.minWeight}
       </Text>
     </Pressable>
   );
@@ -91,9 +87,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: spacing.xs,
     textAlign: 'center',
-  },
-  minWeight: {
-    color: '#94A3B8', // Slate 400
-    fontSize: 11,
   }
 });

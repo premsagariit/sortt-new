@@ -7,6 +7,7 @@ import {
   ShoppingBag, Search, ChevronRight, RefreshCw,
   Clock, CheckCircle, XCircle, Truck, AlertCircle, Package,
 } from 'lucide-react';
+import { BoneyardTable } from '@/components/ui/Boneyard';
 import styles from './orders.module.css';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -67,6 +68,12 @@ export default function AdminOrdersPage() {
     o.seller_phone?.includes(search)
   );
 
+  useEffect(() => {
+    filtered.slice(0, 12).forEach((order) => {
+      router.prefetch(`/admin/orders/${order.id}`);
+    });
+  }, [filtered, router]);
+
   return (
     <div className={styles.page}>
       {/* Header */}
@@ -112,10 +119,7 @@ export default function AdminOrdersPage() {
       {/* Table */}
       <div className={styles.tableWrapper}>
         {loading ? (
-          <div className={styles.loadingState}>
-            <div className={styles.spinner} />
-            <span>Loading orders...</span>
-          </div>
+          <BoneyardTable preset="orders" rows={9} />
         ) : filtered.length === 0 ? (
           <div className={styles.emptyState}>
             <AlertCircle size={40} />
@@ -144,6 +148,7 @@ export default function AdminOrdersPage() {
                     key={order.id}
                     className={styles.row}
                     onClick={() => router.push(`/admin/orders/${order.id}`)}
+                    onMouseEnter={() => router.prefetch(`/admin/orders/${order.id}`)}
                   >
                     <td className={styles.orderId}>{order.id}</td>
                     <td>

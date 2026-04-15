@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import type { AdminOrderPin } from '@/lib/adminApi';
 import { MapPin, RefreshCw, AlertCircle } from 'lucide-react';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 import styles from './map.module.css';
 
 // Status → colour for Leaflet markers
@@ -178,8 +179,10 @@ export default function MapPage() {
       <div className={styles.mapContainer}>
         {loading && (
           <div className={styles.mapOverlay}>
-            <div className={styles.spinner} />
-            <span>Loading map data…</span>
+            <div className="w-[min(480px,90%)] space-y-3">
+              <BoneyardBlock className="h-4 w-32 mx-auto" />
+              <BoneyardBlock className="h-52 w-full rounded-xl" />
+            </div>
           </div>
         )}
         {error && (

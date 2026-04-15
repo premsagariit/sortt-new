@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import NextImage from 'next/image';
 import { adminApi, type Dispute, type AdminOrderDetail, type AdminOrderItem } from '../../../../lib/adminApi';
+import { BoneyardBlock, BoneyardCardList } from '@/components/ui/Boneyard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -372,10 +373,10 @@ function DisputeRow({
                   <div className="space-y-3">
                     {[1,2,3,4].map((i) => (
                       <div key={i} className="flex gap-3 items-start">
-                        <div className="w-10 h-10 rounded-full bg-border animate-pulse flex-shrink-0" />
+                        <BoneyardBlock className="w-10 h-10 rounded-full flex-shrink-0" />
                         <div className="flex-1 space-y-1.5 pt-2">
-                          <div className="h-3 bg-border rounded animate-pulse w-2/3" />
-                          <div className="h-2.5 bg-border rounded animate-pulse w-1/2" />
+                          <BoneyardBlock className="h-3 rounded w-2/3" />
+                          <BoneyardBlock className="h-2.5 rounded w-1/2" />
                         </div>
                       </div>
                     ))}
@@ -478,19 +479,7 @@ export default function DisputesPage() {
 
       {/* Skeleton loading */}
       {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white border border-border rounded-2xl p-5 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-border flex-shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-border rounded w-1/3" />
-                  <div className="h-3 bg-border rounded w-2/3" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <BoneyardCardList rows={3} />
       )}
 
       {/* Empty state */}

@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import NextImage from 'next/image';
 import { adminFetch } from '../../../../lib/adminApi';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 
 function setFallbackAdminToken(token: string) {
   const maxAge = 15 * 60;
@@ -23,7 +24,7 @@ export default function AdminLoginPage() {
   return (
     <Suspense fallback={
        <div className="min-h-screen bg-navy flex items-center justify-center">
-         <div className="text-white font-bold animate-pulse">Loading secure portal...</div>
+         <BoneyardBlock className="h-5 w-44 bg-white/40" />
        </div>
     }>
       <AdminLoginContent />

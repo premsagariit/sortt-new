@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import NextImage from 'next/image';
 import { adminApi, type KycPendingItem, type KycDocument } from '../../../../lib/adminApi';
+import { BoneyardCardList, BoneyardDocGrid } from '@/components/ui/Boneyard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -166,11 +167,7 @@ function KycCard({
               </div>
 
               {docsLoading && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="aspect-[4/3] bg-border rounded-xl animate-pulse" />
-                  ))}
-                </div>
+                <BoneyardDocGrid cards={4} />
               )}
 
               {!docsLoading && docs && docs.length === 0 && (
@@ -366,19 +363,7 @@ export default function KycQueuePage() {
 
       {/* Skeleton */}
       {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white border border-border rounded-2xl p-5 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-border flex-shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-border rounded w-1/3" />
-                  <div className="h-3 bg-border rounded w-2/3" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <BoneyardCardList rows={3} />
       )}
 
       {/* Empty */}

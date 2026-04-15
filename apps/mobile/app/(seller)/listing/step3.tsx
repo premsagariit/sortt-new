@@ -16,12 +16,12 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { safeBack } from '../../../utils/navigation';
 
 const TIMES = [
-  { label: 'Morning · 8–10 AM', value: 'morning_8_10' },
-  { label: 'Morning · 10–12 PM', value: 'morning_10_12' },
-  { label: 'Afternoon · 12–2 PM', value: 'afternoon_12_2' },
-  { label: 'Afternoon · 2–4 PM', value: 'afternoon_2_4' },
-  { label: 'Afternoon · 4–6 PM', value: 'afternoon_4_6' },
-  { label: 'Evening · 6 PM+', value: 'evening_6_plus' },
+  { label: 'Morning · 8–10 AM', value: 'morning_8_10', startHour: 8 },
+  { label: 'Morning · 10–12 PM', value: 'morning_10_12', startHour: 10 },
+  { label: 'Afternoon · 12–2 PM', value: 'afternoon_12_2', startHour: 12 },
+  { label: 'Afternoon · 2–4 PM', value: 'afternoon_2_4', startHour: 14 },
+  { label: 'Afternoon · 4–6 PM', value: 'afternoon_4_6', startHour: 16 },
+  { label: 'Evening · 6 PM+', value: 'evening_6_plus', startHour: 18 },
 ];
 
 const formatAddress = (address: {
@@ -86,11 +86,23 @@ export default function Step3Screen() {
     }
     if (selectedDate) {
       setScheduledDate(selectedDate.toISOString());
+      setScheduledTime(''); // Reset time when date changes
     }
   };
 
-  const canProceed =
-    (pickupType === 'dropoff' || (pickupType === 'scheduled' && !!selectedAddressId && !!scheduledDate && !!scheduledTime));
+  const isToday = (dateString: string) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    const today = new Date();
+    return d.getDate() === today.getDate() &&
+           d.getMonth() === today.getMonth() &&
+           d.getFullYear() === today.getFullYear();
+  };
+
+  const currentHour = new Date().getHours();
+  const selectedIsToday = isToday(scheduledDate);
+
+  const canProceed = !!selectedAddressId && !!scheduledDate && !!scheduledTime;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -106,39 +118,12 @@ export default function Step3Screen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text variant="heading">Pickup preference</Text>
-          </View>
-
-          <View style={styles.typeRow}>
-            <Pressable
-              style={[styles.typeCard, pickupType === 'scheduled' ? styles.typeSelected : styles.typeUnselected]}
-              onPress={() => setPickupType('scheduled')}
-            >
-              <Truck size={32} color={pickupType === 'scheduled' ? colors.surface : colors.navy} weight="duotone" />
-              <Text variant="label" style={{ color: pickupType === 'scheduled' ? colors.surface : colors.navy, marginTop: spacing.sm, textAlign: 'center' }}>
-                Pickup from my location
-              </Text>
-              <Text variant="caption" style={{ color: pickupType === 'scheduled' ? colors.whiteAlpha70 : colors.muted, marginTop: 2, textAlign: 'center' }}>
-                Aggregator comes to you · Free
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.typeCard, pickupType === 'dropoff' ? styles.typeSelected : styles.typeUnselected]}
-              onPress={() => setPickupType('dropoff')}
-            >
-              <Storefront size={32} color={pickupType === 'dropoff' ? colors.surface : colors.navy} weight="duotone" />
-              <Text variant="label" style={{ color: pickupType === 'dropoff' ? colors.surface : colors.navy, marginTop: spacing.sm, textAlign: 'center' }}>
-                Drop-off at aggregator
-              </Text>
-              <Text variant="caption" style={{ color: pickupType === 'dropoff' ? colors.whiteAlpha70 : colors.muted, marginTop: 2, textAlign: 'center' }}>
-                You bring the scrap · Higher rate
-              </Text>
-            </Pressable>
+            <Text variant="caption" color={colors.slate} style={{ marginTop: spacing.xs }}>
+              Select an address and schedule a convenient time for the aggregator to pick up your scrap.
+            </Text>
           </View>
 
           <View style={styles.detailsContainer}>
-            {pickupType === 'scheduled' && (
-              <>
                 <View style={styles.addressHeaderRow}>
                   <Text variant="subheading">Saved Pickup Address</Text>
                   <Pressable onPress={() => router.push('/(seller)/addresses' as any)}>
@@ -171,11 +156,7 @@ export default function Step3Screen() {
                     onPress={() => router.push('/(seller)/address-map' as any)}
                   />
                 ) : null}
-              </>
-            )}
 
-            {pickupType === 'scheduled' && (
-              <>
                 <Text variant="subheading" style={styles.sectionTitle}>Preferred Date</Text>
 
                 {Platform.OS === 'ios' ? (
@@ -210,20 +191,26 @@ export default function Step3Screen() {
 
                 <Text variant="subheading" style={styles.sectionTitle}>Preferred Time</Text>
                 <View style={styles.timeGrid}>
-                  {TIMES.map((timeSlot) => (
-                    <Pressable
-                      key={timeSlot.label}
-                      style={[styles.timeChip, scheduledTime === timeSlot.value ? styles.chipSelected : styles.chipUnselected]}
-                      onPress={() => setScheduledTime(timeSlot.value)}
-                    >
-                      <Text variant="caption" style={{ color: scheduledTime === timeSlot.value ? colors.surface : colors.navy, textAlign: 'center' }}>
-                        {timeSlot.label}
-                      </Text>
-                    </Pressable>
-                  ))}
+                  {TIMES.map((timeSlot) => {
+                    const isDisabled = selectedIsToday && currentHour >= timeSlot.startHour;
+                    return (
+                      <Pressable
+                        key={timeSlot.label}
+                        disabled={isDisabled}
+                        style={[
+                          styles.timeChip,
+                          scheduledTime === timeSlot.value ? styles.chipSelected : styles.chipUnselected,
+                          isDisabled && { opacity: 0.4, backgroundColor: colors.muted + '20' }
+                        ]}
+                        onPress={() => setScheduledTime(timeSlot.value)}
+                      >
+                        <Text variant="caption" style={{ color: scheduledTime === timeSlot.value ? colors.surface : (isDisabled ? colors.muted : colors.navy), textAlign: 'center' }}>
+                          {timeSlot.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              </>
-            )}
           </View>
         </ScrollView>
 

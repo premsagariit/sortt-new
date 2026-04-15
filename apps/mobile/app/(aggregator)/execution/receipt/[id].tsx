@@ -551,7 +551,13 @@ export default function AggregatorReceiptScreen() {
           
           <View style={styles.actions}>
             <Pressable
-              onPress={() => router.push('/(shared)/dispute' as any)}
+              onPress={() => router.push({
+                pathname: '/(shared)/dispute',
+                params: {
+                  orderId: routeOrderId,
+                  fallbackRoute: '/(aggregator)/orders',
+                },
+              } as any)}
               style={styles.reportIssue}
             >
               <Text variant="caption" style={styles.reportIssueText}>

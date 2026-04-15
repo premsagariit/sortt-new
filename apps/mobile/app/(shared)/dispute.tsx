@@ -13,7 +13,7 @@
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -23,8 +23,8 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { Warning, UploadSimple, CheckCircle } from 'phosphor-react-native';
 
 import { colors, spacing, radius } from '../../constants/tokens';
@@ -34,6 +34,7 @@ import { NavBar } from '../../components/ui/NavBar';
 import { StatusChip } from '../../components/ui/StatusChip';
 import { BaseCard } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
+import { useOrderStore } from '../../store/orderStore';
 import { api } from '../../lib/api';
 import { safeBack } from '../../utils/navigation';
 
@@ -65,6 +66,8 @@ const SELLER_ISSUES: IssueOption[] = [
 export default function DisputeScreen() {
     const insets = useSafeAreaInsets();
     const userType = useAuthStore((state) => state.userType);
+    const orders = useOrderStore((state) => state.orders);
+    const fetchOrder = useOrderStore((state) => state.fetchOrder);
     const params = useLocalSearchParams<{ orderId?: string; id?: string; fallbackRoute?: string }>();
     const orderId = typeof params.orderId === 'string'
         ? params.orderId
@@ -72,6 +75,12 @@ export default function DisputeScreen() {
     const fallbackRoute = typeof params.fallbackRoute === 'string'
         ? params.fallbackRoute
         : (userType === 'aggregator' ? '/(aggregator)/orders' : '/(seller)/orders');
+    const order = orders.find((item: any) => item.orderId === orderId);
+
+    useEffect(() => {
+        if (!orderId || order) return;
+        void fetchOrder(orderId, true);
+    }, [orderId, order, fetchOrder]);
 
     const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
     const [description, setDescription] = useState('');
@@ -81,7 +90,17 @@ export default function DisputeScreen() {
     const [submitError, setSubmitError] = useState<string | null>(null);
 
     const issueOptions = userType === 'aggregator' ? AGGREGATOR_ISSUES : SELLER_ISSUES;
-    const counterpartyName = userType === 'aggregator' ? 'Rahul Sharma' : 'Kumar Scrap Co.';
+    const counterpartyName = userType === 'aggregator'
+        ? order?.sellerName || 'Seller'
+        : order?.aggregatorName || 'Aggregator';
+    const statusLabel = order?.status || 'completed';
+    const disputeDateLabel = useMemo(() => {
+        const completedEvent = Array.isArray(order?.history)
+            ? [...order.history].reverse().find((entry: any) => entry?.new_status === 'completed')
+            : null;
+        const iso = completedEvent?.created_at || order?.updatedAt || order?.createdAt;
+        return iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently completed';
+    }, [order?.history, order?.updatedAt, order?.createdAt]);
 
     const isFormValid = !!orderId && selectedIssue !== null && description.trim().length >= 10;
 
@@ -166,12 +185,12 @@ export default function DisputeScreen() {
                                 <Text variant="label" style={styles.cardSectionLabel}>Order</Text>
                                 <View style={styles.orderMeta}>
                                     <Numeric size={12} color={colors.muted}>{orderId || 'Order ID unavailable'}</Numeric>
-                                    <StatusChip status="completed" />
+                                    <StatusChip status={statusLabel as any} />
                                 </View>
                             </View>
                         </View>
                         <Text variant="caption" style={styles.partnerInfo}>
-                            {counterpartyName} • Tue, Mar 4
+                            {counterpartyName} • {disputeDateLabel}
                         </Text>
                     </BaseCard>
 

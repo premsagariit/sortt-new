@@ -1,6 +1,6 @@
-Sortt
+﻿Sortt
 ├── Recent implementation updates (2026-04-13)
-│   ├── Auth Strategy: Migrated from Clerk to Custom JWT; completely purged clerk_user_id database and codebase records.
+│   ├── Auth Strategy: Migrated from external auth SDK to Custom JWT; completely purged legacy external auth user id database and codebase records.
 │   ├── Database Core: Converted UUID primary keys to Text (strings) ensuring table integrity scaling.
 │   ├── Clean up: Purged non-essential testing files from backend to finalize MVP readiness.
 │   ├── Admin UI Overhaul: Added Leaflet maps, analytical trends, specific order filtering on cards, and complete end-to-end data views for Dispute resolution.
@@ -10,7 +10,7 @@ Sortt
 │   │   ├── Admin Web Dashboard (`apps/web`) fully operational with live data.
 │   │   ├── Admin navigation, login, KYC queue, and Dispute management modules completed.
 │   │   ├── Design system tokens (`apps/web/constants/tokens.ts`) applied across all admin screens.
-│   │   ├── Next.js optimized `<Image />` components implemented for R2/Clerk assets.
+│   │   ├── Next.js optimized `<Image />` components implemented for R2/Custom JWT assets.
 │   │   ├── Monorepo-wide verification: `pnpm type-check`, `pnpm lint`, and `pnpm test` all 100% green.
 │   │   ├── Verification refresh (2026-04-05): no failed tests found in Day 16 report; backend re-run passed (6 suites, 44 tests).
 │   │   ├── EAS preview build status: queued on free-tier infrastructure (external queue wait), tracked as non-blocking external dependency.
@@ -214,7 +214,7 @@ Sortt
 │   │   │   └── usePhotoCapture.ts # Camera/gallery capture helper hook
 │   │   ├── lib
 │   │   │   ├── api.ts # Axios API client with auth + centralized 401 handler
-│   │   │   ├── clerk.ts # Clerk SDK configuration and token cache
+│   │   │   ├── Custom JWT.ts # Custom JWT SDK configuration and token cache
 │   │   │   ├── push.ts # Push notification registration/utilities
 │   │   │   └── realtime.ts # Ably token-auth singleton client + disconnect helper
 │   │   ├── store
@@ -232,15 +232,15 @@ Sortt
 │   └── web # Next.js admin web app (production scope)
 │       ├── package.json # Web app dependencies and scripts
 │       ├── tsconfig.json # Web app TypeScript config
-│       ├── next.config.ts # Next.js optimized remotePatterns for R2/Clerk
+│       ├── next.config.ts # Next.js optimized remotePatterns for R2/Custom JWT
 │       ├── app # App Router layout and routes
-│       │   ├── layout.tsx # Root layout with Clerk + Next.js UI integration
+│       │   ├── layout.tsx # Root layout with Custom JWT + Next.js UI integration
 │       │   ├── page.tsx # Public-facing landing page with hero, how-it-works, dual-audience cards, and footer (route `/`)
 │       │   ├── globals.css # Design system global overrides
 │       │   ├── admin # Admin Portal (Active)
 │       │   │   ├── layout.tsx # Admin SIDENAV + design system tokens
 │       │   │   ├── login
-│       │   │   │   └── page.tsx # Clerk-integrated admin login (Suspense wrapped)
+│       │   │   │   └── page.tsx # Custom JWT-integrated admin login (Suspense wrapped)
 │       │   │   ├── create-password
 │       │   │   │   └── page.tsx # Admin password creation (Suspense wrapped)
 │       │   │   ├── reset-password
@@ -293,7 +293,7 @@ Sortt
 │   │   │   ├── realtime.ts # Realtime publish/token wrapper via @sortt/realtime
 │   │   │   └── storage.ts # File storage adapter via @sortt/storage
 │   │   ├── middleware
-│   │   │   ├── auth.ts # Clerk token verification and user loading middleware
+│   │   │   ├── auth.ts # Custom JWT token verification and user loading middleware
 │   │   │   ├── errorHandler.ts # Centralized API error handler middleware
 │   │   │   ├── sanitize.ts # Input sanitization middleware
 │   │   │   └── verifyRole.ts # Role guard middleware for protected routes
@@ -347,7 +347,7 @@ Sortt
 │   │       ├── index.ts # IAuthProvider exports + factory
 │   │       ├── types.ts # Session DTO + IAuthProvider interface
 │   │       └── providers
-│   │           └── ClerkAuthProvider.ts # Clerk auth adapter via backend APIs
+│   │           └── Custom JWTAuthProvider.ts # Custom JWT auth adapter via backend APIs
 │   ├── maps
 │   │   ├── package.json # Maps package manifest
 │   │   ├── tsconfig.json # Maps package TypeScript config
@@ -435,3 +435,7 @@ Sortt
 - Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
 - Admin metrics accurately track deterministic IDs correctly without constraint errors.
 - UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
+
+
+
+

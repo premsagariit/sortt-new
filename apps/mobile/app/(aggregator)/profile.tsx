@@ -70,7 +70,7 @@ export default function AggregatorProfileScreen() {
   const language = useLanguageStore((state) => state.language);
   const router = useRouter();
   const authStore = useAuthStore();
-  const { fetchMe, name, locality } = authStore;
+  const { fetchMe, name } = authStore;
   const {
     fetchAggregatorProfile,
     fetchAggregatorOrders,
@@ -90,7 +90,6 @@ export default function AggregatorProfileScreen() {
 
   const displayName = name || profile?.name || 'Aggregator';
   const displayBusinessName = profile?.businessName || 'Business name not set';
-  const displayLocality = profile?.operatingArea || locality || 'Unknown Area';
 
   const completedOrders = (aggOrders || []).filter((o: any) => o.status === 'completed').length;
   const cancelledOrders = (aggOrders || []).filter((o: any) => o.status === 'cancelled').length;
@@ -182,13 +181,6 @@ export default function AggregatorProfileScreen() {
             </View>
 
             <Text variant="caption" style={styles.heroBusinessName}>{displayBusinessName}</Text>
-
-            <View style={styles.badgeRow}>
-              <View style={styles.localityPill}>
-                <View style={styles.localityDot} />
-                <Text variant="caption" style={styles.localityText}>{displayLocality}</Text>
-              </View>
-            </View>
 
             {/* Injected Stats Bar - Unified style */}
             <View style={styles.heroStatsContainer}>
@@ -380,33 +372,7 @@ const styles = StyleSheet.create({
   heroBusinessName: {
     color: 'rgba(255,255,255,0.85)',
     marginTop: -4,
-    marginBottom: spacing.sm,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-
-  },
-  localityPill: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  localityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.statusOnline,
-  },
-  localityText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 12,
-    fontWeight: '500',
+    marginBottom: spacing.md,
   },
   heroStatsContainer: {
 

@@ -6,15 +6,13 @@
  */
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Star } from 'phosphor-react-native';
-import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
+import { colors, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
-import { PrimaryButton } from '../../components/ui/Button';
 import { StatusBar } from 'expo-status-bar';
 import { safeBack } from '../../utils/navigation';
-import { useListingStore } from '../../store/listingStore';
 import { api } from '../../lib/api';
 
 type AggregatorRate = {
@@ -31,6 +29,7 @@ type AggregatorReview = {
 
 type AggregatorProfileResponse = {
   id: string;
+  createdAt: string;
   name: string;
   aggregatorTypeLabel: string;
   isOnline: boolean;
@@ -67,6 +66,17 @@ const formatReviewDate = (value: string): string => {
   });
 };
 
+const calculateYearsActive = (createdAtIso: string): number => {
+  try {
+    const createdDate = new Date(createdAtIso);
+    const now = new Date();
+    const years = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+    return Math.floor(years);
+  } catch {
+    return 0;
+  }
+};
+
 const resolveRouteParam = (value: string | string[] | undefined): string => {
   if (Array.isArray(value)) {
     return String(value[0] ?? '').trim();
@@ -76,9 +86,7 @@ const resolveRouteParam = (value: string | string[] | undefined): string => {
 };
 
 export default function AggregatorProfileScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
-  const resetListing = useListingStore((s) => s.resetListing);
   const aggregatorId = resolveRouteParam(id);
 
   const [profile, setProfile] = React.useState<AggregatorProfileResponse | null>(null);
@@ -218,7 +226,6 @@ export default function AggregatorProfileScreen() {
             <View style={styles.table}>
               <View style={styles.tableHeader}>
                 <Text variant="caption" color={colors.muted} style={styles.thLeft}>Material</Text>
-                <Text variant="caption" color={colors.muted} style={styles.thRight}>Rate/kg</Text>
               </View>
               {profile.rates.length === 0 ? (
                 <View style={[styles.tableRow, styles.tableRowLast]}>
@@ -231,7 +238,6 @@ export default function AggregatorProfileScreen() {
                   return (
                     <View key={`${rate.materialCode}-${index}`} style={[styles.tableRow, isLast && styles.tableRowLast]}>
                       <Text variant="body">{label}</Text>
-                      <Numeric style={styles.rateValue}>₹{Math.round(rate.ratePerKg)}</Numeric>
                     </View>
                   );
                 })
@@ -260,6 +266,15 @@ export default function AggregatorProfileScreen() {
                 <Text variant="caption" color={colors.muted}>Operating hours</Text>
               </View>
             </View>
+              <View style={[styles.listRow, styles.tableRowLast]}>
+                <Text variant="body" style={styles.iconEmoji}>📅</Text>
+                <View style={styles.listContent}>
+                  <Text variant="body" style={styles.listTitle}>
+                    {calculateYearsActive(profile.createdAt) || 'Recently joined'} year{calculateYearsActive(profile.createdAt) !== 1 ? 's' : ''}
+                  </Text>
+                  <Text variant="caption" color={colors.muted}>Using app</Text>
+                </View>
+              </View>
           </View>
 
           {/* Recent Reviews */}
@@ -307,16 +322,6 @@ export default function AggregatorProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky Bottom Bar */}
-      <View style={styles.bottomBar}>
-        <PrimaryButton
-          label="List Scrap for Pickup"
-          onPress={() => {
-            resetListing();
-            router.push({ pathname: '/(seller)/listing/step1', params: { fresh: '1' } } as any);
-          }}
-        />
-      </View>
     </View>
   );
 }

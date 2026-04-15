@@ -5,16 +5,23 @@
  * Admin profile page — shows current admin's session metadata.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { adminFetch } from '../../../../lib/adminApi';
+import { BoneyardProfileSection } from '@/components/ui/Boneyard';
 
 interface AdminProfile {
   id: string;
-  phone?: string;
-  email?: string;
+  name?: string | null;
+  full_name?: string | null;
+  phone?: string | null;
+  display_phone?: string | null;
+  email?: string | null;
   user_type: string;
   created_at: string;
-  full_name?: string;
+  preferred_language?: string | null;
+  profile_photo_url?: string | null;
+  photo_url?: string | null;
   must_change_password?: boolean;
 }
 
@@ -33,6 +40,8 @@ export default function AdminProfilePage() {
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     adminFetch<AdminProfile>('/api/users/me')
@@ -41,8 +50,57 @@ export default function AdminProfilePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const displayName = profile?.full_name ?? profile?.name ?? null;
+  const displayPhone = profile?.phone ?? profile?.display_phone ?? null;
+  const displayPhoto = profile?.profile_photo_url ?? profile?.photo_url ?? null;
+
+  const handleProfilePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    setError('');
+
+    try {
+      const token = typeof window !== 'undefined'
+        ? (window.sessionStorage.getItem('admin_token') ||
+          document.cookie
+            .split('; ')
+            .find((part) => part.startsWith('admin_token='))
+            ?.split('=')[1] || '')
+        : '';
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}/api/users/profile-photo`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${decodeURIComponent(token)}` } : undefined,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? 'Failed to upload profile image');
+      }
+
+      const payload = await response.json();
+      setProfile((prev) => prev ? {
+        ...prev,
+        profile_photo_url: payload?.profile_photo_url ?? prev.profile_photo_url,
+      } : prev);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to upload profile image');
+    } finally {
+      setUploadingPhoto(false);
+      if (event.target) event.target.value = '';
+    }
+  };
+
   const initials = profile?.full_name
     ? profile.full_name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+    : profile?.name
+    ? profile.name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
     : profile?.email
     ? profile.email.slice(0, 2).toUpperCase()
     : 'SA';
@@ -84,50 +142,59 @@ export default function AdminProfilePage() {
 
         {/* Avatar + name */}
         <div className="px-6 pb-5">
-          <div className="flex items-end gap-4 -mt-8 mb-4">
-            {loading ? (
-              <div className="w-16 h-16 rounded-2xl bg-border animate-pulse flex-shrink-0 border-4 border-white" />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-navy to-navySoft flex items-center justify-center text-white font-black text-xl flex-shrink-0 border-4 border-white shadow-lg">
-                {initials}
-              </div>
-            )}
-            <div className="pb-1">
-              {loading ? (
-                <div className="space-y-1">
-                  <div className="h-5 w-32 bg-border rounded animate-pulse" />
-                  <div className="h-4 w-24 bg-border rounded animate-pulse" />
-                </div>
-              ) : (
-                <>
+          {loading ? (
+            <BoneyardProfileSection />
+          ) : (
+            <>
+              <div className="flex items-end gap-4 -mt-8 mb-4">
+                {displayPhoto ? (
+                  <Image
+                    src={displayPhoto}
+                    alt="Admin Profile"
+                    width={64}
+                    height={64}
+                    className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 border-4 border-white shadow-lg"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-navy to-navySoft flex items-center justify-center text-white font-black text-xl flex-shrink-0 border-4 border-white shadow-lg">
+                    {initials}
+                  </div>
+                )}
+                <div className="pb-1">
                   <div className="text-[16px] font-bold text-navy">
-                    {profile?.full_name ?? 'Admin User'}
+                    {displayName ?? 'Admin User'}
                   </div>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber/10 border border-amber/20 text-amber text-[10px] font-bold uppercase tracking-widest rounded-full">
                     Super Admin
                   </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Profile fields */}
-          <div>
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex gap-4 py-4 border-b border-border">
-                    <div className="w-32 h-4 bg-border rounded animate-pulse" />
-                    <div className="flex-1 h-4 bg-border rounded animate-pulse" />
-                  </div>
-                ))}
+                </div>
+                <div className="ml-auto pb-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleProfilePhotoChange}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingPhoto}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg border border-border text-[11px] font-bold text-navy hover:bg-bg disabled:opacity-50"
+                  >
+                    {uploadingPhoto ? 'Uploading...' : 'Update Photo'}
+                  </button>
+                </div>
               </div>
-            ) : (
+
               <div>
                 <InfoRow label="User ID" value={profile?.id} mono />
                 <InfoRow label="Email" value={profile?.email} />
-                <InfoRow label="Phone" value={profile?.phone} />
+                <InfoRow label="Phone" value={displayPhone} />
                 <InfoRow label="Role" value={profile?.user_type ? profile.user_type.charAt(0).toUpperCase() + profile.user_type.slice(1) : undefined} />
+                <InfoRow label="Preferred Language" value={profile?.preferred_language?.toUpperCase() ?? 'EN'} />
+                <InfoRow label="Password Change Required" value={profile?.must_change_password ? 'Yes' : 'No'} />
                 <InfoRow
                   label="Account Created"
                   value={profile?.created_at
@@ -138,8 +205,8 @@ export default function AdminProfilePage() {
                 />
                 <InfoRow label="Last Active" value={lastActive ?? 'This session'} />
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
 

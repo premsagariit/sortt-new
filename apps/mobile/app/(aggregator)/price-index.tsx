@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
-import { Warning, Robot, TrendUp, TrendDown } from 'phosphor-react-native';
+import { Stack } from 'expo-router';
+import { Warning, Robot, TrendDown } from 'phosphor-react-native';
 
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
@@ -23,7 +22,6 @@ type PriceIndexItem = {
 };
 
 export default function PriceIndexScreen() {
-    const router = useRouter();
     const [priceData, setPriceData] = React.useState<PriceIndexItem[]>([]);
 
     React.useEffect(() => {
@@ -33,10 +31,10 @@ export default function PriceIndexScreen() {
                 const mapped: PriceIndexItem[] = (res.data?.rates ?? []).map((rate: any, index: number) => ({
                     id: String(rate.id ?? rate.material_code ?? index),
                     label: String(rate.material_code ?? 'material').toUpperCase(),
-                    subLabel: 'Live market rate',
+                    subLabel: 'AI/Admin market index',
                     price: Number(rate.rate_per_kg ?? 0),
                     trend: 'stable',
-                    trendText: 'Live',
+                    trendText: 'Index',
                     icon: '♻️',
                     bg: '#F3F4F6',
                 }));
@@ -60,7 +58,7 @@ export default function PriceIndexScreen() {
         <View style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
             <NavBar
-                title="Daily Price Index"
+                title="Market Price Index"
                 variant="light"
                 onBack={() => safeBack()}
             />
@@ -69,7 +67,7 @@ export default function PriceIndexScreen() {
                 <View style={styles.header}>
                     <View>
                         <Text variant="caption" color={colors.muted}>
-                            Hyderabad · Updated <Numeric size={11} color={colors.muted}>Feb 28, 9:00 AM</Numeric>
+                            Hyderabad · AI/Admin reference feed
                         </Text>
                     </View>
                     <View style={styles.aiPill}>
@@ -81,7 +79,7 @@ export default function PriceIndexScreen() {
                 <View style={styles.infoBanner}>
                     <Robot size={20} color={colors.navy} weight="fill" />
                     <Text variant="caption" style={styles.infoText}>
-                        Rates are scraped daily by AI from Hyderabad scrap market references. Admin can manually adjust flagged rates.
+                        This page shows market index rates from AI updates and admin overrides via /api/rates.
                     </Text>
                 </View>
 
@@ -129,7 +127,7 @@ export default function PriceIndexScreen() {
                 <View style={styles.warningBanner}>
                     <Warning size={20} color={colors.amber} weight="fill" />
                     <Text variant="caption" style={styles.warningText}>
-                        These are city-average reference rates, not mandated prices. Your rates are set independently in "My Buy Rates".
+                        This index is for market reference only. Set your own purchase rates in "My Buy Rates".
                     </Text>
                 </View>
             </ScrollView>

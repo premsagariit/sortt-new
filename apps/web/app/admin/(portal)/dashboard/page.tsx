@@ -8,6 +8,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { adminApi, type AdminStats } from '../../../../lib/adminApi';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 
 function CountUp({ target, loading }: { target: number; loading: boolean }) {
   const [display, setDisplay] = useState(0);
@@ -97,7 +98,7 @@ const STAT_CARDS = [
     key: 'total_active_aggregators' as keyof AdminStats,
     label: 'Active Aggregators',
     sub: 'Online now',
-    href: '/admin/flagged',
+      href: '/admin/active-aggregators',
     accentClass: 'from-navySoft/20 to-navySoft/5 border-navySoft/30',
     iconBg: 'bg-navySoft/10',
     iconColor: 'text-navySoft',
@@ -217,7 +218,7 @@ export default function AdminDashboard() {
               </div>
               <div className={`text-3xl font-black font-mono leading-none ${card.valueColor} mb-1`}>
                 {loading ? (
-                  <div className="h-9 w-16 bg-white/40 rounded-lg animate-pulse" />
+                  <BoneyardBlock className="h-9 w-16 bg-white/40" />
                 ) : (
                   <CountUp target={value} loading={loading} />
                 )}

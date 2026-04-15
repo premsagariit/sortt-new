@@ -38,6 +38,7 @@ export interface AuthState {
   preferredLanguage: SupportedLanguage;
   createdAt: string | null;
   meLoaded: boolean;
+  profilePhoto: string | null;
 
   setSession: (data: { token: string; user: SessionUser; isNewUser: boolean }) => void;
   clearSession: () => void;
@@ -58,6 +59,7 @@ export interface AuthState {
   setLocality: (locality: string) => void;
   setCity: (city: string) => void;
   setPreferredLanguage: (language: SupportedLanguage) => void;
+  setProfilePhoto: (url: string | null) => void;
 
   reset: () => void;
   signOut: () => Promise<void>;
@@ -84,6 +86,7 @@ const initialState = {
   preferredLanguage: 'en' as SupportedLanguage,
   createdAt: null,
   meLoaded: false,
+  profilePhoto: null,
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -115,6 +118,7 @@ export const useAuthStore = create<AuthState>()(
           city: '',
           createdAt: null,
           meLoaded: false,
+          profilePhoto: null,
         });
       },
 
@@ -156,6 +160,7 @@ export const useAuthStore = create<AuthState>()(
       setLocality: (locality) => set({ locality }),
       setCity: (city) => set({ city }),
       setPreferredLanguage: (preferredLanguage) => set({ preferredLanguage }),
+      setProfilePhoto: (url) => set({ profilePhoto: url }),
 
       reset: () => set({ ...initialState, hasHydrated: true }),
 
@@ -186,6 +191,7 @@ export const useAuthStore = create<AuthState>()(
             city: city ?? '',
             preferredLanguage,
             createdAt: u.created_at ?? null,
+            profilePhoto: u.profile_photo_url ?? null,
             meLoaded: true,
           });
 
@@ -211,6 +217,7 @@ export const useAuthStore = create<AuthState>()(
         preferredLanguage: state.preferredLanguage,
         createdAt: state.createdAt,
         phoneNumber: state.phoneNumber,
+        profilePhoto: state.profilePhoto,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (error) {

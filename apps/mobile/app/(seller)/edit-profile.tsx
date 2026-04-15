@@ -11,6 +11,7 @@ import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, EnvelopeSimple, MapPin, User, CheckCircle } from 'phosphor-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -25,13 +26,59 @@ const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
 export default function EditProfile() {
   const router = useRouter();
-  const { name, email, locality, city, accountType, setName, setEmail, setLocality } = useAuthStore();
+  const { name, email, locality, city, accountType, profilePhoto, setName, setEmail, setLocality, setProfilePhoto, token } = useAuthStore();
 
   const [newName, setNewName] = useState(name);
   const [newEmail, setNewEmail] = useState(email);
   const [newLocality, setNewLocality] = useState(locality);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        
+        setIsUploadingPhoto(true);
+        setError(null);
+        
+        const localUri = asset.uri;
+        const filename = localUri.split('/').pop() || 'profile.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        
+        const formData = new FormData();
+        formData.append('photo', {
+          uri: localUri,
+          name: filename,
+          type,
+        } as any);
+
+        const uploadRes = await api.post('/api/users/profile-photo', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        if (uploadRes.data?.profile_photo_url) {
+          setProfilePhoto(uploadRes.data.profile_photo_url);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error uploading photo', err);
+      setError('Failed to upload photo. Please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   const handleSave = () => {
     // 🛡️ BSE Security Finding 1: Input Validation / Trimming
@@ -100,19 +147,19 @@ export default function EditProfile() {
       >
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatarWrap}>
+          <Pressable style={styles.avatarWrap} onPress={handlePickImage} disabled={isUploadingPhoto || isSaving}>
             <Avatar 
               name={name} 
               userType="seller" 
               size="lg" 
-              source={AVATAR_SOURCE} 
+              uri={profilePhoto || undefined}
             />
             <View style={styles.cameraIcon}>
               <Camera size={18} color={colors.surface} weight="fill" />
             </View>
-          </View>
+          </Pressable>
           <Text variant="label" color={colors.teal} style={{ marginTop: 12, fontWeight: '600' }}>
-            Change Photo
+            {isUploadingPhoto ? 'Uploading...' : 'Change Photo'}
           </Text>
         </View>
 

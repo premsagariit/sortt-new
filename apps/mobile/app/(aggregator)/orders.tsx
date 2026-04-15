@@ -15,6 +15,7 @@ import { useAggregatorStore } from '../../store/aggregatorStore';
 import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { SkeletonLoader } from '../../components/ui/SkeletonLoader';
+import { openExternalDirections } from '../../utils/mapNavigation';
 
 type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
@@ -130,6 +131,8 @@ export default function AggregatorOrdersScreen() {
       id: o.orderId || o.id,
       orderNumber: o.orderNumber ?? o.order_display_id ?? `#${String(o.orderId || o.id || '').slice(0, 8).toUpperCase()}`,
       distance: distanceText,
+      pickupLat,
+      pickupLng,
       price,
       locality: o.pickupLocality ?? o.pickup_locality,
       window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
@@ -309,6 +312,11 @@ export default function AggregatorOrdersScreen() {
     const isHistorical = order.status === 'completed' || order.status === 'cancelled';
 
     const handleCardPress = () => {
+      if (isActive) {
+        router.push({ pathname: '/(aggregator)/active-order-detail', params: { id: order.id } } as any);
+        return;
+      }
+
       if (order.status === 'completed') {
         router.push({ pathname: '/(aggregator)/execution/receipt/[id]', params: { id: order.id } } as any);
       } else if (order.status === 'cancelled') {
@@ -316,6 +324,28 @@ export default function AggregatorOrdersScreen() {
       } else {
         routeToExecutionStage(order);
       }
+    };
+
+    const openNativeNavigationFromCard = async () => {
+      if (
+        currentLocation &&
+        typeof order.pickupLat === 'number' &&
+        typeof order.pickupLng === 'number'
+      ) {
+        await openExternalDirections({
+          origin: currentLocation,
+          destination: {
+            latitude: order.pickupLat,
+            longitude: order.pickupLng,
+          },
+          errorTitle: 'Unable to open navigation',
+          errorBody: 'No compatible maps app was found on this device.',
+        });
+        return;
+      }
+
+      // Fallback to route screen if precise coordinates are not available here.
+      routeToExecutionStage(order);
     };
     return (
       <BaseCard key={order.id} style={styles.card}>
@@ -382,7 +412,13 @@ export default function AggregatorOrdersScreen() {
                           : 'Navigate'
                   }
                   style={styles.actionBtn}
-                  onPress={() => routeToExecutionStage(order)}
+                  onPress={() => {
+                    if (order.status === 'accepted') {
+                      void openNativeNavigationFromCard();
+                      return;
+                    }
+                    routeToExecutionStage(order);
+                  }}
                 />
                 <SecondaryButton
                   label="Cancel"

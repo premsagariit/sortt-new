@@ -15,6 +15,7 @@ dotenv.config();
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { Pool } from 'pg';
+import { generateUserId } from '../src/lib/idGenerator';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -46,19 +47,19 @@ async function run() {
     const normalizedPhone = `+91${rawPhone}`;            // +917981576207
     const phoneLast4  = rawPhone.slice(-4);              // 6207
     const rawPassword = 'Sortt@123';
-    const userType    = 'admin';
+    const userType    = 'admin'; // DB check constraint requires 'admin' (even for super admin ID)
 
     // Proper phone hash (same algorithm as auth.ts)
     const phoneHash = hashPhone(normalizedPhone);
 
-    // ID format for admin: admin_{name_snake}
-    // (no timestamp — fixed, deterministic)
-    const namePart = name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_');
-    const adminId  = `admin_${namePart}`;
+    // ID format for super admin: {name}_super_admin
+    const adminId     = generateUserId(name, normalizedPhone, 'super_admin', email);
 
     // Password hash
     const salt         = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(rawPassword, salt);
+
+    console.log(`\n✅ Using Super Admin ID: ${adminId}\n`);
 
     await client.query(
       `INSERT INTO users (

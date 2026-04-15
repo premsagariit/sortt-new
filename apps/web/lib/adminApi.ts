@@ -228,6 +228,9 @@ export const adminApi = {
   // Flagged
   getFlagged: () => adminFetch<FlaggedAggregator[]>('/api/admin/flagged'),
 
+    // Active
+    getActive: () => adminFetch<FlaggedAggregator[]>('/api/admin/active'),
+
   // Orders
   getOrders: (params?: { status?: string; seller_id?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();

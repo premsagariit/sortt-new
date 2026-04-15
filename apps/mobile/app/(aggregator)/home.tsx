@@ -399,10 +399,6 @@ export default function AggregatorHomeScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.locationPill}>
-            <View style={[styles.locationDot, { backgroundColor: colors.statusOnline }]} />
-            <Text variant="caption" style={styles.locationText}>{displayArea}</Text>
-          </View>
 
           {/* Stats Row */}
           <View style={styles.heroStats}>
@@ -528,10 +524,6 @@ export default function AggregatorHomeScreen() {
               <View style={styles.compressedRow}>
                 <View style={styles.navLeft}>
                   <Text variant="subheading" style={styles.navMinimizedName}>{displayName}</Text>
-                  <View style={styles.navMinimizedLoc}>
-                    <View style={[styles.locationDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
-                    <Text variant="caption" style={styles.navMinimizedLocText}>{displayAreaShort}</Text>
-                  </View>
                 </View>
               </View>
             </Animated.View>
@@ -655,17 +647,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'DMSans-Bold',
   },
-  navMinimizedLoc: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  navMinimizedLocText: {
-    color: colors.surface,
-    opacity: 0.7,
-    fontSize: 11,
-  },
   alwaysRight: {
     position: 'absolute',
     right: spacing.sm,
@@ -754,26 +735,6 @@ const styles = StyleSheet.create({
   },
   onlineText: {
     fontWeight: '600',
-  },
-  locationPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    marginBottom: spacing.lg,
-  },
-  locationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  locationText: {
-    color: colors.surface,
-    fontSize: 12,
   },
   headerInfo: {
     flexDirection: 'row',

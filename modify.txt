@@ -1,0 +1,46 @@
+. In aggregator route page, the orders must be aggregator specific (only accepted orders must appear in map), not the global. They must be linked to the id of aggregators. When the user tries to expand the map, the order related content must move smoothly down and map expands in height. When the order is choosen from the list below the map, the order pin should get pinned and displayed on the map at order pickup location for that order. Remove the Map/List toggle in the navbar, this page is specifically for the map visual only. The material chip with weight are all similar, give them color for each different type of material. In the order card, instead of city name, fetch the locality name (since city is Hyderabad for all orders) and remove the `.` and `-` symbols beside the city name in the order card. When clicked on the order card that comes over the map, the order id page must open for that order.
+    There is misbehaviour of the page. The maps always contains the location pins at all the order pickup addresses that the aggregator has accepted but not completed. When clicked on the order pin or the list of orders in the second half of the screen, the order detail card will pop on the map as currently popping. Only one order can be selected at once for viewing the order detail card. Remove the order card selection and deselection type UI indication with circle inside the order card. When selected the particular card must be highlighted - that's enough. if you need further exact clarification, do ask me the doubts, don't go blindly. The current order card are those that are below the map, order detail card are those that are popping over the map, when selected.
+
+. Building the skeleton screen using the Boneyard.
+
+. In seller profile setup page, remove the profile photo component.
+
+. In edit pofile page, the user must be able to update their profile photo (store in the R2 storage in a separate bucket) and it must be fetched correctly to the correct user in the correcr pages in mobile and web portals.
+
+. In aggregator home page, remove the active locations text, it is not required.
+
+. The admin portal must have the Users tab in sidebar, when clicked, the users who joined the application must be appearing in a tablular manner with the corresponding details in the columns. When clicked on any row of the user, their user details page must open.
+
+. Remove the mini weight text in the Materials tabs in the seller side components while listing the materials.
+
+. There is no pickup preference funtionality. We have only one type of order services that is- Pick up from the sellers location. No need to choose between the Pickup from the seller location or Drop-off at aggregator in the step 3 page while listing. Remove this functioanlity from UI, backend and database.
+
+. In the step 3, when the date is choosen, if the current time is beyond the preferred time options, disable them, as they make no sense - this is applicable only when the prefered dat and the current order date are on the same date.
+
+8. During the aggregator onboarding and profile set up, even when the aggregator is choosing the shop-based business, the backend and database are saving it as mobile. Check the issue with this and fix the problem to save the aggregator business mode correctly.
+
+. The order confirm/navigate screen is not displaying the map when the order is already accepted in map component. 
+
+. In Active orders, when clicked on the navigate button in Order card or `Mark on the way button   in order id page, it must ask the andriod native maps to open for the navigation, it should not directly take to the ola maps site or any other similar to that (google maps, etc with all the `mapping apps present in the device, same for the ios also). When clicked on the order card, it must then open the order it page.
+
+. When the order is completed, the the aggregator captured scrap image must be fetched in both the seller receipt id page and aggregator receipt id pages. 
+
+. In the seller receipt id page, The aggregator card should not have the chat option. The chat option must be present when the order is active and will be removed when the order is completed.
+
+13. The dispute pages in the mobile are hard coded, they are not fetching the real data. The dispute related page must be present on both the seller and aggregator sides. Check these pages and handele dispute management system properly. 
+
+. When the active aggregators component is clicked in the admin dashboard, it is navigating to the Flagged aggregators, it is not the correct routing.
+
+. The Price Override executed by the admin is not getting updated in the aggregator side Daily Price index pages. Check the flow and fix the breaking points.
+
+16. The seller sees tha average local rates - these are calculated by calculating the average of the prices set by the aggregators (directly from the database only - on the fly. If any aggregator updates the price, the average is recomputed and updated) in the city, not from the internet, not from the admin pages. If any material average is not calculated because no aggregator has added that material, either disable that material (indicate no aggregator is accepting this material in your area) or use the price set by the admin. The rates related pages are very confusing, If you have any doubt (even it is small) do aks me, get full clarification and then only make the changes.
+
+. The admin portal is facing problems in loading the Order, order id pages, user pages, analytics pages, profile page (missing some details that needs to be fetched from database, the profile image updation), system config. Please inspect for the bug, check its root cause and fix it. I also see tha the admin pages are having huge latency in loading the pages, routing the new pages, etc. Please check this and fix it.
+
+. In seller side agg-profiles page, no need to display the aggregator operating hours, instead display the number of years he is been using the app and the types of materials that this particular aggregator will accept should not diaply the rates that he is offering (Remove the 2nd column, no UI layout change), remove the button (List Scrap for PickUp) to sell the scrap to this particular aggregator. This individual order placing is not a good feature at this point of time.
+
+. The AI agents are not tracking the Live scrap material prices (Daily Price Index) and they are not getting updated in the Ui and database. Please check this and ensure that they search the provided sites once a day and update in the admin portal, database and it must get updated in mobile UI also.
+
+20. Push Notification
+
+21. Logo Image

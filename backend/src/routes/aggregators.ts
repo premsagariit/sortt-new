@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { verifyRole } from '../middleware/auth';
+import { issueToken } from '../lib/jwt';
 import { storageProvider } from '../lib/storage';
 import { publishEvent } from '../lib/realtime';
 import { channelName } from '../utils/channelHelper';
@@ -420,18 +421,38 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
             );
         }
 
+        const aggregatorType = String((req.body as any).aggregator_type ?? (req.body as any).aggregatorType ?? '').trim();
+        const normalizedAggregatorType = aggregatorType === 'shop' || aggregatorType === 'mobile'
+            ? aggregatorType
+            : null;
+
         await query(
-            `INSERT INTO aggregator_profiles (user_id, business_name, city_code)
-             VALUES ($1, $2, $3)
+            `INSERT INTO aggregator_profiles (user_id, business_name, city_code, aggregator_type)
+             VALUES ($1, $2, $3, COALESCE($4, 'mobile'))
              ON CONFLICT (user_id) DO UPDATE SET
                 business_name = EXCLUDED.business_name,
-                city_code = EXCLUDED.city_code`,
-            [finalUserId, business_name, city_code]
+                city_code = EXCLUDED.city_code,
+                aggregator_type = COALESCE(EXCLUDED.aggregator_type, aggregator_profiles.aggregator_type)`,
+            [finalUserId, business_name, city_code, normalizedAggregatorType]
         );
 
         await query('COMMIT');
-        // Return id_changed so frontend can update its store if needed
-        res.json({ success: true, id_changed: finalUserId !== userId ? finalUserId : undefined });
+        // Return id_changed + a fresh JWT so the mobile client can swap tokens.
+        // Without a new token, the old JWT sub (tmp_...) no longer exists in the DB and
+        // subsequent requireAuth lookups would return 401.
+        let newToken: string | undefined;
+        if (finalUserId !== userId) {
+            try {
+                newToken = await issueToken(finalUserId, '7d');
+            } catch (jwtErr) {
+                console.warn('[ID-RENAME] Failed to issue new token after rename:', jwtErr);
+            }
+        }
+        res.json({
+            success: true,
+            id_changed: finalUserId !== userId ? finalUserId : undefined,
+            new_token: newToken,
+        });
     } catch (e: any) {
         await query('ROLLBACK');
         console.error('Profile POST error:', e);
@@ -452,6 +473,10 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
     }
 
     const { name, operating_area, operating_hours, business_name, email } = req.body;
+    const aggregatorTypeInput = String((req.body as any).aggregator_type ?? (req.body as any).aggregatorType ?? '').trim();
+    const aggregatorType = aggregatorTypeInput === 'shop' || aggregatorTypeInput === 'mobile'
+        ? aggregatorTypeInput
+        : null;
 
     const diagPayload: Record<string, any> = { userId };
     if (name !== undefined) diagPayload.name = name;
@@ -459,6 +484,7 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
     if (business_name !== undefined) diagPayload.business_name = business_name;
     if (email !== undefined) diagPayload.email = email;
     if (operating_hours !== undefined) diagPayload.operating_hours = JSON.stringify(operating_hours);
+    if (aggregatorType !== null) diagPayload.aggregator_type = aggregatorType;
     console.log('[DIAG] PATCH /api/aggregators/profile', diagPayload);
 
     try {
@@ -553,6 +579,11 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
             values.push(business_name);
         }
 
+        if (aggregatorType !== null) {
+            updateFields.push(`aggregator_type = $${placeholderIdx++}`);
+            values.push(aggregatorType);
+        }
+
         if (updateFields.length === 0) {
             await query('COMMIT');
             return res.json({ success: true, message: 'No fields to update', id_changed: finalUserId !== userId ? finalUserId : undefined });
@@ -567,7 +598,16 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
 
         await query(queryStr, values);
         await query('COMMIT');
-        res.json({ success: true, id_changed: finalUserId !== userId ? finalUserId : undefined });
+
+        let newToken: string | undefined;
+        if (finalUserId !== userId) {
+            try {
+                newToken = await issueToken(finalUserId, '7d');
+            } catch (jwtErr) {
+                console.warn('[ID-RENAME] Failed to issue new token after rename:', jwtErr);
+            }
+        }
+        res.json({ success: true, id_changed: finalUserId !== userId ? finalUserId : undefined, new_token: newToken });
     } catch (e: any) {
         await query('ROLLBACK');
         console.error('Profile PATCH error:', e);
@@ -586,6 +626,7 @@ router.get('/me', verifyRole('aggregator'), async (req: Request, res: Response) 
                     u.name,
                     u.email,
                     a.business_name,
+                          a.aggregator_type,
                     a.city_code,
                     a.operating_area,
                     a.operating_hours,
@@ -1214,6 +1255,7 @@ router.get('/:id/public-profile', verifyRole('seller'), async (req: Request, res
                 return res.json({
                         id: row.id,
                         name: row.display_name,
+                    createdAt: row.created_at,
                         aggregatorTypeLabel: `Aggregator · Since ${memberSinceYear}`,
                         isOnline: Boolean(row.is_online),
                         isVerified: String(row.kyc_status || '').toLowerCase() === 'verified',

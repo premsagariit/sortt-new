@@ -1,4 +1,4 @@
-# ♻ [APP_NAME]
+﻿# ♻ [APP_NAME]
 ## Hyperlocal Scrap Marketplace
 
 > ⚠️ **APP NAME PLACEHOLDER NOTICE**
@@ -10,7 +10,7 @@
 **February 2026**
 
 > 📋 **v1.5 CHANGE SUMMARY (from v1.4)**
-> - Authentication stack transitioned from Clerk to Custom JWT.
+> - Authentication stack finalized on Custom JWT (backend-issued tokens + OTP verification).
 > - Admin Dashboard extended with Leaflet mapping, advanced analytics and real-time detailed order resolution cards.
 > - Data masking updated for privacy using sequential indexing logic.
 
@@ -391,7 +391,7 @@ All security constraints listed here are mandatory for MVP launch. Full technica
 - OTP-based authentication for all users. OTPs delivered via **Meta WhatsApp Cloud API** (free tier: 1,000 authentication conversations/month). OTPs are generated server-side in the custom backend (Express on Azure App Service) using `crypto.randomInt`, stored only as HMAC-SHA256 hashes (keyed on `OTP_HMAC_SECRET`), and delivered directly to WhatsApp.
 - Scale photos, KYC documents, and GST invoices stored in **Cloudflare R2** private storage (S3-compatible; India PoPs in Mumbai, Hyderabad, Chennai). All sensitive media served via short-lived signed URLs (5-minute expiry) generated server-side after ownership verification. No direct public file URLs exposed. See TRD v4.1 §14.5 (D1).
 - **Admin panel security** is enforced via: IP allowlisting (`ADMIN_IP_ALLOWLIST` env var via Vercel Edge Middleware), 10-attempt lockout, 15-minute inactivity re-auth, and comprehensive `admin_audit_log` table for all admin actions. See TRD v4.1 §14.1 (X4).
-- Custom backend (Azure App Service) must verify **Clerk JWT** on every API route via middleware before processing any request — after Clerk validation, the middleware additionally re-fetches `user_type` and `is_active` from the DB (never trusts JWT claims for these fields — V7). See TRD v4.1 §14.1 (A1).
+- Custom backend (Azure App Service) must verify **Custom JWT** on every API route via middleware before processing any request — after Custom JWT validation, the middleware additionally re-fetches `user_type` and `is_active` from the DB (never trusts JWT claims for these fields — V7). See TRD v4.1 §14.1 (A1).
 - Push notification bodies must not include names, amounts, or location details visible on the device lock screen. Generic copy only; PII revealed in-app after authentication. See TRD v4.1 §5.2 (D2).
 - OTP pickup confirmation must bind to the confirmed weight and amount values (not just physical presence). Seller must review the full transaction summary before entering the OTP. See TRD v4.1 §14.6 (C1).
 - AI image analysis output (Gemini Vision) is a seller-facing hint only and must never be written directly to order records or used as the basis for invoice amounts. See TRD v4.1 §14.4 (I1).
@@ -426,7 +426,7 @@ The following constraints arise from the MVP technology choices and must be acco
 
 - **In-app chat must technically prevent phone number sharing.** A server-side regex filter must detect and remove Indian phone number patterns from messages before they are stored in the database and broadcast via Ably (V26).
 
-- **The admin panel must never use backend service credentials client-side.** The Clerk secret key and database credentials must never appear in any client bundle or `NEXT_PUBLIC_*` environment variable (V12, V-CLERK-1).
+- **The admin panel must never use backend service credentials client-side.** The Custom JWT secret key and database credentials must never appear in any client bundle or `NEXT_PUBLIC_*` environment variable (V12, V-Custom JWT-1).
 
 - **Aggregator KYC status (`kyc_status`)** must only be updatable by admin-authenticated backend routes. It is blocklisted from all aggregator-facing profile update endpoints, enforced by a DB trigger that blocks updates from non-admin database sessions (V35).
 
@@ -445,10 +445,10 @@ The following constraints arise from the MVP technology choices and must be acco
 
 ### 8.7 Analytics & Monitoring
 
-- **Product funnel analytics** are implemented in **PostHog Cloud** and must track core events: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
-- **Admin web behavioural analytics** are implemented in **Microsoft Clarity** for session replay and heatmap review on admin workflows.
-- **Backend and admin web error telemetry** are handled in **Azure Application Insights** (exceptions, traces, request diagnostics).
-- **Mobile crash telemetry** remains **Sentry React Native SDK only** (for mobile crash capture + symbolication).
+- **Product funnel analytics** are currently disabled in the runtime stack. If enabled later, they must track: `listing_started`, `listing_submitted`, `order_accepted`, `order_completed`.
+- **Admin web behavioural analytics** are currently disabled in the runtime stack.
+- **Backend and admin web error telemetry** are handled in **Azure Sentry** (exceptions, traces, request diagnostics).
+- **Mobile crash telemetry** remains **Sentry only** (for mobile crash capture + symbolication).
 - **Synthetic uptime checks** run through **Azure Monitor Availability Tests** for backend `/health` and admin web production URL.
 
 ---
@@ -462,7 +462,7 @@ The MVP is built over 17 days in a sequential single-thread model. The exact day
 | **Phase 1: UI Shells** | Days 1–3 | Static screens, no backend | Design system, all seller + aggregator mobile screens with mock data |
 | **Phase 2: Database** | Days 4–5 | Schema + RLS + indexes | Azure PostgreSQL live, all migrations applied, RLS active on every table |
 | **Phase 3: Backend Core** | Days 6–7 | Express foundation + Auth | Helmet, CORS, JWT middleware, WhatsApp OTP end-to-end, node-cron scheduler |
-| **Phase 4: Auth Wiring** | Day 8 | Mobile auth live | Clerk integration, real OTP on device, push token registration |
+| **Phase 4: Auth Wiring** | Day 8 | Mobile auth live | Custom JWT integration, real OTP on device, push token registration |
 | **Phase 5: Order Routes** | Days 9–10 | Core API live | Order CRUD, media upload, aggregator feed, market rates, chat, disputes |
 | **Phase 6: Mobile Wiring** | Day 11 | Real data on mobile | Mock data replaced, all screens wired to live API |
 | **Phase 7: Atomic Ops** | Day 12 | Accept + OTP routes | First-accept-wins race condition handled, OTP pickup verification live |
@@ -470,7 +470,7 @@ The MVP is built over 17 days in a sequential single-thread model. The exact day
 | **Phase 9: Providers** | Day 14 | Provider abstractions | All 5 provider packages complete (maps, realtime, auth, storage, analysis) |
 | **Phase 10: Intelligence** | Day 15 | AI + Invoice + Scraper | Gemini image analysis, GST PDF invoices, daily price scraper |
 | **Phase 11: Admin Web + Tests** | Day 16 | ✅ Complete | Admin panel + tests complete, live-data wired, 100% pass rate |
-| **Phase 12: Launch** | Day 17 | **Ready to Start** | Security audit, monitoring (Application Insights + Azure Availability), product analytics (PostHog), behavioural analytics (Clarity), mobile crashes (Sentry), production deploy |
+| **Phase 12: Launch** | Day 17 | **Ready to Start** | Security audit, monitoring (Sentry + Azure Availability), optional analytics enablement (if required), mobile crashes (Sentry), production deploy |
 
 **Post-MVP roadmap (not in Days 4–17):**
 - Telugu (and other regional languages) localisation
@@ -491,16 +491,16 @@ This document is a PRD only. Full technical architecture is in TRD v4.1.
 - **Primary build approach:** Agent-assisted development using Antigravity (Google DeepMind) — structured, sequential feature development across frontend and backend.
 - **AI features:** Google Gemini API (Gemini Flash Vision for image analysis; Gemini Pro for AI price-scraping agent). Delivered on Day 15.
 - **OTP delivery:** Meta WhatsApp Cloud API called directly from Express backend — zero cost up to 1,000 authentication conversations/month.
-- **Auth provider:** Clerk — handles session management, JWT issuance, and device sessions. India SMS/WhatsApp region must be enabled in Clerk Dashboard before launch.
+- **Auth provider:** Custom JWT — handles session management, JWT issuance, and device sessions. India SMS/WhatsApp region must be enabled in Custom JWT Dashboard before launch.
 - **Realtime:** Ably — India edge nodes ensure low latency for order status updates and in-app chat. Mobile clients use Token Auth via `GET /api/realtime/token` (no raw Ably key in client bundle).
 - **Storage:** Cloudflare R2 (S3-compatible) — private file storage with server-generated presigned URLs for KYC documents, scale photos, and GST invoices. Bucket region: Automatic (routes to India PoPs). Zero egress fees. Free tier: 10 GB storage, 1M operations/month.
 - **Database:** Azure PostgreSQL Flexible Server B1ms (Central India) — full relational schema with Row Level Security on every table. No PostGIS — geospatial matching uses `city_code` and `locality` text fields.
 - **Backend hosting:** Azure App Service (Central India, free tier) — all business logic, OTP generation, vendor API calls, and node-cron scheduled jobs.
 - **Scheduled jobs:** node-cron on Express (replaces pg_cron). Five jobs: aggregator culling (5 min), rating stats refresh (15 min), price cache refresh (daily 00:30 UTC), OTP log cleanup (nightly 02:00 UTC), message partition creation (25th of month).
-- **Atomic operations:** Express routes using PostgreSQL transactions with `SELECT … FOR UPDATE SKIP LOCKED` (replaces Supabase Edge Functions).
+- **Atomic operations:** Express routes using PostgreSQL transactions with `SELECT … FOR UPDATE SKIP LOCKED` (replaces legacy stack Edge Functions).
 - Deployment, CI/CD, and hosting architecture defined in TRD v4.1.
 
-> ⚠️ **India Infrastructure Note:** Supabase (`*.supabase.co`) and Firebase (`*.firebaseapp.com`) are subject to active ISP-level DNS blocks in India as of February 2026 under Section 69A of the IT Act. Neither service is used in this product. All infrastructure services use custom domains or India-accessible endpoints, ensuring no single government domain block can take the product offline.
+> ⚠️ **India Infrastructure Note:** Legacy external services used in older prototypes are not part of the current production architecture. Current infrastructure is selected for India-accessible endpoints and avoids single-domain dependency risk.
 
 ---
 
@@ -514,7 +514,7 @@ This document is a PRD only. Full technical architecture is in TRD v4.1.
 | What is the aggregator subscription fee percentage? | **Open** — suggested 1–2% of monthly earnings; needs market testing in Phase 7. |
 | Should the app show the seller which specific aggregator has viewed their order before acceptance, or only the accepted aggregator? | **Resolved: Only the accepted aggregator is shown.** An `order_views` tracking table is not in the MVP schema. Pre-acceptance: seller sees "Awaiting aggregator" state. Post-acceptance: seller sees accepted aggregator's name and rating. |
 | What is the exact security deposit amount for aggregators in v2? | **Open (v2)** — ₹500–₹1,000 suggested; research required. |
-| Will the admin panel be a standalone web app or integrated into the main web portal behind a role-based auth wall? | **Resolved: Integrated into `apps/web` behind a role-based auth wall.** Admin routes (`/api/admin/*`) are protected by Clerk JWT + DB-verified `is_admin` role check. Current Day 16 scope is admin web pages only; business/aggregator web UI is deferred. No separate deployment needed. |
+| Will the admin panel be a standalone web app or integrated into the main web portal behind a role-based auth wall? | **Resolved: Integrated into `apps/web` behind a role-based auth wall.** Admin routes (`/api/admin/*`) are protected by Custom JWT + DB-verified `is_admin` role check. Current Day 16 scope is admin web pages only; business/aggregator web UI is deferred. No separate deployment needed. |
 | GST invoice template: does this need a CA's input for legal compliance, or is a standard template sufficient for v1? | **Resolved: Standard template is sufficient for v1.** CA review is recommended before launch but is not a blocker. The `invoices.invoice_data JSONB NOT NULL` column satisfies the audit trail requirement. Full GST API integration is v2. |
 
 ### 11.2 TRD-Derived Open Questions (Product Decisions Required)
@@ -536,3 +536,7 @@ These questions were identified in the TRD v4.1 patch session. They require prod
 - Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
 - Admin metrics accurately track deterministic IDs correctly without constraint errors.
 - UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
+
+
+
+

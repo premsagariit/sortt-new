@@ -1,31 +1,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Info, Warning, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
+import { SkeletonLoader } from '../../components/ui/SkeletonLoader';
 import { safeBack } from '../../utils/navigation';
 import { api } from '../../lib/api';
 
 interface RateEntry {
   material_code: string;
   name: string;
-  rate_per_kg: number;
-  trend: 'up' | 'down' | 'flat';
+  rate_per_kg: number | null;
+  trend?: 'up' | 'down' | 'flat';
+  is_available: boolean;
 }
 
 export default function MarketRatesScreen() {
-  const router = useRouter();
   const [rates, setRates] = useState<RateEntry[]>([]);
+  const [cityCode, setCityCode] = useState('HYD');
   const [loading, setLoading] = useState(true);
 
   const loadRates = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await api.get('/api/rates');
-      setRates(res.data.rates || []);
+      const res = await api.get('/api/users/me/local-rates');
+      setRates(res.data?.rates || []);
+      setCityCode(String(res.data?.city_code || 'HYD').toUpperCase());
     } catch {
       /* non-fatal — empty state shown */
     } finally {
@@ -47,7 +49,7 @@ export default function MarketRatesScreen() {
         rightAction={
           <View style={styles.localityTag}>
             <View style={styles.liveDot} />
-            <Numeric size={11} color={colors.muted}>LIVE · HYD</Numeric>
+            <Numeric size={11} color={colors.muted}>LIVE · {cityCode}</Numeric>
           </View>
         }
       />
@@ -62,13 +64,19 @@ export default function MarketRatesScreen() {
           <Info size={20} color={colors.amber} weight="fill" />
           <View style={styles.hintTextWrap}>
             <Text variant="label" color={colors.navy}>Locality Average</Text>
-            <Text variant="caption">These rates are averaged from all certified aggregators in Hyderabad. Rates may vary slightly by collector.</Text>
+            <Text variant="caption">These rates are averaged on the fly from verified active aggregators in your city.</Text>
           </View>
         </View>
 
         {/* Rates Grid */}
         {loading ? (
-          <ActivityIndicator size="large" color={colors.muted} style={{ marginTop: 40 }} />
+          <View style={styles.grid}>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <View key={`skeleton-${idx}`} style={styles.gridItem}>
+                <SkeletonLoader variant="card" height={118} />
+              </View>
+            ))}
+          </View>
         ) : rates.length === 0 ? (
           <Text variant="caption" color={colors.muted} style={{ textAlign: 'center', marginTop: 40 }}>
             Rates unavailable — check back soon.
@@ -76,20 +84,30 @@ export default function MarketRatesScreen() {
         ) : (
           <View style={styles.grid}>
             {rates.map((item) => (
-              <View key={item.material_code} style={styles.gridItem}>
-                <View style={styles.rateCard}>
+                <View key={item.material_code} style={styles.gridItem}>
+                <View style={[styles.rateCard, !item.is_available && styles.rateCardDisabled]}>
                   <View style={styles.rateHeader}>
-                    <Text variant="label" color={colors.navy}>{item.name}</Text>
-                    {item.trend === 'up'
+                    <Text variant="label" color={item.is_available ? colors.navy : colors.muted}>{item.name}</Text>
+                    {!item.is_available
+                      ? <Minus size={16} color={colors.muted} weight="bold" />
+                      : item.trend === 'up'
                       ? <CaretUp size={16} color={colors.teal} weight="bold" />
                       : item.trend === 'down'
                       ? <CaretDown size={16} color={colors.red} weight="bold" />
                       : <Minus size={16} color={colors.muted} weight="bold" />}
                   </View>
-                  <Numeric size={20} color={colors.navy} style={{ marginTop: spacing.xs }}>
-                    ₹{item.rate_per_kg}
-                  </Numeric>
-                  <Text variant="caption" color={colors.muted}>per kg</Text>
+                  {item.is_available ? (
+                    <>
+                      <Numeric size={20} color={colors.navy} style={{ marginTop: spacing.xs }}>
+                        ₹{item.rate_per_kg}
+                      </Numeric>
+                      <Text variant="caption" color={colors.muted}>per kg</Text>
+                    </>
+                  ) : (
+                    <Text variant="caption" color={colors.muted} style={styles.materialHelpText}>
+                      No aggregator is accepting this material in your area.
+                    </Text>
+                  )}
                 </View>
               </View>
             ))}
@@ -165,6 +183,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+  },
+  rateCardDisabled: {
+    opacity: 0.65,
+  },
+  materialHelpText: {
+    marginTop: spacing.sm,
+    lineHeight: 16,
   },
   rateHeader: {
     flexDirection: 'row',

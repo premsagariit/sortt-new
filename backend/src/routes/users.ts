@@ -1,8 +1,21 @@
 import { Router } from 'express';
 import { query } from '../lib/db';
-import { normalizeLanguage } from '../utils/language';
+import { normalizeLanguage, resolveRequestLanguage } from '../utils/language';
 import * as Sentry from '@sentry/node';
+import multer from 'multer';
+import sharp from 'sharp';
 import { sanitizeName, sellerSuffix, aggregatorSuffix } from '../lib/idGenerator';
+import { issueToken } from '../lib/jwt';
+import { storageProvider } from '../lib/storage';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
+  }
+});
 
 const router = Router();
 
@@ -207,12 +220,70 @@ router.post('/profile', async (req, res) => {
     }
 
     await query('COMMIT');
-    // Return new ID so the mobile app can update its local JWT reference if needed
-    res.json({ success: true, id: finalUserId, id_changed: finalUserId !== userId });
+    // Issue fresh JWT if ID was renamed — old JWT sub (tmp_...) no longer maps to a DB row
+    let newToken: string | undefined;
+    if (finalUserId !== userId) {
+      try {
+        newToken = await issueToken(finalUserId, '7d');
+      } catch (jwtErr) {
+        console.warn('[ID-RENAME] Failed to issue new token after rename:', jwtErr);
+      }
+    }
+    res.json({
+      success: true,
+      id: finalUserId,
+      id_changed: finalUserId !== userId,
+      new_token: newToken,
+    });
   } catch (e: any) {
     await query('ROLLBACK');
     console.error('Profile update error:', e);
     Sentry.captureException(e);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/users/profile-photo
+router.post('/profile-photo', upload.single('file'), async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'File is required' });
+  }
+
+  try {
+    const normalizedBuffer = await sharp(req.file.buffer)
+      .rotate()
+      .resize({ width: 500, height: 500, fit: 'cover', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const bucketName = 'sortt-profiles'; 
+    const storageKey = await storageProvider.uploadWithKey(
+      normalizedBuffer,
+      `profile_${userId}_${Date.now()}.jpg`,
+      bucketName
+    );
+
+    await query(
+      `UPDATE users
+       SET profile_photo_url = $1
+       WHERE id = $2`,
+      [storageKey, userId]
+    );
+
+    const signedUrl = await storageProvider.getSignedUrl(storageKey, 3600 * 24 * 7, bucketName); // 7 days expiry
+
+    res.json({ success: true, profile_photo_url: signedUrl });
+  } catch (error: any) {
+    if (error.message === 'Invalid file type') {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Profile photo upload error:', error);
+    Sentry.captureException(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -229,7 +300,7 @@ router.get('/me', async (req, res) => {
     try {
       dbRes = await query(
         `SELECT u.id, u.user_type, u.is_active, u.name, u.email, u.created_at, u.preferred_language,
-          u.password_change_required,
+          u.password_change_required, u.profile_photo_url, u.display_phone,
                 s.profile_type as seller_profile_type, s.business_name as seller_business_name,
                 s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
                 a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
@@ -257,7 +328,7 @@ router.get('/me', async (req, res) => {
       if (viewError.code === '42P01' || viewError.code === '42703') {
         dbRes = await query(
           `SELECT u.id, u.user_type, u.is_active, u.name, u.email, u.created_at, u.preferred_language,
-              u.password_change_required,
+              u.password_change_required, u.profile_photo_url, u.display_phone,
                   s.profile_type as seller_profile_type, s.business_name as seller_business_name,
                   s.gstin as seller_gstin, s.locality as seller_locality, s.city_code as seller_city_code,
                   a.business_name as aggregator_business_name, a.operating_area as aggregator_locality,
@@ -292,6 +363,20 @@ router.get('/me', async (req, res) => {
 
     const userObj = { ...dbRes.rows[0] };
     userObj.must_change_password = Boolean(userObj.password_change_required);
+    userObj.full_name = userObj.name ?? null;
+    userObj.phone = userObj.display_phone ?? null;
+    userObj.photo_url = userObj.profile_photo_url ?? null;
+
+    // Fetch signed URL for profile photo
+    if (userObj.profile_photo_url) {
+      const bucketName = 'sortt-profiles';
+      try {
+        userObj.profile_photo_url = await storageProvider.getSignedUrl(userObj.profile_photo_url, 3600 * 24 * 7, bucketName);
+      } catch (err) {
+        console.warn('Failed to get signed URL for profile photo', err);
+        userObj.profile_photo_url = null;
+      }
+    }
 
     // Strip sensitive fields
     delete userObj.phone_hash;
@@ -301,6 +386,97 @@ router.get('/me', async (req, res) => {
     console.error('GET /api/users/me error:', error);
     Sentry.captureException(error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/users/me/local-rates - seller city-level average from verified active aggregators
+router.get('/me/local-rates', async (req, res) => {
+  const userId = req.user?.id;
+  const userType = req.user?.user_type;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (userType !== 'seller') {
+    return res.status(403).json({ error: 'Forbidden: Seller access only' });
+  }
+
+  try {
+    const sellerCityRes = await query(
+      `SELECT COALESCE(NULLIF(TRIM(s.city_code), ''), NULLIF(TRIM($2::text), '')) AS city_code
+       FROM users u
+       LEFT JOIN seller_profiles s ON s.user_id = u.id
+       WHERE u.id = $1`,
+      [userId, req.user?.city_code ?? null]
+    );
+
+    const cityCode = String(sellerCityRes.rows[0]?.city_code ?? '').trim();
+    if (!cityCode) {
+      return res.status(400).json({ error: 'seller_city_not_set' });
+    }
+
+    const language = resolveRequestLanguage({
+      explicit: typeof req.query.language === 'string' ? req.query.language : null,
+      header: typeof req.headers['accept-language'] === 'string' ? req.headers['accept-language'] : null,
+      userPreferred: req.user?.preferred_language ?? null,
+    });
+
+    const ratesRes = await query(
+      `WITH eligible_aggregators AS (
+          SELECT u.id
+          FROM users u
+          JOIN aggregator_profiles a ON a.user_id = u.id
+          WHERE u.user_type = 'aggregator'
+            AND u.is_active = true
+            AND LOWER(TRIM(COALESCE(a.city_code, ''))) = LOWER(TRIM($1::text))
+            AND LOWER(TRIM(COALESCE(a.kyc_status, ''))) = 'verified'
+      ),
+      averaged AS (
+          SELECT r.material_code,
+                 AVG(r.rate_per_kg)::numeric(10,2) AS avg_rate_per_kg,
+                 COUNT(*)::int AS contributor_count
+          FROM aggregator_material_rates r
+          JOIN eligible_aggregators e ON e.id = r.aggregator_id
+          WHERE r.material_code IS NOT NULL
+            AND COALESCE(r.is_custom, false) = false
+            AND r.rate_per_kg > 0
+          GROUP BY r.material_code
+      )
+      SELECT mt.code AS material_code,
+             COALESCE(
+               CASE
+                 WHEN $2 = 'te' THEN mt.label_te
+                 WHEN $2 = 'hi' THEN to_jsonb(mt) ->> 'label_hi'
+                 ELSE mt.label_en
+               END,
+               mt.label_en,
+               mt.code
+             ) AS name,
+             a.avg_rate_per_kg::float8 AS rate_per_kg,
+             (a.material_code IS NOT NULL) AS is_available,
+             COALESCE(a.contributor_count, 0)::int AS contributor_count
+      FROM material_types mt
+      LEFT JOIN averaged a ON a.material_code = mt.code
+      ORDER BY mt.code ASC`,
+      [cityCode, language]
+    );
+
+    return res.json({
+      city_code: cityCode,
+      rates: ratesRes.rows.map((row: any) => ({
+        material_code: row.material_code,
+        name: row.name,
+        rate_per_kg: row.rate_per_kg != null ? Number(row.rate_per_kg) : null,
+        is_available: Boolean(row.is_available),
+        contributor_count: Number(row.contributor_count ?? 0),
+      })),
+      computed_at: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('GET /api/users/me/local-rates error:', error);
+    Sentry.captureException(error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

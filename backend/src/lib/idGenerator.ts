@@ -69,20 +69,33 @@ export function sanitizeName(rawName: string): string {
 export function generateUserId(
   name: string,
   phone: string | null,
-  userType: 'seller' | 'aggregator' | 'admin'
+  userType: 'seller' | 'aggregator' | 'admin' | 'super_admin' | string,
+  email?: string | null
 ): string {
-  if (userType === 'admin') {
-    const safeName = sanitizeName(name || 'admin');
-    return `admin_${safeName}_${Date.now().toString(36).slice(-6)}`;
+  const safeName = sanitizeName(name || 'user');
+
+  if (userType === 'super_admin') {
+    return `${safeName}_super_admin`;
   }
+
+  if (userType === 'admin') {
+    let emailLocal = '';
+    if (email && email.includes('@')) {
+      emailLocal = sanitizeName(email.split('@')[0]);
+    } else {
+      emailLocal = Date.now().toString(36).slice(-6); // fallback
+    }
+    return `${safeName}_admin_${emailLocal}`;
+  }
+
   if (!phone) {
     // fallback: use timestamp+random
     return `${userType === 'seller' ? 's' : 'a'}_unknown_${Date.now().toString(36).slice(-8)}`;
   }
-  const namePart = sanitizeName(name);
+  
   const typeChar = userType === 'seller' ? 's' : 'a';
   const suffix = userType === 'seller' ? sellerSuffix(phone) : aggregatorSuffix(phone);
-  return `${namePart}_${typeChar}_${suffix}`;
+  return `${safeName}_${typeChar}_${suffix}`;
 }
 
 /**

@@ -41,10 +41,10 @@ export class R2StorageProvider implements IStorageProvider {
     });
   }
 
-  async upload(_bucket: string, path: string, data: Buffer): Promise<{ fileKey: string }> {
+  async upload(bucket: string, path: string, data: Buffer): Promise<{ fileKey: string }> {
     await this.client.send(
       new PutObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: bucket || this.bucketName,
         Key: path,
         Body: data,
       })
@@ -53,20 +53,20 @@ export class R2StorageProvider implements IStorageProvider {
     return { fileKey: path };
   }
 
-  async getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string> {
+  async getSignedUrl(fileKey: string, expiresInSeconds?: number, bucket?: string): Promise<string> {
     const expiresIn = Math.min(expiresInSeconds ?? 300, 300);
     const command = new GetObjectCommand({
-      Bucket: this.bucketName,
+      Bucket: bucket || this.bucketName,
       Key: fileKey,
     });
 
     return getSignedUrl(this.client, command, { expiresIn });
   }
 
-  async delete(fileKey: string): Promise<void> {
+  async delete(fileKey: string, bucket?: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: bucket || this.bucketName,
         Key: fileKey,
       })
     );

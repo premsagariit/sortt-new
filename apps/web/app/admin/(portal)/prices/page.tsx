@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { adminApi, type PriceEntry } from '../../../../lib/adminApi';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 
 const MATERIAL_META: Record<string, {
   label: string;
@@ -124,16 +125,16 @@ export default function PricesPage() {
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-white border border-border rounded-2xl p-5 animate-pulse space-y-3">
+            <div key={i} className="bg-white border border-border rounded-2xl p-5 space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-border" />
+                <BoneyardBlock className="w-10 h-10 rounded-xl" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-border rounded w-2/3" />
-                  <div className="h-3 bg-border rounded w-1/2" />
+                  <BoneyardBlock className="h-4 rounded w-2/3" />
+                  <BoneyardBlock className="h-3 rounded w-1/2" />
                 </div>
               </div>
-              <div className="h-8 bg-border rounded" />
-              <div className="h-2 bg-border rounded" />
+              <BoneyardBlock className="h-8 rounded" />
+              <BoneyardBlock className="h-2 rounded" />
             </div>
           ))}
         </div>

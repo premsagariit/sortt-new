@@ -33,6 +33,7 @@ import {
   type UserRegistrationAnalytics,
   type RegisteredUser,
 } from '@/lib/adminApi';
+import { BoneyardAnalyticsPage, BoneyardBlock } from '@/components/ui/Boneyard';
 
 // ─── Constants ────────────────────────────────────────────────────
 
@@ -57,14 +58,6 @@ const DATE_RANGES: { key: DateRangeKey; label: string }[] = [
 ];
 
 // ─── Tiny Components ──────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-20">
-      <div className="h-8 w-8 rounded-full border-4 border-indigo-400 border-t-transparent animate-spin" />
-    </div>
-  );
-}
 
 function StatCard({
   title,
@@ -111,13 +104,17 @@ function UserRegistrationsSection() {
   const [showTable, setShowTable] = useState(false);
   const [drillType, setDrillType] = useState<'all' | 'seller' | 'aggregator'>('all');
   const [search, setSearch] = useState('');
+  const [regError, setRegError] = useState('');
 
   const load = useCallback(
     async (r: DateRangeKey, from?: string, to?: string) => {
       setLoading(true);
+      setRegError('');
       try {
         const res = await adminApi.getRegistrationAnalytics(r, from, to);
         setData(res);
+      } catch (e: unknown) {
+        setRegError(e instanceof Error ? e.message : 'Failed to load registration analytics');
       } finally {
         setLoading(false);
       }
@@ -213,10 +210,16 @@ function UserRegistrationsSection() {
       )}
 
       {/* Stat Cards */}
+      {regError ? (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+          {regError}
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-28 rounded-2xl bg-[#1a1f36] border border-white/8 animate-pulse" />
+            <BoneyardBlock key={i} className="h-28 rounded-2xl bg-[#1a1f36] border border-white/8" />
           ))}
         </div>
       ) : (
@@ -350,7 +353,7 @@ export default function AnalyticsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Spinner />;
+  if (loading) return <BoneyardAnalyticsPage />;
   if (error) {
     return (
       <div className="flex items-center justify-center py-20 text-red-400 text-sm">

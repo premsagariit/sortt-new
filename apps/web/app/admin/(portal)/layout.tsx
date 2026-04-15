@@ -11,7 +11,7 @@
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -30,6 +30,7 @@ import {
   ChartLine,
   MapPin,
   IconWeight,
+  Users,
 } from 'phosphor-react';
 import Image from 'next/image';
 import { AdminAuthGuard } from '../../../components/admin/AdminAuthGuard';
@@ -49,9 +50,11 @@ const UserCircleIcon: IconComponent = UserCircle;
 const ShoppingBagIcon: IconComponent = ShoppingBag;
 const ChartLineIcon: IconComponent = ChartLine;
 const MapIconComp: IconComponent = MapPin;
+const UsersIcon: IconComponent = Users;
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin/dashboard', icon: ChartBarIcon },
+  { label: 'Users', href: '/admin/users', icon: UsersIcon },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingBagIcon },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartLineIcon },
   { label: 'Map', href: '/admin/map', icon: MapIconComp },
@@ -79,6 +82,13 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
   };
 
   const isNearTimeout = remainingMs < 2 * 60 * 1000;
+
+  useEffect(() => {
+    const targets = [...NAV_ITEMS.map((item) => item.href), '/admin/config'];
+    targets.forEach((href) => {
+      router.prefetch(href);
+    });
+  }, [router]);
 
   const NavContent = ({ collapsed }: { collapsed: boolean }) => (
     <>

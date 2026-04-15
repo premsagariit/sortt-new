@@ -118,6 +118,7 @@ export default function RootLayout() {
   const languageInitialized = useLanguageStore((s) => s.initialized);
   const initializeLanguage = useLanguageStore((s) => s.initializeLanguage);
   const storedUserType = useAuthStore((s: AuthState) => s.userType);
+  const hasHydrated = useAuthStore((s: AuthState) => s.hasHydrated);
   const [isRetrying, setIsRetrying] = useState(false);
   const [lastRole, setLastRole] = useState<'seller' | 'aggregator'>('seller');
   const prevOnlineRef = useRef(isOnline);
@@ -216,7 +217,11 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!fontsReady || !languageInitialized) {
+  // Block render until fonts, language store, AND Zustand persist rehydration are ready.
+  // Without the hasHydrated guard, async rehydration can overwrite a token that was
+  // written mid-session (e.g., right after OTP verify), causing protected API calls on
+  // the next screen to fire with a null token.
+  if (!fontsReady || !languageInitialized || !hasHydrated) {
     return null;
   }
 

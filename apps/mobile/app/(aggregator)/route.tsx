@@ -1,44 +1,56 @@
 /**
  * app/(aggregator)/route.tsx
  * ──────────────────────────────────────────────────────────────────
- * Aggregator Route Planner — matches design Image 2
+ * Aggregator Route Planner
+ * - Shows only the authenticated aggregator's accepted orders as map pins
+ * - All accepted pins always visible; selecting one shows a detail card overlay
+ * - Map expands smoothly on tap; order list slides down
+ * - Material chips are color-coded per type
+ * - Tapping the floating detail card navigates to order detail page
  * ──────────────────────────────────────────────────────────────────
  */
 
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Stack } from 'expo-router';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
-  Check,
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  Dimensions,
+  Platform,
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import {
   Globe,
   NavigationArrow,
   Package,
   Wrench,
   FileText,
   Dress,
+  Cube,
+  Recycle,
+  ArrowsOut,
+  ArrowsIn,
 } from 'phosphor-react-native';
 
-import { colors, spacing, radius, colorExtended } from '../../constants/tokens';
+import { colors, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { BaseCard } from '../../components/ui/Card';
 import { StatusChip } from '../../components/ui/StatusChip';
 import { Text, Numeric } from '../../components/ui/Typography';
-import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
+import { useAggregatorStore } from '../../store/aggregatorStore';
 import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
-import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
+import {
+  type AuthenticatedMapStyle,
+  getAuthenticatedMapStyle,
+  OLA_TILE_STYLE_URL,
+} from '../../lib/olaMaps';
 
-type OrderStatus =
-  | 'created'
-  | 'accepted'
-  | 'en_route'
-  | 'arrived'
-  | 'weighing_in_progress'
-  | 'completed'
-  | 'cancelled'
-  | 'disputed';
+// ── Types ────────────────────────────────────────────────────────────────────
 
-type MaterialType = 'metal' | 'paper' | 'fabric';
+type MaterialType = 'metal' | 'paper' | 'fabric' | 'plastic' | 'ewaste' | 'glass' | 'custom';
 
 const MATERIAL_CODE_TO_TYPE: Record<string, MaterialType> = {
   metal: 'metal',
@@ -56,9 +68,29 @@ const MATERIAL_CODE_TO_TYPE: Record<string, MaterialType> = {
   cloth: 'fabric',
   textile: 'fabric',
   textiles: 'fabric',
+  plastic: 'plastic',
+  plastics: 'plastic',
+  ewaste: 'ewaste',
+  'e-waste': 'ewaste',
+  electronics: 'ewaste',
+  glass: 'glass',
 };
 
-const CONFIRMED_WEIGHT_STATUSES: OrderStatus[] = ['weighing_in_progress', 'completed'];
+// Material chip colors from design tokens
+const MATERIAL_CHIP_COLORS: Record<MaterialType, { bg: string; fg: string; icon: React.ElementType }> = {
+  metal:   { bg: colors.material.metal.bg,   fg: colors.material.metal.fg,   icon: Wrench },
+  paper:   { bg: colors.material.paper.bg,   fg: colors.material.paper.fg,   icon: FileText },
+  fabric:  { bg: colors.material.fabric.bg,  fg: colors.material.fabric.fg,  icon: Dress },
+  plastic: { bg: colors.material.plastic.bg, fg: colors.material.plastic.fg, icon: Recycle },
+  ewaste:  { bg: colors.material.ewaste.bg,  fg: colors.material.ewaste.fg,  icon: Cube },
+  glass:   { bg: colors.material.glass.bg,   fg: colors.material.glass.fg,   icon: Cube },
+  custom:  { bg: colors.material.custom.bg,  fg: colors.material.custom.fg,  icon: Package },
+};
+
+function toMaterialType(value: unknown): MaterialType {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return MATERIAL_CODE_TO_TYPE[normalized] ?? 'custom';
+}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -69,457 +101,466 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function toMaterialType(value: unknown): MaterialType {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  return MATERIAL_CODE_TO_TYPE[normalized] ?? 'metal';
-}
-
-function normalizeOrderStatus(value: unknown): OrderStatus {
-  const normalized = String(value ?? 'created').toLowerCase() as OrderStatus;
-  const allowed: OrderStatus[] = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress', 'completed', 'cancelled', 'disputed'];
-  return allowed.includes(normalized) ? normalized : 'created';
-}
-
-interface Order {
+interface RouteOrder {
   id: string;
   orderNumber: string;
-  status: OrderStatus;
+  status: string;
   locality: string;
-  distance: string;
-  weightBasis: 'estimated' | 'confirmed';
-  materials: { type: 'metal' | 'paper' | 'fabric'; weight: number }[];
+  distanceKm: number | null;
+  materials: { type: MaterialType; weight: number; label: string }[];
   price: number;
   lat: number;
   lng: number;
 }
 
-const MOCK_ORDERS: Order[] = [
-  {
-    id: 'route-order-1',
-    orderNumber: '#000005',
-    status: 'accepted',
-    locality: 'Banjara Hills',
-    distance: '0.8 km',
-    weightBasis: 'estimated',
-    materials: [
-      { type: 'metal', weight: 18 },
-      { type: 'paper', weight: 15 },
-    ],
-    price: 896,
-    lat: 30,
-    lng: 40,
-  },
-  {
-    id: 'route-order-2',
-    orderNumber: '#000006',
-    status: 'en_route',
-    locality: 'Jubilee Hills',
-    distance: '1.4 km',
-    weightBasis: 'estimated',
-    materials: [{ type: 'metal', weight: 10 }],
-    price: 280,
-    lat: 50,
-    lng: 60,
-  },
-  {
-    id: 'route-order-3',
-    orderNumber: '#000007',
-    status: 'weighing_in_progress',
-    locality: 'Somajiguda',
-    distance: '2.1 km',
-    weightBasis: 'confirmed',
-    materials: [
-      { type: 'paper', weight: 8 },
-      { type: 'fabric', weight: 4 },
-    ],
-    price: 144,
-    lat: 70,
-    lng: 75,
-  },
-];
+// ── Screen dimensions ─────────────────────────────────────────────────────────
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const NAV_HEIGHT = Platform.OS === 'ios' ? 88 : 64;
+const USABLE = SCREEN_HEIGHT - NAV_HEIGHT;
+const MAP_HEIGHT_COLLAPSED = Math.round(USABLE * 0.5);
+const MAP_HEIGHT_EXPANDED = Math.round(USABLE * 0.82);
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function RoutePlannerScreen() {
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const router = useRouter();
+  const aggOrders = useAggregatorStore((state) => state.aggOrders);
+
   const [focusedOrderId, setFocusedOrderId] = useState<string | null>(null);
-  const orders = useOrderStore((state: any) => state.orders);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+
+  // Map height animation
+  const mapHeightAnim = useRef(new Animated.Value(MAP_HEIGHT_COLLAPSED)).current;
+
+  // Authenticated map style
   const [authenticatedMapStyle, setAuthenticatedMapStyle] = React.useState<AuthenticatedMapStyle | null>(null);
-  const mapAvailability = React.useMemo(() => getMapRenderAvailability(), []);
-  const mapLibre = React.useMemo(() => (mapAvailability.canRenderMap ? getMapLibreModule() : null), [mapAvailability.canRenderMap]);
+  const mapAvailability = useMemo(() => getMapRenderAvailability(), []);
+  const mapLibre = useMemo(
+    () => (mapAvailability.canRenderMap ? getMapLibreModule() : null),
+    [mapAvailability.canRenderMap],
+  );
   const canRenderMap = Boolean(mapAvailability.canRenderMap && mapLibre && authenticatedMapStyle);
 
   React.useEffect(() => {
     let isMounted = true;
-
     if (!mapAvailability.canRenderMap || !mapLibre || !OLA_TILE_STYLE_URL) {
       setAuthenticatedMapStyle(null);
-      return () => {
-        isMounted = false;
-      };
+      return () => { isMounted = false; };
     }
-
     void getAuthenticatedMapStyle(OLA_TILE_STYLE_URL)
-      .then((style) => {
-        if (isMounted) setAuthenticatedMapStyle(style);
-      })
-      .catch((error) => {
-        console.warn('[aggregator-route] failed to resolve map style', error);
+      .then((style) => { if (isMounted) setAuthenticatedMapStyle(style); })
+      .catch((err) => {
+        console.warn('[aggregator-route] failed to resolve map style', err);
         if (isMounted) setAuthenticatedMapStyle(null);
       });
+    return () => { isMounted = false; };
+  }, [mapAvailability.canRenderMap, mapLibre]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [mapAvailability.canRenderMap, mapLibre, OLA_TILE_STYLE_URL]);
+  // ── Build route orders from aggOrders (accepted only, with coordinates) ──
 
-  const toRouteMaterials = React.useCallback((item: any, status: OrderStatus): { materials: Order['materials']; weightBasis: Order['weightBasis'] } => {
-    const weightBasis: Order['weightBasis'] = CONFIRMED_WEIGHT_STATUSES.includes(status) ? 'confirmed' : 'estimated';
-    const orderItems = Array.isArray(item?.orderItems)
-      ? item.orderItems
-      : (Array.isArray(item?.order_items) ? item.order_items : []);
-    const lineItems = Array.isArray(item?.lineItems)
-      ? item.lineItems
-      : (Array.isArray(item?.line_items) ? item.line_items : []);
+  const storeOrders: RouteOrder[] = useMemo(() => {
+    if (!Array.isArray(aggOrders)) return [];
 
-    const fromOrderItems = orderItems
-      .map((orderItem: any) => {
-        const estimated = toFiniteNumber(orderItem?.estimatedWeightKg ?? orderItem?.estimated_weight_kg);
-        const confirmed = toFiniteNumber(orderItem?.confirmedWeightKg ?? orderItem?.confirmed_weight_kg);
-        const picked = weightBasis === 'confirmed' ? (confirmed ?? estimated ?? 0) : (estimated ?? confirmed ?? 0);
-        const rounded = Number.isFinite(picked) ? Number(picked.toFixed(2)) : 0;
-        return {
-          type: toMaterialType(orderItem?.materialCode ?? orderItem?.material_code),
-          weight: rounded,
-        };
+    return aggOrders
+      .filter((item: any) => {
+        const status = String(item?.status ?? '').toLowerCase();
+        // Show accepted + en_route + arrived + weighing_in_progress — everything not completed/cancelled
+        const isActive = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(status);
+        const hasCoords =
+          Number.isFinite(toFiniteNumber(item?.pickup_lat ?? item?.pickupLat)) &&
+          Number.isFinite(toFiniteNumber(item?.pickup_lng ?? item?.pickupLng));
+        return isActive && hasCoords;
       })
-      .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
-    if (fromOrderItems.length > 0) return { materials: fromOrderItems, weightBasis };
+      .slice(0, 20)
+      .map((item: any, index: number): RouteOrder => {
+        // Materials from order_items or estimated_weights
+        const rawOrderItems = Array.isArray(item?.order_items) ? item.order_items : [];
+        const estimatedWeights =
+          item?.estimated_weights && typeof item.estimated_weights === 'object'
+            ? item.estimated_weights as Record<string, number>
+            : {};
 
-    const fromLineItems = lineItems
-      .map((lineItem: any) => {
-        const weight = toFiniteNumber(lineItem?.weightKg ?? lineItem?.weight_kg ?? lineItem?.confirmedWeightKg ?? lineItem?.estimatedWeightKg) ?? 0;
-        return {
-          type: toMaterialType(lineItem?.materialCode ?? lineItem?.material_code),
-          weight: Number(weight.toFixed(2)),
-        };
-      })
-      .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
-    if (fromLineItems.length > 0) return { materials: fromLineItems, weightBasis };
+        let materials: { type: MaterialType; weight: number; label: string }[] = [];
 
-    const estimatedWeights = item?.estimatedWeights ?? item?.estimated_weights;
-    if (estimatedWeights && typeof estimatedWeights === 'object') {
-      const fromEstimatedWeights = Object.entries(estimatedWeights)
-        .map(([code, weight]) => ({
-          type: toMaterialType(code),
-          weight: Number((toFiniteNumber(weight) ?? 0).toFixed(2)),
-        }))
-        .filter((material: { type: MaterialType; weight: number }) => material.weight > 0);
-      if (fromEstimatedWeights.length > 0) return { materials: fromEstimatedWeights, weightBasis: 'estimated' };
-    }
+        if (rawOrderItems.length > 0) {
+          materials = rawOrderItems
+            .map((oi: any) => ({
+              type: toMaterialType(oi?.material_code ?? oi?.materialCode),
+              weight: Number(
+                toFiniteNumber(oi?.estimated_weight_kg ?? oi?.estimatedWeightKg) ?? 0,
+              ),
+              label: String(oi?.material_label ?? oi?.materialLabel ?? oi?.material_code ?? ''),
+            }))
+            .filter((m: { weight: number }) => m.weight > 0);
+        }
 
-    const fallbackWeight = toFiniteNumber(item?.confirmedWeightKg ?? item?.confirmed_weight_kg ?? item?.estimatedWeightKg ?? item?.estimated_weight_kg) ?? 0;
-    return {
-      materials: [{ type: 'metal', weight: Number(fallbackWeight.toFixed(2)) }],
-      weightBasis,
-    };
-  }, []);
+        if (materials.length === 0 && Object.keys(estimatedWeights).length > 0) {
+          materials = Object.entries(estimatedWeights)
+            .map(([code, weight]) => ({
+              type: toMaterialType(code),
+              weight: Number((toFiniteNumber(weight) ?? 0).toFixed(2)),
+              label: code,
+            }))
+            .filter((m) => m.weight > 0);
+        }
 
-  const storeOrders: Order[] = React.useMemo(() => {
-    const withCoordinates = Array.isArray(orders)
-      ? orders.filter((item: any) => Number.isFinite(item?.pickupLat) && Number.isFinite(item?.pickupLng))
-      : [];
+        // Fallback: at least show material_codes as chips with 0 weight hidden
+        if (materials.length === 0 && Array.isArray(item?.material_codes)) {
+          materials = (item.material_codes as string[]).map((code) => ({
+            type: toMaterialType(code),
+            weight: 0,
+            label: code,
+          }));
+        }
 
-    if (withCoordinates.length === 0) return MOCK_ORDERS;
+        const lat = toFiniteNumber(item?.pickup_lat ?? item?.pickupLat) ?? 0;
+        const lng = toFiniteNumber(item?.pickup_lng ?? item?.pickupLng) ?? 0;
 
-    return withCoordinates.slice(0, 12).map((item: any, index: number) => {
-      const status = normalizeOrderStatus(item?.status);
-      const materialPayload = toRouteMaterials(item, status);
+        // Distance: prefer distance_km from API or liveDistanceKm
+        const distanceKm = toFiniteNumber(item?.distance_km ?? item?.liveDistanceKm ?? item?.distanceKm);
 
-      return {
-        id: String(item.orderId ?? item.id ?? `route-order-${index + 1}`),
-        orderNumber: String(item.orderNumber ?? item.order_display_id ?? `#${String(item.orderId ?? '').slice(0, 6).toUpperCase()}`),
-        status,
-        locality: String(item.pickupLocality ?? item.locality ?? 'Unknown area'),
-        distance: typeof item.liveDistanceKm === 'number' ? `${item.liveDistanceKm.toFixed(1)} km` : '—',
-        weightBasis: materialPayload.weightBasis,
-        materials: materialPayload.materials,
-        price: Number(getOrderDisplayAmount(item)) || 0,
-        lat: Number(item.pickupLat),
-        lng: Number(item.pickupLng),
-      };
-    });
-  }, [orders, toRouteMaterials]);
+        const price = Number(
+          item?.orderAmount ??
+            item?.display_amount ??
+            item?.confirmed_total ??
+            item?.estimated_total ??
+            item?.estimatedAmount ??
+            0,
+        );
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(storeOrders.map(o => o.id));
+        const rawId = String(item.id ?? item.orderId ?? `route-order-${index + 1}`);
+        const orderNumber = String(
+          item.order_display_id ??
+            item.orderNumber ??
+            `#${rawId.slice(0, 6).toUpperCase()}`,
+        );
 
-  const toggleSelection = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(i => i !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
-  };
+        const locality = String(
+          item.pickup_locality ?? item.pickupLocality ?? item.locality ?? 'Unknown area',
+        );
 
-  const clearAll = () => setSelectedIds([]);
+        return { id: rawId, orderNumber, status: String(item?.status ?? 'accepted'), locality, distanceKm, materials, price, lat, lng };
+      });
+  }, [aggOrders]);
 
-  React.useEffect(() => {
-    setSelectedIds(storeOrders.map((item) => item.id));
-  }, [storeOrders]);
-
+  // Set initial focused order
   React.useEffect(() => {
     if (storeOrders.length === 0) {
       setFocusedOrderId(null);
       return;
     }
+    if (focusedOrderId && storeOrders.some((o) => o.id === focusedOrderId)) return;
+    setFocusedOrderId(null); // No auto-selection — user picks from list
+  }, [storeOrders]);
 
-    if (focusedOrderId && storeOrders.some((order) => order.id === focusedOrderId)) return;
-    setFocusedOrderId(storeOrders[0].id);
-  }, [focusedOrderId, storeOrders]);
-
-  React.useEffect(() => {
-    if (selectedIds.length === 0) {
-      setFocusedOrderId(null);
-      return;
-    }
-
-    if (focusedOrderId && selectedIds.includes(focusedOrderId)) return;
-    setFocusedOrderId(selectedIds[0]);
-  }, [focusedOrderId, selectedIds]);
-
-  const totalValue = storeOrders
-    .filter(o => selectedIds.includes(o.id))
-    .reduce((sum, o) => sum + o.price, 0);
-  const focusedOrder = React.useMemo(
-    () => storeOrders.find((order) => order.id === focusedOrderId) ?? null,
+  const focusedOrder = useMemo(
+    () => storeOrders.find((o) => o.id === focusedOrderId) ?? null,
     [focusedOrderId, storeOrders],
   );
+
+  const totalValue = storeOrders.reduce((sum, o) => sum + o.price, 0);
+
+  // ── Map expand/collapse toggle ─────────────────────────────────────────────
+
+  const toggleMapExpand = useCallback(() => {
+    const toExpanded = !isMapExpanded;
+    setIsMapExpanded(toExpanded);
+    Animated.spring(mapHeightAnim, {
+      toValue: toExpanded ? MAP_HEIGHT_EXPANDED : MAP_HEIGHT_COLLAPSED,
+      useNativeDriver: false,
+      speed: 14,
+      bounciness: 4,
+    }).start();
+  }, [isMapExpanded, mapHeightAnim]);
+
+  // ── Handle order card tap (list below map) ─────────────────────────────────
+
+  const handleOrderCardPress = useCallback(
+    (orderId: string) => {
+      setFocusedOrderId((prev) => (prev === orderId ? null : orderId));
+    },
+    [],
+  );
+
+  // ── Handle floating detail card tap → navigate to order detail ─────────────
+
+  const handleDetailCardPress = useCallback(
+    (orderId: string) => {
+      router.push(`/(aggregator)/order/${orderId}` as any);
+    },
+    [router],
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <NavBar
-        title="Route Planner"
-        variant="light"
-        rightAction={
-          <View style={styles.viewToggle}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, viewMode === 'map' && styles.toggleBtnActive]}
-              onPress={() => setViewMode('map')}
-            >
-              <Text variant="caption" style={[styles.toggleText, viewMode === 'map' && styles.toggleTextActive]}>
-                Map
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, viewMode === 'list' && styles.toggleBtnActive]}
-              onPress={() => setViewMode('list')}
-            >
-              <Text variant="caption" style={[styles.toggleText, viewMode === 'list' && styles.toggleTextActive]}>
-                List
-              </Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      <NavBar title="Route Planner" variant="light" />
 
       <View style={styles.main}>
-        {/* Map Visualization Area */}
-        <View style={styles.mapArea}>
+        {/* ── Map Area (animated height) ── */}
+        <Animated.View style={[styles.mapArea, { height: mapHeightAnim }]}>
           {canRenderMap && mapLibre ? (
             <mapLibre.MapView style={styles.map} mapStyle={authenticatedMapStyle ?? undefined}>
-              <mapLibre.Camera centerCoordinate={[78.4867, 17.385]} zoomLevel={11} />
-              {storeOrders
-                .filter((order) => selectedIds.includes(order.id))
-                .map((order) => (
-                  <mapLibre.PointAnnotation
-                    key={order.id}
-                    id={`route-order-pin-${order.id}`}
-                    coordinate={[order.lng, order.lat]}
-                    onSelected={() => setFocusedOrderId(order.id)}
-                  >
-                    <View style={[styles.routePointPin, focusedOrderId === order.id && styles.routePointPinActive]} />
-                  </mapLibre.PointAnnotation>
-                ))}
+              <mapLibre.Camera
+                centerCoordinate={
+                  focusedOrder
+                    ? [focusedOrder.lng, focusedOrder.lat]
+                    : [78.4867, 17.385]
+                }
+                zoomLevel={focusedOrder ? 14 : 11}
+                animationDuration={500}
+              />
+              {storeOrders.map((order) => (
+                <mapLibre.PointAnnotation
+                  key={order.id}
+                  id={`route-pin-${order.id}`}
+                  coordinate={[order.lng, order.lat]}
+                  onSelected={() => setFocusedOrderId(order.id)}
+                >
+                  <View
+                    style={[
+                      styles.routePointPin,
+                      focusedOrderId === order.id && styles.routePointPinActive,
+                    ]}
+                  />
+                </mapLibre.PointAnnotation>
+              ))}
             </mapLibre.MapView>
           ) : (
+            /* Fallback graphic when native map is unavailable */
             <View style={styles.mapGraphic}>
-            {/* Markers */}
-            {storeOrders.map(order => (
-              <TouchableOpacity
-                key={order.id}
-                style={[
-                  styles.marker,
-                  {
-                    left: `${Math.max(5, Math.min(90, ((order.lng - 78.2) / 0.6) * 100))}%`,
-                    top: `${Math.max(5, Math.min(90, ((order.lat - 17.2) / 0.4) * 100))}%`,
-                  },
-                  !selectedIds.includes(order.id) && { opacity: 0.4 },
-                ]}
-                onPress={() => setFocusedOrderId(order.id)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.markerPin, styles.markerOrder, focusedOrderId === order.id && styles.markerPinActive]}>
-                  <Package size={14} color="#fff" weight="bold" />
+              {storeOrders.map((order) => (
+                <TouchableOpacity
+                  key={order.id}
+                  style={[
+                    styles.marker,
+                    {
+                      left: `${Math.max(5, Math.min(90, ((order.lng - 78.2) / 0.6) * 100))}%`,
+                      top: `${Math.max(5, Math.min(90, ((17.6 - order.lat) / 0.4) * 100))}%`,
+                    },
+                  ]}
+                  onPress={() => handleOrderCardPress(order.id)}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    style={[
+                      styles.markerPin,
+                      styles.markerOrder,
+                      focusedOrderId === order.id && styles.markerPinActive,
+                    ]}
+                  >
+                    <Package size={14} color="#fff" weight="bold" />
+                  </View>
+                  <View style={styles.markerLabelBg}>
+                    <Text style={styles.markerLabel}>{order.orderNumber}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+
+              <View style={[styles.marker, { left: '45%', top: '65%' }]}>
+                <View style={[styles.markerPin, styles.markerUser]}>
+                  <NavigationArrow size={14} color="#fff" weight="fill" />
                 </View>
                 <View style={styles.markerLabelBg}>
-                  <Text style={styles.markerLabel}>{order.orderNumber}</Text>
+                  <Text style={styles.markerLabel}>You</Text>
                 </View>
-              </TouchableOpacity>
-            ))}
-
-            {/* User Marker */}
-            <View style={[styles.marker, { left: '45%', top: '65%' }]}>
-              <View style={[styles.markerPin, styles.markerUser]}>
-                <NavigationArrow size={14} color="#fff" weight="fill" />
               </View>
-              <View style={styles.markerLabelBg}>
-                <Text style={styles.markerLabel}>You</Text>
+
+              <View style={styles.mapOverlay}>
+                <Globe size={40} color={colors.muted} style={{ opacity: 0.1 }} />
+                <Text style={styles.mapOverlayText}>Route Preview</Text>
+                <Text style={styles.mapOverlayText}>
+                  {mapAvailability.heading || 'Map preview unavailable'}
+                </Text>
+                <Text style={styles.mapOverlayText}>
+                  {mapAvailability.body || 'Use a development build to view map pins.'}
+                </Text>
               </View>
             </View>
-
-            {/* Placeholder Background Text */}
-            <View style={styles.mapOverlay}>
-              <Globe size={40} color={colors.muted} style={{ opacity: 0.1 }} />
-              <Text style={styles.mapOverlayText}>Route Preview</Text>
-              <Text style={styles.mapOverlayText}>{mapAvailability.heading || 'Map preview unavailable'}</Text>
-              <Text style={styles.mapOverlayText}>{mapAvailability.body || 'Use a development build to view map pins.'}</Text>
-            </View>
-          </View>
           )}
 
-          {/* Map Info Overlays */}
+          {/* ── Map overlays ── */}
           <View style={styles.overlayTopLeft}>
             <View style={styles.badge}>
-              <Text variant="caption" style={styles.badgeText}>{selectedIds.length} selected</Text>
+              <Text variant="caption" style={styles.badgeText}>
+                {storeOrders.length} on map
+              </Text>
             </View>
           </View>
 
           <View style={styles.overlayTopRight}>
             <View style={[styles.badge, styles.badgePrice]}>
-              <Numeric size={12} color={colors.amber}>~₹{totalValue.toLocaleString()} total</Numeric>
+              <Numeric size={12} color={colors.amber}>
+                ~₹{totalValue.toLocaleString()}
+              </Numeric>
             </View>
           </View>
 
+          {/* ── Expand / Collapse button ── */}
+          <TouchableOpacity
+            style={styles.expandBtn}
+            onPress={toggleMapExpand}
+            activeOpacity={0.85}
+          >
+            {isMapExpanded ? (
+              <ArrowsIn size={18} color={colors.navy} weight="bold" />
+            ) : (
+              <ArrowsOut size={18} color={colors.navy} weight="bold" />
+            )}
+          </TouchableOpacity>
+
+          {/* ── Floating detail card (appears over map when an order is selected) ── */}
           {focusedOrder ? (
-            <BaseCard style={styles.focusedOrderCard}>
-              <View style={styles.focusedOrderHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text variant="label" style={styles.focusedOrderTitle}>{focusedOrder.orderNumber}</Text>
-                  <Text variant="caption" color={colors.muted}>{focusedOrder.locality} · {focusedOrder.distance}</Text>
-                </View>
-                <StatusChip status={focusedOrder.status} />
-              </View>
-
-              <View style={styles.materialRow}>
-                {focusedOrder.materials.map((material, index) => (
-                  <View key={`${focusedOrder.id}-${material.type}-${index}`} style={styles.miniChip}>
-                    {material.type === 'metal' ? <Wrench size={10} color={colors.slate} /> :
-                      material.type === 'paper' ? <FileText size={10} color={colors.slate} /> :
-                        <Dress size={10} color={colors.slate} />}
-                    <Text variant="caption" style={styles.miniChipText}>{material.weight} kg</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => handleDetailCardPress(focusedOrder.id)}
+            >
+              <BaseCard style={styles.focusedOrderCard}>
+                <View style={styles.focusedOrderHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="label" style={styles.focusedOrderTitle}>
+                      {focusedOrder.orderNumber}
+                    </Text>
+                    <Text variant="caption" color={colors.muted}>
+                      {focusedOrder.locality}
+                      {focusedOrder.distanceKm !== null
+                        ? `  ·  ${focusedOrder.distanceKm.toFixed(1)} km`
+                        : ''}
+                    </Text>
                   </View>
-                ))}
-              </View>
+                  <StatusChip status={focusedOrder.status as any} />
+                </View>
 
-              <View style={styles.focusedOrderFooter}>
-                <Text variant="caption" color={colors.muted}>
-                  {focusedOrder.weightBasis === 'confirmed' ? 'Showing confirmed pickup weight' : 'Showing estimated listing weight'}
-                </Text>
-                <Numeric color={colors.amber} style={styles.orderPrice}>~₹{focusedOrder.price}</Numeric>
-              </View>
-            </BaseCard>
+                <View style={styles.materialRow}>
+                  {focusedOrder.materials.map((material, idx) => {
+                    const chipColors = MATERIAL_CHIP_COLORS[material.type];
+                    const Icon = chipColors.icon;
+                    return (
+                      <View
+                        key={`${focusedOrder.id}-${material.type}-${idx}`}
+                        style={[styles.miniChip, { backgroundColor: chipColors.bg }]}
+                      >
+                        <Icon size={10} color={chipColors.fg} />
+                        {material.weight > 0 && (
+                          <Text variant="caption" style={[styles.miniChipText, { color: chipColors.fg }]}>
+                            {material.weight} kg
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.focusedOrderFooter}>
+                  <Text variant="caption" color={colors.muted}>
+                    Tap to view order details
+                  </Text>
+                  <Numeric color={colors.amber} style={styles.orderPriceText}>
+                    ~₹{focusedOrder.price}
+                  </Numeric>
+                </View>
+              </BaseCard>
+            </TouchableOpacity>
           ) : null}
-        </View>
+        </Animated.View>
 
-        {/* List Section */}
+        {/* ── Order List Section ── */}
         <View style={styles.listSection}>
           <View style={styles.listHeader}>
-            <Text variant="subheading" style={styles.listTitle}>Select orders for this trip</Text>
-            <TouchableOpacity onPress={clearAll}>
-              <Text variant="caption" style={styles.clearLink}>Clear all</Text>
-            </TouchableOpacity>
+            <Text variant="subheading" style={styles.listTitle}>
+              Accepted Orders ({storeOrders.length})
+            </Text>
           </View>
 
-          <ScrollView
-            style={styles.orderList}
-            contentContainerStyle={styles.orderListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {storeOrders.map(order => {
-              const isSelected = selectedIds.includes(order.id);
-              return (
-                <TouchableOpacity
-                  key={order.id}
-                  style={[styles.orderRow, isSelected && styles.orderRowSelected]}
-                  onPress={() => toggleSelection(order.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
-                    {isSelected && <Check size={12} color="#fff" weight="bold" />}
-                  </View>
-
-                  <View style={styles.orderInfo}>
-                    <Text variant="label" style={styles.orderLocality}>
-                      {order.locality} · {order.distance}
-                    </Text>
-                    <View style={styles.materialRow}>
-                      {order.materials.map((m, idx) => (
-                        <View key={idx} style={styles.miniChip}>
-                          {m.type === 'metal' ? <Wrench size={10} color={colors.slate} /> :
-                            m.type === 'paper' ? <FileText size={10} color={colors.slate} /> :
-                              <Dress size={10} color={colors.slate} />}
-                          <Text variant="caption" style={styles.miniChipText}>
-                            {m.weight} kg
+          {storeOrders.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Package size={36} color={colors.muted} />
+              <Text variant="caption" color={colors.muted} style={styles.emptyText}>
+                No accepted orders with location data
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.orderList}
+              contentContainerStyle={styles.orderListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {storeOrders.map((order) => {
+                const isFocused = focusedOrderId === order.id;
+                return (
+                  <TouchableOpacity
+                    key={order.id}
+                    style={[styles.orderRow, isFocused && styles.orderRowFocused]}
+                    onPress={() => handleOrderCardPress(order.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.orderInfo}>
+                      <View style={styles.orderTopRow}>
+                        <Text variant="label" style={styles.orderLocality}>
+                          {order.locality}
+                        </Text>
+                        {order.distanceKm !== null && (
+                          <Text variant="caption" color={colors.muted}>
+                            {order.distanceKm.toFixed(1)} km
                           </Text>
-                        </View>
-                      ))}
+                        )}
+                      </View>
+                      <View style={styles.materialRow}>
+                        {order.materials.map((m, idx) => {
+                          const chipColors = MATERIAL_CHIP_COLORS[m.type];
+                          const Icon = chipColors.icon;
+                          return (
+                            <View
+                              key={`${order.id}-${m.type}-${idx}`}
+                              style={[styles.miniChip, { backgroundColor: chipColors.bg }]}
+                            >
+                              <Icon size={10} color={chipColors.fg} />
+                              {m.weight > 0 && (
+                                <Text
+                                  variant="caption"
+                                  style={[styles.miniChipText, { color: chipColors.fg }]}
+                                >
+                                  {m.weight} kg
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
 
-                  <Numeric color={colors.amber} style={styles.orderPrice}>~₹{order.price}</Numeric>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                    <Numeric color={colors.amber} style={styles.orderPriceText}>
+                      ~₹{order.price}
+                    </Numeric>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       </View>
     </View>
   );
 }
 
+// ── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
   },
-  viewToggle: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(28,46,74,0.08)',
-    borderRadius: 20,
-    padding: 2,
-    marginRight: spacing.sm,
-  },
-  toggleBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: 18,
-  },
-  toggleBtnActive: {
-    backgroundColor: colors.navy,
-  },
-  toggleText: {
-    fontWeight: '600',
-    color: colors.slate,
-  },
-  toggleTextActive: {
-    color: '#fff',
-  },
   main: {
     flex: 1,
   },
+  // ── Map area ──
   mapArea: {
-    flex: 1,
-    backgroundColor: colorExtended.surface2,
+    backgroundColor: '#EEF4FC',
     position: 'relative',
+    overflow: 'hidden',
   },
   map: {
     ...StyleSheet.absoluteFillObject,
@@ -533,11 +574,14 @@ const styles = StyleSheet.create({
     borderColor: colors.surface,
   },
   routePointPinActive: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: colors.navy,
+    borderWidth: 2.5,
+    borderColor: colors.surface,
   },
+  // ── Fallback map graphic ──
   mapGraphic: {
     flex: 1,
     backgroundColor: '#EEF4FC',
@@ -553,6 +597,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: spacing.xs,
     fontWeight: '500',
+    textAlign: 'center',
   },
   marker: {
     position: 'absolute',
@@ -577,15 +622,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red,
   },
   markerPinActive: {
-    transform: [{ scale: 1.08 }],
-    borderColor: colors.navy,
+    transform: [{ scale: 1.15 }],
+    backgroundColor: colors.navy,
+    borderColor: colors.surface,
   },
   markerUser: {
     backgroundColor: colors.teal,
   },
   markerLabelBg: {
     marginTop: 2,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -595,6 +641,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.navy,
   },
+  // ── Map overlays ──
   overlayTopLeft: {
     position: 'absolute',
     top: spacing.md,
@@ -620,12 +667,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // ── Expand button ──
+  expandBtn: {
+    position: 'absolute',
+    bottom: spacing.md + 80, // above the detail card
+    right: spacing.md,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 20,
+  },
+  // ── Floating detail card ──
   focusedOrderCard: {
     position: 'absolute',
     left: spacing.md,
     right: spacing.md,
     bottom: spacing.md,
     padding: spacing.md,
+    zIndex: 30,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
   },
   focusedOrderHeader: {
     flexDirection: 'row',
@@ -636,6 +710,7 @@ const styles = StyleSheet.create({
   focusedOrderTitle: {
     color: colors.navy,
     fontWeight: '700',
+    fontSize: 15,
   },
   focusedOrderFooter: {
     marginTop: spacing.sm,
@@ -644,6 +719,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
+  // ── List section ──
   listSection: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -659,10 +735,7 @@ const styles = StyleSheet.create({
   },
   listTitle: {
     flex: 1,
-  },
-  clearLink: {
-    fontWeight: '600',
-    color: colors.red,
+    color: colors.navy,
   },
   orderList: {
     flex: 1,
@@ -682,50 +755,57 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     gap: spacing.md,
   },
-  orderRowSelected: {
+  orderRowFocused: {
     borderColor: colors.navy,
-    backgroundColor: 'rgba(28,46,74,0.03)',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxActive: {
-    backgroundColor: colors.navy,
-    borderColor: colors.navy,
+    backgroundColor: colors.navyAlpha3,
   },
   orderInfo: {
     flex: 1,
+    gap: 4,
+  },
+  orderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   orderLocality: {
     fontWeight: '700',
     color: colors.navy,
+    flex: 1,
+    marginRight: spacing.sm,
   },
+  // ── Material chips ──
   materialRow: {
     flexDirection: 'row',
     marginTop: 4,
     gap: 6,
+    flexWrap: 'wrap',
   },
   miniChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bg,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 10,
     gap: 4,
   },
   miniChipText: {
     fontSize: 10,
     fontWeight: '600',
-    color: colors.slate,
   },
-  orderPrice: {
+  orderPriceText: {
     textAlign: 'right',
+    flexShrink: 0,
+  },
+  // ── Empty state ──
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  emptyText: {
+    textAlign: 'center',
   },
 });

@@ -168,8 +168,7 @@ export default function OrderCompleteScreen() {
 
             {/* App name thank-you line */}
             <Text style={styles.thankYou}>
-              Thank you for using {APP_NAME}!{'\n'}
-              Payment receipt will be sent to your WhatsApp.
+              Thank you for using {APP_NAME}!
             </Text>
           </Animated.View>
         </Animated.View>

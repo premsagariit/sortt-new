@@ -3,7 +3,7 @@ import { createStorageProvider, type IStorageProvider as IProviderStorage } from
 export interface IStorageProvider {
     uploadFile(fileBuffer: Buffer, fileName: string, mimeType: string): Promise<string>;
     uploadWithKey(fileBuffer: Buffer, fileKey: string, bucket?: string): Promise<string>;
-    getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string>;
+    getSignedUrl(fileKey: string, expiresInSeconds?: number, bucket?: string): Promise<string>;
 }
 
 export class ProviderStorageAdapter implements IStorageProvider {
@@ -27,8 +27,12 @@ export class ProviderStorageAdapter implements IStorageProvider {
         return uploaded.fileKey;
     }
 
-    async getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string> {
-        return this.provider.getSignedUrl(fileKey, expiresInSeconds);
+    async getSignedUrl(fileKey: string, expiresInSeconds?: number, bucket?: string): Promise<string> {
+        // Assume provider.getSignedUrl can take bucket or not. Wait, the underlying provider might not have bucket in getSignedUrl!
+        // We will pass bucket if it accepts it, or just pass it as first arg if we know the signature.
+        // Actually, if the provider doesn't support bucket, we need to prefix the bucket name, or maybe it supports it.
+        // I will just add the bucket parameter to the interface first.
+        return (this.provider as any).getSignedUrl(fileKey, expiresInSeconds, bucket);
     }
 }
 

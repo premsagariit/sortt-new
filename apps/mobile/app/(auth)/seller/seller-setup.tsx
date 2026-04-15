@@ -72,15 +72,6 @@ export default function SellerSetupScreen() {
 
       <View style={styles.content}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerArea}>
-            <View style={styles.avatarSection}>
-              <View style={styles.avatarPlaceholder}>
-                <Text variant="heading" style={{ color: colors.surface }}>R</Text>
-              </View>
-              <Text variant="caption" color={colors.muted}>Optional · Tap to add photo</Text>
-            </View>
-          </View>
-
           <View style={styles.form}>
             <Input
               label="Full Name"
@@ -140,23 +131,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 20,
     paddingBottom: spacing.lg,
-  },
-  headerArea: {
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: spacing.xs,
-  },
-  avatarPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   form: {
     gap: spacing.sm,

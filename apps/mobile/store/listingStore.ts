@@ -61,7 +61,7 @@ const initialState = {
   photoUris: [],
   isAnalyzing: false,
   customNames: {},
-  pickupType: null,
+  pickupType: 'scheduled' as const,
   scheduledDate: '',
   scheduledTime: '',
   selectedAddressId: null,

@@ -21,7 +21,7 @@ export interface IStorageProvider {
    * @param expiresInSeconds - URL expiry in seconds. Defaults to 300 (5 minutes).
    * @returns Signed URL valid for specified duration
    */
-  getSignedUrl(fileKey: string, expiresInSeconds?: number): Promise<string>;
+  getSignedUrl(fileKey: string, expiresInSeconds?: number, bucket?: string): Promise<string>;
 
   /**
    * Delete a file from storage.

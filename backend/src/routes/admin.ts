@@ -24,6 +24,9 @@ import { verifyAdmin } from '../middleware/verifyAdmin';
 
 const router = Router();
 
+const ANALYTICS_CACHE_TTL_MS = 2 * 60 * 1000;
+let analyticsCache: { expiresAt: number; payload: any } | null = null;
+
 // Apply admin role check to all routes in this file
 router.use(verifyAdmin);
 
@@ -396,6 +399,14 @@ router.post('/prices/override', async (req: Request, res: Response) => {
       ]
     );
     await client.query('COMMIT');
+
+    // Keep /api/rates in sync immediately; mobile reads current_price_index view.
+    try {
+      await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index`);
+    } catch (refreshErr) {
+      console.error('[admin/prices/override] view refresh failed', refreshErr);
+    }
+
     return res.json({ success: true, material_code, rate_per_kg });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -403,6 +414,36 @@ router.post('/prices/override', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to save price override' });
   } finally {
     client.release();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/active
+// Aggregators with avg_rating >= 3.5 after 10+ completed orders
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/active', async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT
+         o.aggregator_id,
+         ap.business_name,
+         ap.city_code,
+         ap.kyc_status,
+         ROUND(COALESCE(AVG(r.score), 0)::numeric, 2) AS avg_rating,
+         COUNT(DISTINCT o.id) AS total_orders,
+         MAX(o.created_at) AS last_order_at
+       FROM orders o
+       LEFT JOIN ratings r ON r.order_id = o.id AND r.ratee_id = o.aggregator_id
+       LEFT JOIN aggregator_profiles ap ON ap.user_id = o.aggregator_id
+       WHERE o.status = 'completed'
+       GROUP BY o.aggregator_id, ap.business_name, ap.city_code, ap.kyc_status
+       HAVING COUNT(DISTINCT o.id) >= 10 AND COALESCE(AVG(r.score), 0) >= 3.5
+       ORDER BY COALESCE(AVG(r.score), 0) DESC`
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('[admin/active]', err);
+    return res.status(500).json({ error: 'Failed to fetch active aggregators' });
   }
 });
 
@@ -608,12 +649,14 @@ router.get('/orders/:id', async (req: Request, res: Response) => {
       }))
     );
 
-    // Audit log (no tx needed for read)
-    await query(
+    // Audit log should not block the response path.
+    void query(
       `INSERT INTO admin_audit_log (actor_id, action, target_entity, target_id, metadata, created_at)
        VALUES ($1, 'order_detail_viewed', 'orders', $2, $3, NOW())`,
       [adminUserId, id, JSON.stringify({ context: 'admin_portal' })]
-    );
+    ).catch((auditErr) => {
+      console.error('[admin/orders/:id] audit insert failed', auditErr);
+    });
 
     return res.json({
       ...order,
@@ -636,6 +679,10 @@ router.get('/orders/:id', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
+    if (analyticsCache && analyticsCache.expiresAt > Date.now()) {
+      return res.json(analyticsCache.payload);
+    }
+
     const [
       dailyOrdersRes,
       statusBreakdownRes,
@@ -715,7 +762,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       `),
     ]);
 
-    return res.json({
+    const payload = {
       daily_orders: dailyOrdersRes.rows,
       status_breakdown: statusBreakdownRes.rows,
       city_breakdown: cityBreakdownRes.rows,
@@ -723,7 +770,14 @@ router.get('/analytics', async (req: Request, res: Response) => {
       top_aggregators: topAggregatorsRes.rows,
       hourly_distribution: hourlyDistributionRes.rows,
       revenue_weekly: revenueWeeklyRes.rows,
-    });
+    };
+
+    analyticsCache = {
+      expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS,
+      payload,
+    };
+
+    return res.json(payload);
   } catch (err) {
     console.error('[admin/analytics]', err);
     return res.status(500).json({ error: 'Failed to fetch analytics' });
@@ -805,6 +859,98 @@ router.get('/analytics/users', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[admin/analytics/users]', err);
     return res.status(500).json({ error: 'Failed to fetch user analytics' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/users/:id
+// Get comprehensive user details for admin inspection
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/users/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const adminUserId = req.user!.id;
+
+  try {
+    const userRes = await query(
+      `SELECT id, name, user_type, display_phone, email, is_active, created_at, photo_url
+       FROM users WHERE id = $1`,
+      [id]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userRes.rows[0];
+    let profile = null;
+    let stats = null;
+
+    if (user.user_type === 'aggregator') {
+      const profileRes = await query(
+        `SELECT business_name, aggregator_type, city_code, kyc_status, vehicle_type,
+                home_lat, home_lng, is_onboarding_complete
+         FROM aggregator_profiles WHERE user_id = $1`,
+        [id]
+      );
+      if (profileRes.rows.length > 0) profile = profileRes.rows[0];
+
+      const statsRes = await query(
+        `SELECT
+           COUNT(o.id) AS total_orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'completed') AS completed_orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'cancelled') AS cancelled_orders,
+           COALESCE(SUM(o.amount_due) FILTER (WHERE o.status = 'completed'), 0) AS total_earnings,
+           (SELECT COUNT(*) FROM disputes d JOIN orders so ON d.order_id = so.id WHERE so.aggregator_id = $1) AS complaints_count,
+           (SELECT COALESCE(AVG(score), 0)::numeric(3,2) FROM ratings WHERE ratee_id = $1) AS avg_rating,
+           (SELECT COUNT(*) FROM ratings WHERE ratee_id = $1) AS ratings_count
+         FROM orders o WHERE o.aggregator_id = $1 AND o.deleted_at IS NULL`,
+        [id]
+      );
+      if (statsRes.rows.length > 0) stats = statsRes.rows[0];
+
+    } else if (user.user_type === 'seller') {
+      const statsRes = await query(
+        `SELECT
+           COUNT(o.id) AS total_orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'completed') AS completed_orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'cancelled') AS cancelled_orders,
+           COALESCE(SUM(o.amount_due) FILTER (WHERE o.status = 'completed'), 0) AS total_earnings,
+           (SELECT COUNT(*) FROM disputes d JOIN orders so ON d.order_id = so.id WHERE so.seller_id = $1) AS complaints_count,
+           (SELECT COALESCE(AVG(score), 0)::numeric(3,2) FROM ratings WHERE ratee_id = $1) AS avg_rating,
+           (SELECT COUNT(*) FROM ratings WHERE ratee_id = $1) AS ratings_count
+         FROM orders o WHERE o.seller_id = $1 AND o.deleted_at IS NULL`,
+        [id]
+      );
+      if (statsRes.rows.length > 0) stats = statsRes.rows[0];
+    }
+
+    // Include recent 10 orders for context
+    const recentOrdersQuery = user.user_type === 'aggregator' ? 'aggregator_id' : 'seller_id';
+    const recentOrdersRes = await query(
+      `SELECT id, status, amount_due, created_at, completed_at
+       FROM orders WHERE ${recentOrdersQuery} = $1 AND deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT 10`,
+      [id]
+    );
+
+    // Audit log should not block the response path.
+    void query(
+      `INSERT INTO admin_audit_log (actor_id, action, target_entity, target_id, metadata, created_at)
+       VALUES ($1, 'user_detail_viewed', 'users', $2, $3, NOW())`,
+      [adminUserId, id, JSON.stringify({ context: 'admin_portal' })]
+    ).catch((auditErr) => {
+      console.error('[admin/users/:id] audit insert failed', auditErr);
+    });
+
+    return res.json({
+      user,
+      profile,
+      stats,
+      recent_orders: recentOrdersRes.rows
+    });
+  } catch (err) {
+    console.error('[admin/users/:id]', err);
+    return res.status(500).json({ error: 'Failed to fetch user details' });
   }
 });
 

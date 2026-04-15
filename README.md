@@ -1,8 +1,8 @@
-# [APP_NAME] — India's Scrap Marketplace
+﻿# [APP_NAME] — India's Scrap Marketplace
 
 > **Status:** Day 17 IN PROGRESS: Security Audit, MVP Launch & Admin enhancements (2026-04-13)  
 > **Architecture:** pnpm Monorepo  
-> **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI, Azure Application Insights, Azure Monitor Availability Tests, PostHog Cloud, Microsoft Clarity, Sentry (mobile only).
+> **Tech Stack:** Expo SDK 54+, Next.js 15 (admin web), Node.js (Express), Azure PostgreSQL, Gemini AI, Azure Sentry, Azure Monitor Availability Tests, Product analytics (disabled), Behavior analytics (disabled), Sentry (mobile only).
 
 ---
 
@@ -15,8 +15,8 @@
 │   └── web/          # Next.js 15 — Admin web pages (`/admin/*`)
 ├── backend/          # Node.js/Express — Central API & Webhooks
 ├── packages/         # Shared Provider Abstractions (@sortt/*)
-│   ├── auth/         # IAuthProvider (Clerk Auth)
-│   ├── maps/         # IMapProvider (Google/Ola Maps)
+│   ├── auth/         # IAuthProvider (JWT)
+│   ├── maps/         # IMapProvider (Ola Maps)
 │   ├── realtime/     # IRealtimeProvider (Ably Realtime)
 │   ├── storage/      # IStorageProvider (Cloudflare R2 Storage)
 │   └── analysis/     # IAnalysisProvider (Gemini Vision)
@@ -48,7 +48,7 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 - `backend/.env`
 - `scraper/.env`
 
-- `CLERK_SECRET_KEY`: Backend auth verification.
+- `JWT_SECRET`: Backend auth verification.
 - `OLA_MAPS_API_KEY`: Backend geocoding/routing key (Ola Maps).
 - `EXPO_PUBLIC_OLA_MAPS_API_KEY`: Mobile tile-rendering key for Ola vector style.
 - `EXPO_ACCESS_TOKEN`: EAS deployments and updates.
@@ -88,8 +88,8 @@ pnpm dev:backend
 | **Backend** | Node.js, Express, Upstash (Redis), Sharp, Etag |
 | **Database** | Azure PostgreSQL, RLS, migration-driven schema |
 | **Auth** | Custom JWT (Phone OTP via WhatsApp Cloud API) |
-| **Observability** | Azure Application Insights (Express + Next.js), Azure Monitor Availability Tests |
-| **Analytics** | PostHog Cloud (product funnels), Microsoft Clarity (admin web behaviour), Sentry React Native SDK (mobile crash symbolication only) |
+| **Observability** | Azure Sentry (Express + Next.js), Azure Monitor Availability Tests |
+| **Analytics** | Product analytics disabled, admin behavior analytics disabled, Sentry (mobile crash symbolication only) |
 | **Offline Handling** | `useNetworkStatus` (NetInfo), `OfflineAwareNavigator`, `AuthNetworkErrorScreen`, `NetworkErrorScreen` |
 | **AI** | Gemini Flash Vision (Photo Analysis), Gemini Pro (Price Scraping) |
 
@@ -214,3 +214,7 @@ pnpm dev:backend
 - Admin functionality cleaned: Super Admin script successfully truncates legacy inconsistencies and reliably sets up fresh deterministic accounts.
 - Admin metrics accurately track deterministic IDs correctly without constraint errors.
 - UI elements stripped of unwanted scrollbars and mapped to correct tiles sets natively.
+
+
+
+

@@ -11,6 +11,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { adminFetch } from '../../../../lib/adminApi';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -26,7 +27,7 @@ export default function CreatePasswordPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-bg flex flex-col items-center justify-center py-12 px-4">
-        <div className="text-navy font-bold animate-pulse">Loading setup...</div>
+        <BoneyardBlock className="h-5 w-32" />
       </div>
     }>
       <CreatePasswordContent />

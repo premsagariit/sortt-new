@@ -10,6 +10,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { BoneyardBlock } from '@/components/ui/Boneyard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -17,7 +18,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-bg flex flex-col items-center justify-center py-12 px-4">
-        <div className="text-navy font-bold animate-pulse">Loading recovery...</div>
+        <BoneyardBlock className="h-5 w-36" />
       </div>
     }>
       <ResetPasswordContent />
