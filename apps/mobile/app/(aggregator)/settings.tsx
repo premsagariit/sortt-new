@@ -22,8 +22,6 @@ import { useAggregatorStore } from '../../store/aggregatorStore';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
-
 interface SettingToggleProps {
     title: string;
     subtitle?: string;
@@ -70,12 +68,13 @@ function SettingLink({ title, subtitle, onPress, isLast, isDestructive }: Settin
 }
 
 export default function AggregatorSettingsScreen() {
-    const { getLanguageName } = useI18n();
+    const { t, getLanguageName } = useI18n();
     const language = useLanguageStore((state) => state.language);
     const router = useRouter();
     const { fullName, aggregatorType, primaryArea, isOnline, updateOnlineStatus, fetchAggregatorProfile, profile } = useAggregatorStore();
     const accountName = useAuthStore((s) => s.name);
     const phoneNumber = useAuthStore((s) => s.phoneNumber);
+    const profilePhoto = useAuthStore((s) => s.profilePhoto);
     const signOut = useAuthStore((s) => s.signOut);
 
     const handleLogout = async () => {
@@ -92,12 +91,12 @@ export default function AggregatorSettingsScreen() {
                 void fetchAggregatorProfile();
         }, [fetchAggregatorProfile]);
 
-        const displayName = accountName || profile?.name || fullName || 'Aggregator';
+        const displayName = accountName || profile?.name || fullName || t('Aggregator');
     const displayPhone = phoneNumber
       ? `+91 •••••${phoneNumber.slice(-5)}`
             : '+91 •••••';
-        const displayType = aggregatorType === 'shop' ? 'Shop-Based' : aggregatorType === 'mobile' ? 'Mobile' : 'Aggregator';
-        const displayLocality = profile?.operatingArea || primaryArea || 'Unknown Area';
+        const displayType = aggregatorType === 'shop' ? t('Shop-Based') : aggregatorType === 'mobile' ? t('Mobile') : t('Aggregator');
+        const displayLocality = profile?.operatingArea || primaryArea || t('Unknown Area');
 
     // States match the UI requirements
     const [autoOffline, setAutoOffline] = useState(true);
@@ -109,17 +108,17 @@ export default function AggregatorSettingsScreen() {
         <View style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
             <NavBar
-                title="Settings"
+                title={t('Settings')}
                 variant="light"
                 onBack={() => router.back()}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* ACCOUNT SECTION */}
-                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>ACCOUNT</Text>
+                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>{t('ACCOUNT')}</Text>
                 <View style={styles.card}>
                     <View style={styles.accountRow}>
-                        <Avatar name={displayName} userType="aggregator" size="lg" source={AVATAR_SOURCE} />
+                        <Avatar name={displayName} userType="aggregator" size="lg" uri={profilePhoto || undefined} />
                         <View style={styles.accountInfo}>
                             <Text variant="body" style={styles.userName}>{displayName}</Text>
                             <Text variant="caption" color={colors.muted} style={styles.userDetail}>
@@ -127,23 +126,23 @@ export default function AggregatorSettingsScreen() {
                             </Text>
                         </View>
                         <Pressable onPress={() => router.push('/(aggregator)/edit-profile')}>
-                            <Text variant="body" style={styles.editText}>Edit</Text>
+                            <Text variant="body" style={styles.editText}>{t('Edit')}</Text>
                         </Pressable>
                     </View>
                 </View>
 
                 {/* AVAILABILITY SECTION */}
-                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>AVAILABILITY</Text>
+                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>{t('AVAILABILITY')}</Text>
                 <View style={styles.card}>
                     <SettingToggle
-                        title="Online status"
-                        subtitle="Visible to sellers when online"
+                        title={t('Online status')}
+                        subtitle={t('Visible to sellers when online')}
                         value={isOnline}
                         onValueChange={updateOnlineStatus}
                     />
                     <SettingToggle
-                        title="Auto-offline after hours"
-                        subtitle="Go offline after 7 PM automatically"
+                        title={t('Auto-offline after hours')}
+                        subtitle={t('Go offline after 7 PM automatically')}
                         value={autoOffline}
                         onValueChange={setAutoOffline}
                         isLast
@@ -151,22 +150,22 @@ export default function AggregatorSettingsScreen() {
                 </View>
 
                 {/* NOTIFICATIONS SECTION */}
-                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>NOTIFICATIONS</Text>
+                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>{t('NOTIFICATIONS')}</Text>
                 <View style={styles.card}>
                     <SettingToggle
-                        title="New orders near me"
-                        subtitle="Alert when a matching order is posted"
+                        title={t('New orders near me')}
+                        subtitle={t('Alert when a matching order is posted')}
                         value={newOrderAlerts}
                         onValueChange={setNewOrderAlerts}
                     />
                     <SettingToggle
-                        title="Price index updates"
-                        subtitle="Daily market rate changes"
+                        title={t('Price index updates')}
+                        subtitle={t('Daily market rate changes')}
                         value={priceUpdates}
                         onValueChange={setPriceUpdates}
                     />
                     <SettingToggle
-                        title="Seller messages"
+                        title={t('Seller messages')}
                         value={sellerMessages}
                         onValueChange={setSellerMessages}
                         isLast
@@ -174,16 +173,16 @@ export default function AggregatorSettingsScreen() {
                 </View>
 
                 {/* PREFERENCES SECTION */}
-                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>PREFERENCES</Text>
+                <Text variant="caption" color={colors.muted} style={styles.sectionLabel}>{t('PREFERENCES')}</Text>
                 <View style={styles.card}>
                     <SettingLink
-                        title="Language"
+                        title={t('Language')}
                         subtitle={getLanguageName(language)}
                         onPress={() => router.push('/(shared)/language' as any)}
                     />
                     <SettingLink
-                        title="Min. order value"
-                        subtitle="Only show orders above ₹100"
+                        title={t('Min. order value')}
+                        subtitle={t('Only show orders above ₹100')}
                         onPress={() => { }} // Feature implementation for later
                         isLast
                     />
@@ -192,15 +191,15 @@ export default function AggregatorSettingsScreen() {
                 {/* DELETE ACCOUNT */}
                 <View style={[styles.card, { marginTop: spacing.lg }]}>
                     <SettingLink
-                        title="Log Out"
+                        title={t('Log Out')}
                         isDestructive
                         onPress={() => { void handleLogout(); }}
                     />
                     <SettingLink
-                        title="Delete Account"
+                        title={t('Delete Account')}
                         isDestructive
                         isLast
-                        onPress={() => Alert.alert('Account deletion requested')}
+                        onPress={() => Alert.alert(t('Account deletion requested'))}
                     />
                 </View>
 

@@ -9,6 +9,8 @@ export type OrderStatus =
   | 'arrived' | 'weighing_in_progress' | 'completed'
   | 'cancelled' | 'disputed';
 
+export type DisputeStatus = 'open' | 'resolved' | 'dismissed';
+
 // MaterialCode canonical source is MaterialChip.tsx — import for local use + re-export
 import type { MaterialCode } from '../components/ui/MaterialChip';
 export type { MaterialCode };
@@ -66,6 +68,8 @@ export interface Order {
   }>;
   materialCodes?: string[];
   history?: any[];
+  disputeId?: string | null;
+  disputeStatus?: DisputeStatus | null;
 }
 
 export function getOrderDisplayAmount(order: any): number {
@@ -219,7 +223,15 @@ export function mapApiOrder(o: any): Order {
       : undefined,
     materialCodes: o.material_codes ?? o.materialCodes ?? o.materials ?? [],
     history: o.history ?? [],
+    disputeId: typeof o.dispute_id === 'string' ? o.dispute_id : (typeof o.disputeId === 'string' ? o.disputeId : null),
+    disputeStatus: toDisputeStatusOrNull(o.dispute_status ?? o.disputeStatus),
   };
+}
+
+function toDisputeStatusOrNull(value: unknown): DisputeStatus | null {
+  if (value === 'closed') return 'resolved';
+  if (value === 'open' || value === 'resolved' || value === 'dismissed') return value;
+  return null;
 }
 
 interface OrderStoreState {

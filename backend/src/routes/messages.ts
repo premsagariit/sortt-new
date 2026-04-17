@@ -9,6 +9,7 @@ import { channelName } from '../utils/channelHelper';
 import { sendPushToUsers } from '../utils/pushNotifications';
 import { publishEvent } from '../lib/realtime';
 import { storageProvider } from '../lib/storage';
+import { resolveProfilePhotosBucket } from '../lib/storageBuckets';
 
 const router = Router();
 
@@ -357,7 +358,9 @@ router.get('/', async (req: Request, res: Response) => {
         const orderRes = await query(
             `SELECT o.seller_id, o.aggregator_id,
                     su.name AS seller_name, su.id AS seller_clerk,
-                    au.name AS aggregator_name, au.id AS aggregator_clerk
+                    su.profile_photo_url AS seller_profile_photo_url,
+                    au.name AS aggregator_name, au.id AS aggregator_clerk,
+                    au.profile_photo_url AS aggregator_profile_photo_url
              FROM orders o
              LEFT JOIN users su ON su.id = o.seller_id
              LEFT JOIN users au ON au.id = o.aggregator_id
@@ -382,9 +385,19 @@ router.get('/', async (req: Request, res: Response) => {
 
         const mappedMessages = await Promise.all(result.rows.map(resolveMessageRow));
 
-        // Avatar URLs: not available without Clerk — return null
-        const sellerAvatarUrl: string | null = null;
-        const aggregatorAvatarUrl: string | null = null;
+        const bucketName = resolveProfilePhotosBucket();
+        const signPhoto = async (key: string | null | undefined) => {
+            const storageKey = String(key ?? '').trim();
+            if (!storageKey) return null;
+            try {
+                return await storageProvider.getSignedUrl(storageKey, 3600, bucketName);
+            } catch {
+                return null;
+            }
+        };
+
+        const sellerAvatarUrl = await signPhoto(order.seller_profile_photo_url ?? order.seller_photo_url ?? order.seller_avatar_url ?? null);
+        const aggregatorAvatarUrl = await signPhoto(order.aggregator_profile_photo_url ?? order.aggregator_photo_url ?? order.aggregator_avatar_url ?? null);
 
         return res.json({
             messages: mappedMessages,

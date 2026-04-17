@@ -142,13 +142,33 @@ def get_previous_rate(cur, material_code: str):
     return float(row[0]) if row else None
 
 
-def insert_rate(cur, material_code: str, rate: float, source_url: str, is_manual_override: bool):
+def insert_rate(cur, material_code: str, rate: float, source_url: str, is_manual_override: bool, previous_rate: float | None):
+    change_percent = None
+    if previous_rate is not None and previous_rate > 0:
+        change_percent = round(((rate - previous_rate) / previous_rate) * 100.0, 2)
+
     cur.execute(
         """
-        INSERT INTO price_index (city_code, material_code, rate_per_kg, source, is_manual_override, scraped_at)
-        VALUES ('HYD', %s, %s, %s, %s, NOW())
+        INSERT INTO price_index (
+          city_code,
+          material_code,
+          rate_per_kg,
+          previous_rate_per_kg,
+          change_percent,
+          source,
+          is_manual_override,
+          scraped_at
+        )
+        VALUES ('HYD', %s, %s, %s, %s, %s, %s, NOW())
         """,
-        (material_code, Decimal(str(rate)), source_url, is_manual_override),
+        (
+            material_code,
+            Decimal(str(rate)),
+            Decimal(str(previous_rate)) if previous_rate is not None else None,
+            Decimal(str(change_percent)) if change_percent is not None else None,
+            source_url,
+            is_manual_override,
+        ),
     )
 
 
@@ -205,7 +225,7 @@ def run_scraper():
                             level="warning",
                         )
 
-                    insert_rate(cur, material_code, rate, url, is_manual_override)
+                    insert_rate(cur, material_code, rate, url, is_manual_override, prev)
                     inserted += 1
                     inserted_codes.add(material_code)
 
@@ -222,7 +242,7 @@ def run_scraper():
                     f"Fallback insert for missing material {material_code}: {fallback_rate}",
                     level="warning",
                 )
-                insert_rate(cur, material_code, float(fallback_rate), "fallback:missing_material", True)
+                insert_rate(cur, material_code, float(fallback_rate), "fallback:missing_material", True, get_previous_rate(cur, material_code))
                 inserted += 1
                 inserted_codes.add(material_code)
 

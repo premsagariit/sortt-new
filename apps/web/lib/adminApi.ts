@@ -62,6 +62,7 @@ export interface KycPendingItem {
   kyc_status: 'pending' | 'verified' | 'rejected';
   submitted_at: string;
   document_count: number;
+  photo_url?: string | null;
 }
 
 export interface KycDocument {
@@ -73,8 +74,11 @@ export interface KycDocument {
 
 export interface Dispute {
   id: string;
+  uuid?: string;
   order_id: string;
   raised_by: string;
+  raised_by_name?: string | null;
+  issue_type: string;
   description: string;
   status: 'open' | 'resolved' | 'dismissed';
   created_at: string;
@@ -83,8 +87,43 @@ export interface Dispute {
   hours_since_raised: number;
   order_status: string;
   seller_id: string;
+  seller_name?: string | null;
+  aggregator_id?: string | null;
   aggregator_name: string;
+  aggregator_phone?: string | null;
+  evidence_count?: number;
   evidence_urls?: string[];
+}
+
+export interface DisputeEvidence {
+  source: 'order_media' | 'dispute_evidence';
+  media_type: string;
+  created_at: string;
+  url: string;
+  uploaded_by_role?: 'seller' | 'aggregator' | 'admin' | 'user' | string;
+  uploaded_by_name?: string | null;
+  uploaded_by_label?: string;
+}
+
+export interface AdminDisputeDetail extends Dispute {
+  evidence?: DisputeEvidence[];
+}
+
+export interface AdminDisputesResponse {
+  disputes: Dispute[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminDisputeFilters {
+  status?: 'all' | 'open' | 'closed' | 'resolved' | 'dismissed';
+  issue_type?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface PriceEntry {
@@ -103,6 +142,7 @@ export interface FlaggedAggregator {
   avg_rating: number;
   total_orders: number;
   last_order_at: string;
+  photo_url?: string | null;
 }
 
 // ─── Orders ──────────────────────────────────────────────────────
@@ -137,8 +177,20 @@ export interface AdminOrderMedia {
   id: string; media_type: string; url: string; created_at: string;
 }
 
+export interface AdminOrderDispute {
+  id: string;
+  order_id: string;
+  description: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  raised_by: string | null;
+}
+
 export interface AdminOrderDetail {
   id: string; status: string; created_at: string;
+    order_number: number;
   scheduled_at: string | null; picked_up_at: string | null;
   completed_at: string | null; cancelled_at: string | null;
   cancellation_reason: string | null; amount_due: number | null;
@@ -153,6 +205,7 @@ export interface AdminOrderDetail {
   aggregator_city: string | null; aggregator_kyc_status: string | null;
   aggregator_phone: string | null; distance_km: number | null;
   items: AdminOrderItem[]; timeline: AdminTimelineEvent[]; media: AdminOrderMedia[];
+  disputes: AdminOrderDispute[];
 }
 
 export interface AdminOrderPin {
@@ -210,7 +263,18 @@ export const adminApi = {
     }),
 
   // Disputes
-  getDisputes: () => adminFetch<Dispute[]>('/api/admin/disputes'),
+  getDisputes: (filters?: AdminDisputeFilters) => {
+    const qs = new URLSearchParams();
+    if (filters?.status) qs.set('status', filters.status);
+    if (filters?.issue_type) qs.set('issue_type', filters.issue_type);
+    if (filters?.search) qs.set('search', filters.search);
+    if (filters?.date_from) qs.set('date_from', filters.date_from);
+    if (filters?.date_to) qs.set('date_to', filters.date_to);
+    if (filters?.limit != null) qs.set('limit', String(filters.limit));
+    if (filters?.offset != null) qs.set('offset', String(filters.offset));
+    return adminFetch<AdminDisputesResponse>(`/api/admin/disputes?${qs}`);
+  },
+  getDispute: (id: string) => adminFetch<AdminDisputeDetail>(`/api/admin/disputes/${id}`),
   resolveDispute: (id: string, action: 'resolve' | 'dismiss', resolution_note?: string) =>
     adminFetch(`/api/admin/disputes/${id}`, {
       method: 'PATCH',

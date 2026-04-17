@@ -120,7 +120,14 @@ export default function AggregatorOtpScreen() {
       });
     } catch (err: any) {
       console.error('OTP Verification failed:', err);
-      setErrorMsg(err?.message || 'Invalid OTP. Please try again.');
+      const nextError = err?.message || 'Invalid OTP. Please try again.';
+      setErrorMsg(nextError);
+      if (/invalid|incorrect|otp/i.test(String(nextError))) {
+        setOtp('');
+      }
+      requestAnimationFrame(() => {
+        otpInputRef.current?.focus();
+      });
     } finally {
       setIsVerifying(false);
     }
@@ -201,46 +208,52 @@ export default function AggregatorOtpScreen() {
               Seller OTP
             </Text>
             <View style={styles.otpInputContainer}>
-              <Pressable 
-                style={styles.digitRow} 
-                onPress={() => otpInputRef.current?.focus()}
-              >
-                {Array.from({ length: OTP_LENGTH }).map((_, idx) => {
-                  const digit = otp[idx] || '';
-                  const isFocused = otp.length === idx;
-                  return (
-                    <View 
-                      key={idx} 
-                      style={[
-                        styles.digitBox,
-                        digit ? styles.digitBoxActive : null,
-                        isFocused ? styles.digitBoxFocused : null,
-                        errorMsg ? styles.digitBoxError : null
-                      ]}
-                    >
-                      <Text variant="heading" color={digit ? colors.navy : colors.border}>
-                        {digit || ''}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </Pressable>
-
-              <TextInput
-                ref={otpInputRef}
-                style={styles.hiddenInput}
-                value={otp}
-                onChangeText={(v) => {
-                  setErrorMsg(null);
-                  setOtp(v.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
-                }}
-                keyboardType="number-pad"
-                maxLength={OTP_LENGTH}
-              />
-              {isVerifying && (
-                <View style={styles.loaderWrap}>
-                  <ActivityIndicator size="small" color={colors.teal} />
+              {isVerifying ? (
+                <View style={styles.verifyingWrap}>
+                  <ActivityIndicator size="large" color={colors.teal} />
+                  <Text variant="caption" color={colors.slate} style={styles.verifyingText}>
+                    Verifying OTP...
+                  </Text>
                 </View>
+              ) : (
+                <>
+                  <Pressable
+                    style={styles.digitRow}
+                    onPress={() => otpInputRef.current?.focus()}
+                  >
+                    {Array.from({ length: OTP_LENGTH }).map((_, idx) => {
+                      const digit = otp[idx] || '';
+                      const isFocused = otp.length === idx;
+                      return (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.digitBox,
+                            digit ? styles.digitBoxActive : null,
+                            isFocused ? styles.digitBoxFocused : null,
+                            errorMsg ? styles.digitBoxError : null
+                          ]}
+                        >
+                          <Text variant="heading" color={digit ? colors.navy : colors.border}>
+                            {digit || ''}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </Pressable>
+
+                  <TextInput
+                    ref={otpInputRef}
+                    style={styles.hiddenInput}
+                    value={otp}
+                    onChangeText={(v) => {
+                      setErrorMsg(null);
+                      setOtp(v.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={OTP_LENGTH}
+                  />
+                </>
               )}
             </View>
             
@@ -388,10 +401,13 @@ const styles = StyleSheet.create({
     width: 0,
     height: 0,
   },
-  loaderWrap: {
-    position: 'absolute',
-    right: -10,
-    top: 24,
+  verifyingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  verifyingText: {
+    textAlign: 'center',
   },
   errorText: {
     textAlign: 'center',

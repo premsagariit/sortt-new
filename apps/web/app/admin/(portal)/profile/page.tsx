@@ -225,7 +225,7 @@ export default function AdminProfilePage() {
               </div>
               <div>
                 <div className="text-[13px] font-semibold text-navy">Session Security</div>
-                <div className="text-[11px] text-muted">15-minute inactivity timeout active</div>
+                <div className="text-[11px] text-muted">Session remains active until sign out</div>
               </div>
             </div>
             <span className="px-2.5 py-1 bg-teal/10 text-teal text-[11px] font-bold rounded-full border border-teal/20">Active</span>

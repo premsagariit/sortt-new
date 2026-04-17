@@ -12,6 +12,7 @@ const buildCapability = (userId: string, userType?: string) => {
 
   if (userType === 'aggregator') {
     capability['orders:hyd:new'] = ['subscribe'];
+    capability['rates:hyd:index'] = ['subscribe'];
   }
 
   return capability;

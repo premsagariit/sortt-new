@@ -8,6 +8,7 @@ import type {
   AdminTimelineEvent,
   AdminOrderItem,
   AdminOrderMedia,
+  AdminOrderDispute,
 } from '@/lib/adminApi';
 import {
   ArrowLeft, User, Truck, MapPin, Clock, Package, CheckCircle,
@@ -51,12 +52,37 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatPreferredWindow(windowValue: unknown): string | null {
+  if (!windowValue || typeof windowValue !== 'object') return null;
+
+  const w = windowValue as { scheduledDate?: unknown; scheduledTime?: unknown };
+  const scheduledDate = typeof w.scheduledDate === 'string' ? w.scheduledDate : '';
+  const scheduledTime = typeof w.scheduledTime === 'string' ? w.scheduledTime : '';
+
+  if (!scheduledDate || !scheduledTime) return null;
+
+  const datePart = scheduledDate.includes('T') ? scheduledDate.slice(0, 10) : scheduledDate;
+  const match = scheduledTime.match(/^([a-z]+)_(\d{1,2})_(\d{1,2})$/i);
+
+  if (!match) {
+    return `${datePart}, ${scheduledTime}`;
+  }
+
+  const period = match[1].toLowerCase();
+  const fromHour = String(Number(match[2]));
+  const toHour = String(Number(match[3]));
+  const suffix = period === 'morning' ? 'AM' : 'PM';
+
+  return `${datePart}, ${fromHour}-${toHour} ${suffix}`;
+}
+
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<AdminOrderMedia | null>(null);
 
   useEffect(() => {
     adminFetch<AdminOrderDetail>(`/api/admin/orders/${params.id}`)
@@ -77,6 +103,7 @@ export default function OrderDetailPage() {
 
   const StatusIcon = STATUS_ICONS[order.status] ?? Clock;
   const statusColor = STATUS_COLORS[order.status] ?? '#6366f1';
+  const preferredWindow = formatPreferredWindow(order.preferred_pickup_window);
 
   return (
     <div className={styles.page}>
@@ -97,7 +124,7 @@ export default function OrderDetailPage() {
       <div className={styles.hero}>
         <h1 className={styles.orderId}>{order.id}</h1>
         <p className={styles.orderMeta}>
-          Created {fmtDate(order.created_at)} · {order.city_code}
+            Order #{order.order_number} · Created {fmtDate(order.created_at)} · {order.city_code}
           {order.amount_due != null && ` · ₹${Number(order.amount_due).toFixed(2)}`}
         </p>
       </div>
@@ -121,16 +148,12 @@ export default function OrderDetailPage() {
           <KV label="Address" value={order.pickup_address} />
           <KV label="Coordinates" value={
             order.pickup_lat
-              ? <a href={`https://maps.google.com/?q=${order.pickup_lat},${order.pickup_lng}`} target="_blank" rel="noreferrer" className={styles.link}>
+              ? <a href={`https://www.openstreetmap.org/?mlat=${order.pickup_lat}&mlon=${order.pickup_lng}#map=18/${order.pickup_lat}/${order.pickup_lng}`} target="_blank" rel="noreferrer" className={styles.link}>
                   {Number(order.pickup_lat).toFixed(5)}, {Number(order.pickup_lng).toFixed(5)}
                 </a>
               : null
           } />
-          <KV label="Preferred Window" value={
-            order.preferred_pickup_window
-              ? JSON.stringify(order.preferred_pickup_window)
-              : null
-          } />
+          <KV label="Preferred Window" value={preferredWindow} />
           {order.seller_note && <KV label="Seller Note" value={<em>{order.seller_note}</em>} />}
         </Section>
 
@@ -182,6 +205,37 @@ export default function OrderDetailPage() {
           )}
         </Section>
 
+        {/* Disputes */}
+        <Section title="Related Disputes" icon={Clock}>
+          {(order.disputes ?? []).length === 0 ? (
+            <p className={styles.unassigned}>No disputes raised for this order</p>
+          ) : (
+            <table className={styles.itemsTable}>
+              <thead>
+                <tr>
+                  <th>Dispute ID</th>
+                  <th>Status</th>
+                  <th>Raised</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(order.disputes ?? []).map((d: AdminOrderDispute) => (
+                  <tr
+                    key={d.id}
+                    className={styles.disputeRow}
+                    onClick={() => router.push(`/admin/disputes/${d.id}`)}
+                    title="Open dispute details"
+                  >
+                    <td className={styles.disputeId}>{d.id}</td>
+                    <td>{d.status}</td>
+                    <td>{fmtDate(d.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Section>
+
         {/* Items */}
         <Section title="Order Items" icon={Scale}>
           {(order.items ?? []).length === 0 ? (
@@ -219,29 +273,47 @@ export default function OrderDetailPage() {
         </Section>
 
         {/* Key Timestamps */}
-        <Section title="Key Timestamps" icon={Calendar}>
-          <KV label="Created" value={fmtDate(order.created_at)} />
-          <KV label="Scheduled" value={fmtDate(order.scheduled_at)} />
-          <KV label="Picked Up" value={fmtDate(order.picked_up_at)} />
-          <KV label="Completed" value={fmtDate(order.completed_at)} />
-          <KV label="Cancelled" value={fmtDate(order.cancelled_at)} />
+        {/* Scrap Photos */}
+        <Section title="Scrap Photos" icon={ImageIcon}>
+          {(order.media ?? []).length > 0 ? (
+            <div className={styles.mediaGrid}>
+              {order.media.map((m: AdminOrderMedia) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={styles.mediaCard}
+                  onClick={() => setSelectedMedia(m)}
+                >
+                  <img src={m.url} alt={m.media_type} className={styles.mediaThumb} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.unassigned}>No image captured</p>
+          )}
         </Section>
 
         {/* Media */}
-        {(order.media ?? []).length > 0 && (
-          <Section title="Attachments" icon={ImageIcon}>
-            <div className={styles.mediaGrid}>
-              {order.media.map((m: AdminOrderMedia) => (
-                <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className={styles.mediaCard}>
-                  <ImageIcon size={20} />
-                  <span className={styles.mediaType}>{m.media_type}</span>
-                  <span className={styles.mediaDate}>{fmtDate(m.created_at)}</span>
-                </a>
-              ))}
-            </div>
-          </Section>
-        )}
       </div>
+
+      {selectedMedia && (
+        <div className={styles.previewOverlay} onClick={() => setSelectedMedia(null)}>
+          <div className={styles.previewPanel} onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className={styles.previewClose}
+              onClick={() => setSelectedMedia(null)}
+            >
+              Close
+            </button>
+            <img src={selectedMedia.url} alt={selectedMedia.media_type} className={styles.previewImage} />
+            <div className={styles.previewMeta}>
+              <span>{selectedMedia.media_type}</span>
+              <span>{fmtDate(selectedMedia.created_at)}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

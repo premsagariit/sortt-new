@@ -18,6 +18,7 @@ import { channelName } from '../../utils/channelHelper';
 import { sendPushToUsers } from '../../utils/pushNotifications';
 import { publishEvent } from '../../lib/realtime';
 import { generateAndStoreInvoice } from '../../utils/invoiceGenerator';
+import { getLocalizedMaterialLabelSql, resolveRequestLanguage } from '../../utils/language';
 import {
   isAddressInOperatingAreas,
   isPickupWindowWithinSchedule,
@@ -41,6 +42,14 @@ const router = Router();
 
 const resolveViewerType = (userType?: string | null): OrderDtoViewerType | null => {
   return userType === 'seller' || userType === 'aggregator' ? userType : null;
+};
+
+const resolveRouteLanguage = (req: any) => {
+  return resolveRequestLanguage({
+    explicit: typeof req.query?.language === 'string' ? req.query.language : null,
+    header: typeof req.headers?.['accept-language'] === 'string' ? req.headers['accept-language'] : null,
+    userPreferred: req.user?.preferred_language ?? null,
+  });
 };
 
 // Validation helpers
@@ -171,12 +180,13 @@ router.post('/', verifyUserRole('seller'), async (req, res) => {
 
         const orderRes = await client.query(`
               INSERT INTO orders (
-                id, seller_id, city_code, pickup_address, pickup_locality, pickup_lat, pickup_lng, preferred_pickup_window, seller_note, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'created')
+                id, seller_id, order_number, city_code, pickup_address, pickup_locality, pickup_lat, pickup_lng, preferred_pickup_window, seller_note, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'created')
               RETURNING *
             `, [
           customOrderId,
           userId,
+          orderSeq,
           selectedAddress.city_code,
           fullPickupAddress,
           selectedAddress.pickup_locality,
@@ -346,6 +356,9 @@ router.get('/', async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    const language = resolveRouteLanguage(req);
+    const materialLabelSql = getLocalizedMaterialLabelSql('$2');
+
     const { cursor, role } = req.query;
     const limit = 20;
     let result;
@@ -356,6 +369,8 @@ router.get('/', async (req, res) => {
         SELECT o.*,
                agg.name as aggregator_name,
                agg.display_phone as aggregator_display_phone,
+               latest_dispute.dispute_id,
+               latest_dispute.dispute_status,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
                COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
                COALESCE(
@@ -363,7 +378,7 @@ router.get('/', async (req, res) => {
                    DISTINCT jsonb_build_object(
                      'id', oi.id,
                      'material_code', oi.material_code,
-                     'material_label', mt.label_en,
+                     'material_label', ${materialLabelSql},
                      'estimated_weight_kg', oi.estimated_weight_kg,
                      'confirmed_weight_kg', oi.confirmed_weight_kg,
                      'rate_per_kg', oi.rate_per_kg,
@@ -411,22 +426,29 @@ router.get('/', async (req, res) => {
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN material_types mt ON oi.material_code = mt.code
         LEFT JOIN users agg ON agg.id = o.aggregator_id
+        LEFT JOIN LATERAL (
+          SELECT d.id AS dispute_id, d.status AS dispute_status
+          FROM disputes d
+          WHERE d.order_id = o.id
+          ORDER BY d.created_at DESC
+          LIMIT 1
+        ) latest_dispute ON TRUE
         WHERE o.aggregator_id = $1
       `;
       if (cursor) {
         result = await query(`
-            ${baseQuery} AND o.created_at < $2
-            GROUP BY o.id, agg.name, agg.display_phone
+            ${baseQuery} AND o.created_at < $3
+            GROUP BY o.id, agg.name, agg.display_phone, latest_dispute.dispute_id, latest_dispute.dispute_status
             ORDER BY o.created_at DESC
-            LIMIT $3
-          `, [userId, cursor, limit + 1]);
+            LIMIT $4
+          `, [userId, language, cursor, limit + 1]);
       } else {
         result = await query(`
             ${baseQuery}
-            GROUP BY o.id, agg.name, agg.display_phone
+            GROUP BY o.id, agg.name, agg.display_phone, latest_dispute.dispute_id, latest_dispute.dispute_status
             ORDER BY o.created_at DESC
-            LIMIT $2
-          `, [userId, limit + 1]);
+            LIMIT $3
+          `, [userId, language, limit + 1]);
       }
     } else {
       // Default: seller's own orders
@@ -434,6 +456,8 @@ router.get('/', async (req, res) => {
         SELECT o.*,
                agg.name as aggregator_name,
                agg.display_phone as aggregator_display_phone,
+               latest_dispute.dispute_id,
+               latest_dispute.dispute_status,
                COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
                COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
                COALESCE(
@@ -441,7 +465,7 @@ router.get('/', async (req, res) => {
                    DISTINCT jsonb_build_object(
                      'id', oi.id,
                      'material_code', oi.material_code,
-                     'material_label', mt.label_en,
+                     'material_label', ${materialLabelSql},
                      'estimated_weight_kg', oi.estimated_weight_kg,
                      'confirmed_weight_kg', oi.confirmed_weight_kg,
                      'rate_per_kg', oi.rate_per_kg,
@@ -488,22 +512,29 @@ router.get('/', async (req, res) => {
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN material_types mt ON oi.material_code = mt.code
         LEFT JOIN users agg ON agg.id = o.aggregator_id
+        LEFT JOIN LATERAL (
+          SELECT d.id AS dispute_id, d.status AS dispute_status
+          FROM disputes d
+          WHERE d.order_id = o.id
+          ORDER BY d.created_at DESC
+          LIMIT 1
+        ) latest_dispute ON TRUE
         WHERE o.seller_id = $1
       `;
       if (cursor) {
         result = await query(`
-            ${baseQuery} AND o.created_at < $2
-            GROUP BY o.id, agg.name, agg.display_phone
+            ${baseQuery} AND o.created_at < $3
+            GROUP BY o.id, agg.name, agg.display_phone, latest_dispute.dispute_id, latest_dispute.dispute_status
             ORDER BY o.created_at DESC
-            LIMIT $3
-          `, [userId, cursor, limit + 1]);
+            LIMIT $4
+          `, [userId, language, cursor, limit + 1]);
       } else {
         result = await query(`
             ${baseQuery}
-            GROUP BY o.id, agg.name, agg.display_phone
+            GROUP BY o.id, agg.name, agg.display_phone, latest_dispute.dispute_id, latest_dispute.dispute_status
             ORDER BY o.created_at DESC
-            LIMIT $2
-          `, [userId, limit + 1]);
+            LIMIT $3
+          `, [userId, language, limit + 1]);
       }
     }
 
@@ -958,20 +989,28 @@ router.get('/:id/media/:mediaId/url', async (req, res) => {
 
     // Verify ownership
     const orderRes = await query(
-      'SELECT seller_id, aggregator_id FROM orders WHERE id = $1',
+      'SELECT seller_id, aggregator_id, status, deleted_at FROM orders WHERE id = $1',
       [orderId]
     );
     if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
     const order = orderRes.rows[0];
     const isParty = order.seller_id === userId || order.aggregator_id === userId;
-    if (!isParty) return res.status(403).json({ error: 'Forbidden' });
+    const isPreAcceptanceAggregator = (
+      req.user?.user_type === 'aggregator'
+      && order.status === 'created'
+      && !order.deleted_at
+    );
+    if (!isParty && !isPreAcceptanceAggregator) return res.status(403).json({ error: 'Forbidden' });
 
     // Fetch media record
     const mediaRes = await query(
-      'SELECT storage_path FROM order_media WHERE id = $1 AND order_id = $2',
+      'SELECT storage_path, media_type FROM order_media WHERE id = $1 AND order_id = $2',
       [mediaId, orderId]
     );
     if (mediaRes.rows.length === 0) return res.status(404).json({ error: 'Media not found' });
+    if (!isParty && mediaRes.rows[0].media_type !== 'scrap_photo') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const storageKey = mediaRes.rows[0].storage_path;
 
     // D1: 5-minute signed URL — never return permanent URLs
@@ -998,24 +1037,124 @@ router.get('/:id/media', async (req, res) => {
 
     // Verify party membership
     const orderRes = await query(
-      'SELECT seller_id, aggregator_id FROM orders WHERE id = $1',
+      'SELECT seller_id, aggregator_id, status, deleted_at FROM orders WHERE id = $1',
       [orderId]
     );
     if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
     const order = orderRes.rows[0];
     const isParty = order.seller_id === userId || order.aggregator_id === userId;
-    if (!isParty) return res.status(403).json({ error: 'Forbidden' });
-
-    const mediaRes = await query(
-      `SELECT id, media_type, created_at
-       FROM order_media
-       WHERE order_id = $1
-       ORDER BY created_at ASC`,
-      [orderId]
+    const isPreAcceptanceAggregator = (
+      req.user?.user_type === 'aggregator'
+      && order.status === 'created'
+      && !order.deleted_at
     );
+    if (!isParty && !isPreAcceptanceAggregator) return res.status(403).json({ error: 'Forbidden' });
+
+    const mediaRes = isParty
+      ? await query(
+        `SELECT id, media_type, created_at
+         FROM order_media
+         WHERE order_id = $1
+         ORDER BY created_at ASC`,
+        [orderId]
+      )
+      : await query(
+        `SELECT id, media_type, created_at
+         FROM order_media
+         WHERE order_id = $1 AND media_type = 'scrap_photo'
+         ORDER BY created_at ASC`,
+        [orderId]
+      );
     return res.json({ media: mediaRes.rows });
   } catch (e: any) {
     console.error('GET /api/orders/:id/media error:', e);
+    Sentry.captureException(e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3f. GET /api/orders/:id/dispute
+// Returns latest dispute summary for the order + whether current user can still raise one.
+router.get('/:id/dispute', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const orderId = req.params.id;
+    const orderRes = await query(
+      `SELECT id, seller_id, aggregator_id, status, updated_at
+       FROM orders
+       WHERE id = $1
+       LIMIT 1`,
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRes.rows[0];
+    const isParty = order.seller_id === userId || order.aggregator_id === userId;
+    if (!isParty) return res.status(403).json({ error: 'Forbidden' });
+
+    const latestDisputeRes = await query(
+      `SELECT
+         id,
+         CONCAT(order_id, '_', TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD')) AS public_id,
+         order_id,
+         raised_by,
+         issue_type,
+         description,
+         status,
+         resolution_note,
+         created_at,
+         resolved_at
+       FROM disputes
+       WHERE order_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId]
+    );
+
+    const completedAtRes = await query(
+      `SELECT created_at
+       FROM order_status_history
+       WHERE order_id = $1
+         AND new_status = 'completed'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId]
+    );
+
+    const completedAtSource = completedAtRes.rows[0]?.created_at ?? order.updated_at ?? null;
+    const completedAt = completedAtSource ? new Date(completedAtSource) : null;
+    const disputeWindowExpiresAt = completedAt
+      ? new Date(completedAt.getTime() + (30 * 60 * 1000))
+      : null;
+
+    const hasDispute = latestDisputeRes.rows.length > 0;
+    const canRaiseDispute = Boolean(
+      !hasDispute &&
+      order.status === 'completed' &&
+      completedAt &&
+      disputeWindowExpiresAt &&
+      Date.now() <= disputeWindowExpiresAt.getTime()
+    );
+
+    const latestDispute = hasDispute
+      ? {
+          ...latestDisputeRes.rows[0],
+          id: latestDisputeRes.rows[0].public_id,
+          uuid: latestDisputeRes.rows[0].id,
+        }
+      : null;
+
+    return res.json({
+      dispute: latestDispute,
+      can_raise_dispute: canRaiseDispute,
+      dispute_window_expires_at: disputeWindowExpiresAt ? disputeWindowExpiresAt.toISOString() : null,
+    });
+  } catch (e: any) {
+    console.error('GET /api/orders/:id/dispute error:', e);
     Sentry.captureException(e);
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -1028,6 +1167,8 @@ router.get('/:id', async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
+    const language = resolveRouteLanguage(req);
+    const materialLabelSql = getLocalizedMaterialLabelSql('$2');
 
     const result = await query(`
       SELECT o.*,
@@ -1035,6 +1176,8 @@ router.get('/:id', async (req, res) => {
              u.display_phone as seller_display_phone,
              agg.name as aggregator_name,
              agg.display_phone as aggregator_display_phone,
+             latest_dispute.dispute_id,
+             latest_dispute.dispute_status,
              COALESCE(json_agg(DISTINCT oi.material_code) FILTER (WHERE oi.material_code IS NOT NULL), '[]') as material_codes,
              COALESCE(jsonb_object_agg(oi.material_code, COALESCE(oi.confirmed_weight_kg, oi.estimated_weight_kg)) FILTER (WHERE oi.material_code IS NOT NULL), '{}'::jsonb) as estimated_weights,
              COALESCE(
@@ -1042,7 +1185,7 @@ router.get('/:id', async (req, res) => {
                  DISTINCT jsonb_build_object(
                    'id', oi.id,
                    'material_code', oi.material_code,
-                   'material_label', mt.label_en,
+                   'material_label', ${materialLabelSql},
                    'estimated_weight_kg', oi.estimated_weight_kg,
                    'confirmed_weight_kg', oi.confirmed_weight_kg,
                    'rate_per_kg', oi.rate_per_kg,
@@ -1086,9 +1229,16 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN users agg ON agg.id = o.aggregator_id
       LEFT JOIN order_items oi ON o.id = oi.order_id
       LEFT JOIN material_types mt ON mt.code = oi.material_code
+      LEFT JOIN LATERAL (
+        SELECT d.id AS dispute_id, d.status AS dispute_status
+        FROM disputes d
+        WHERE d.order_id = o.id
+        ORDER BY d.created_at DESC
+        LIMIT 1
+      ) latest_dispute ON TRUE
       WHERE o.id = $1
-      GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
-    `, [id]);
+      GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone, latest_dispute.dispute_id, latest_dispute.dispute_status
+    `, [id, language]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
 
     const order = result.rows[0];
@@ -1114,6 +1264,8 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
   const { id: orderId } = req.params;
+  const language = resolveRouteLanguage(req);
+  const materialLabelSql = getLocalizedMaterialLabelSql('$2');
   const { line_items } = req.body as {
     line_items?: Array<{ material_code: string; confirmed_weight_kg: number; rate_per_kg: number }>;
   };
@@ -1215,7 +1367,7 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
                   DISTINCT jsonb_build_object(
                     'id', oi.id,
                     'material_code', oi.material_code,
-                    'material_label', mt.label_en,
+                    'material_label', ${materialLabelSql},
                     'estimated_weight_kg', oi.estimated_weight_kg,
                     'confirmed_weight_kg', oi.confirmed_weight_kg,
                     'rate_per_kg', oi.rate_per_kg,
@@ -1256,7 +1408,7 @@ router.post('/:id/finalize-weighing', verifyUserRole('aggregator'), async (req, 
        LEFT JOIN material_types mt ON mt.code = oi.material_code
        WHERE o.id = $1
        GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone`,
-      [orderId]
+      [orderId, language]
     );
 
     return res.status(200).json({
@@ -1564,6 +1716,8 @@ router.delete('/:id', verifyUserRole(['seller', 'aggregator']), async (req, res)
 router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) => {
   const { orderId } = req.params;
   const aggregatorId = req.user!.id;
+  const language = resolveRouteLanguage(req);
+  const materialLabelSql = getLocalizedMaterialLabelSql('$2');
   let sellerId: string | null = null;
 
   const client = await pool.connect();
@@ -1752,7 +1906,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
                DISTINCT jsonb_build_object(
                  'id', oi.id,
                  'material_code', oi.material_code,
-                 'material_label', mt.label_en,
+                 'material_label', ${materialLabelSql},
                  'estimated_weight_kg', oi.estimated_weight_kg,
                  'confirmed_weight_kg', oi.confirmed_weight_kg,
                  'rate_per_kg', oi.rate_per_kg,
@@ -1793,7 +1947,7 @@ router.post('/:orderId/accept', verifyUserRole('aggregator'), async (req, res) =
     LEFT JOIN material_types mt ON mt.code = oi.material_code
     WHERE o.id = $1
     GROUP BY o.id, u.name, u.display_phone, agg.name, agg.display_phone
-  `, [orderId]);
+  `, [orderId, language]);
 
   return res.status(200).json({
     order: buildOrderDto(orderRes.rows[0], aggregatorId, resolveViewerType(req.user?.user_type))

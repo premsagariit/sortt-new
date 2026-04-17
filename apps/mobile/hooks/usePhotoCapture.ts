@@ -14,6 +14,14 @@
 
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
+
+type FileSystemCompat = {
+    cacheDirectory?: string | null;
+    documentDirectory?: string | null;
+    copyAsync: (options: { from: string; to: string }) => Promise<void>;
+};
 
 export interface UsePhotoCaptureOptions {
     allowsEditing?: boolean;
@@ -23,7 +31,9 @@ export interface UsePhotoCaptureOptions {
 export interface UsePhotoCaptureResult {
     photoUri: string | null;
     capturePhoto: () => Promise<string | null>;
+    pickFromGallery: () => Promise<string | null>;
     permissionDenied: boolean;
+    mediaPermissionDenied: boolean;
     isLoading: boolean;
     reset: () => void;
 }
@@ -31,7 +41,28 @@ export interface UsePhotoCaptureResult {
 export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoCaptureResult {
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
+    const [mediaPermissionDenied, setMediaPermissionDenied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    const normalizeUploadUri = useCallback(async (uri: string): Promise<string> => {
+        if (Platform.OS !== 'android' || !uri.startsWith('content://')) {
+            return uri;
+        }
+
+        try {
+            const fs = FileSystem as unknown as FileSystemCompat;
+            const safeDir = fs.cacheDirectory ?? fs.documentDirectory;
+            if (!safeDir) return uri;
+
+            const extensionMatch = uri.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
+            const extension = extensionMatch?.[1]?.toLowerCase() ?? 'jpg';
+            const targetUri = `${safeDir}upload-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
+            await fs.copyAsync({ from: uri, to: targetUri });
+            return targetUri;
+        } catch {
+            return uri;
+        }
+    }, []);
 
     const capturePhoto = useCallback(async () => {
         setIsLoading(true);
@@ -55,8 +86,7 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
             });
 
             if (!result.canceled && result.assets.length > 0) {
-                const uri = result.assets[0].uri;
-                // Store only the local URI — no upload, no EXIF processing (V18: Day 8)
+                const uri = await normalizeUploadUri(result.assets[0].uri);
                 setPhotoUri(uri);
                 return uri;
             }
@@ -66,10 +96,42 @@ export function usePhotoCapture(options: UsePhotoCaptureOptions = {}): UsePhotoC
         }
     }, [options.allowsEditing, options.aspect]);
 
+    const pickFromGallery = useCallback(async () => {
+        setIsLoading(true);
+        setMediaPermissionDenied(false);
+
+        try {
+            const mediaResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (mediaResult.status !== ImagePicker.PermissionStatus.GRANTED) {
+                setMediaPermissionDenied(true);
+                setIsLoading(false);
+                return null;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: options.allowsEditing ?? false,
+                aspect: options.aspect,
+                quality: 0.8,
+                selectionLimit: 1,
+            });
+
+            if (!result.canceled && result.assets.length > 0) {
+                const uri = await normalizeUploadUri(result.assets[0].uri);
+                setPhotoUri(uri);
+                return uri;
+            }
+            return null;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [options.allowsEditing, options.aspect, normalizeUploadUri]);
+
     const reset = useCallback(() => {
         setPhotoUri(null);
         setPermissionDenied(false);
+        setMediaPermissionDenied(false);
     }, []);
 
-    return { photoUri, capturePhoto, permissionDenied, isLoading, reset };
+    return { photoUri, capturePhoto, pickFromGallery, permissionDenied, mediaPermissionDenied, isLoading, reset };
 }

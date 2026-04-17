@@ -28,3 +28,17 @@ export const resolveRequestLanguage = (params: {
   if (params.userPreferred) return normalizeLanguage(params.userPreferred);
   return DEFAULT_LANGUAGE;
 };
+
+export const getLocalizedMaterialLabelSql = (languageExpression: string, materialAlias = 'mt'): string => {
+  return `
+    COALESCE(
+      CASE
+        WHEN ${languageExpression} = 'te' THEN ${materialAlias}.label_te
+        WHEN ${languageExpression} = 'hi' THEN to_jsonb(${materialAlias}) ->> 'label_hi'
+        ELSE ${materialAlias}.label_en
+      END,
+      ${materialAlias}.label_en,
+      ${materialAlias}.code
+    )
+  `;
+};

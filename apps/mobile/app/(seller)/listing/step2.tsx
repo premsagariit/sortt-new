@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -9,11 +9,12 @@ import { Text } from '../../../components/ui/Typography';
 import { PrimaryButton } from '../../../components/ui/Button';
 import { WizardStepIndicator } from '../../../components/ui/WizardStepIndicator';
 import { MaterialChip, MaterialCode } from '../../../components/ui/MaterialChip';
-import { MaterialCard } from '../../../components/ui/MaterialCard';
+import { SellerMaterialCard } from '../../../components/ui/SellerMaterialCard';
 import { colors, colorExtended, radius, spacing } from '../../../constants/tokens';
 import { useListingStore } from '../../../store/listingStore';
+import { useSellerMaterialRates } from '../../../hooks/useSellerMaterialRates';
 
-const ALL_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass', 'custom'];
+const AVAILABLE_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass'];
 
 export default function Step2Screen() {
   const {
@@ -24,8 +25,14 @@ export default function Step2Screen() {
     customNames,
     setCustomName,
   } = useListingStore();
+  const { rates } = useSellerMaterialRates();
+  const ratesByCode = useMemo(() => new Map(rates.map((rate) => [rate.material_code, rate] as const)), [rates]);
 
   const handleToggleMaterial = (code: MaterialCode) => {
+    const rate = ratesByCode.get(code);
+    const isAvailable = Boolean(rate?.is_available && rate?.rate_per_kg != null);
+    if (!isAvailable) return;
+
     if (selectedMaterials.includes(code)) {
       setMaterials(selectedMaterials.filter((m) => m !== code));
     } else {
@@ -123,13 +130,19 @@ export default function Step2Screen() {
           <View style={styles.section}>
             <Text variant="heading" style={{ marginBottom: spacing.md }}>Select Materials</Text>
             <View style={styles.grid}>
-              {ALL_MATERIALS.map(code => {
+              {AVAILABLE_MATERIALS.map(code => {
                 const isSelected = selectedMaterials.includes(code);
+                const rate = ratesByCode.get(code);
+                const isAvailable = Boolean(rate?.is_available && rate?.rate_per_kg != null);
                 return (
-                  <MaterialCard
+                  <SellerMaterialCard
                     key={code}
                     code={code}
                     isSelected={isSelected}
+                    isDisabled={!isAvailable}
+                    ratePerKg={rate?.rate_per_kg ?? null}
+                    trend={rate?.trend ?? 'flat'}
+                    helpText="no aggregator is ready to accept this material."
                     onPress={() => handleToggleMaterial(code)}
                   />
                 );

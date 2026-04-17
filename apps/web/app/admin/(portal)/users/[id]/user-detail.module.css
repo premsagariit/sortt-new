@@ -12,7 +12,7 @@
   justify-content: center;
   height: 100%;
   gap: 1rem;
-  color: #94a3b8;
+  color: #000000;
 }
 
 .errorMsg {
@@ -26,7 +26,7 @@
 .back {
   background: none;
   border: 1px solid rgba(255,255,255,0.1);
-  color: #e2e8f0;
+  color: #000000;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
@@ -46,13 +46,13 @@
   gap: 0.5rem;
   background: none;
   border: none;
-  color: #94a3b8;
+  color: #000000;
   cursor: pointer;
   font-size: 0.875rem;
   padding: 0;
   transition: color 0.2s;
 }
-.backBtn:hover { color: #f1f5f9; }
+.backBtn:hover { color: #000000; }
 
 .statusBadge {
   display: inline-flex;
@@ -86,7 +86,7 @@
   height: 80px;
   border-radius: 50%;
   background: rgba(99,102,241,0.2);
-  color: #a5b4fc;
+  color: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -104,11 +104,11 @@
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #1e3a8a;
 }
 .userMeta {
   margin: 0;
-  color: #94a3b8;
+  color: #000000;
   font-size: 0.875rem;
 }
 
@@ -133,13 +133,14 @@
   padding: 1rem 1.25rem;
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid rgba(255,255,255,0.05);
-  color: #e2e8f0;
+  color: #000000;
 }
 
 .sectionTitle {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
+  color: #000000;
 }
 
 .sectionBody {
@@ -156,32 +157,32 @@
 }
 .kvLabel {
   font-size: 0.75rem;
-  color: #64748b;
+  color: #000000;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
 }
 .kvValue {
-  color: #e2e8f0;
+  color: #000000;
   font-size: 0.875rem;
   word-break: break-word;
 }
 .mono {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8125rem;
-  color: #a5b4fc;
+  color: #000000;
   background: rgba(99,102,241,0.1);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
 }
 .link {
-  color: #60a5fa;
+  color: #000000;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
 }
-.link:hover { text-decoration: underline; color: #93c5fd; }
+.link:hover { text-decoration: underline; color: #000000; }
 
 .statsGrid {
   display: grid;
@@ -200,7 +201,7 @@
   gap: 0.25rem;
 }
 .statLabel {
-  color: #94a3b8;
+  color: #000000;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -209,11 +210,11 @@
 .statValue {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #000000;
 }
 .statSub {
   font-size: 0.7rem;
-  color: #64748b;
+  color: #000000;
 }
 
 .itemsTable {
@@ -224,7 +225,7 @@
 .itemsTable th {
   text-align: left;
   padding-bottom: 0.5rem;
-  color: #64748b;
+  color: #000000;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -232,8 +233,30 @@
 }
 .itemsTable td {
   padding: 0.75rem 0;
-  color: #cbd5e1;
+  color: #000000;
   border-bottom: 1px dashed rgba(255,255,255,0.05);
 }
 .itemsTable tr:last-child td { border-bottom: none; }
-.unassigned { color: #64748b; font-style: italic; margin: 0; font-size: 0.875rem; }
+.unassigned { color: #000000; font-style: italic; margin: 0; font-size: 0.875rem; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.pageBtn {
+  padding: 0.4rem 0.9rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #000000;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  transition: all 0.2s;
+}
+.pageBtn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.pageBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pageInfo { color: #000000; font-size: 0.8125rem; }

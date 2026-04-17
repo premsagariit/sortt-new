@@ -24,6 +24,7 @@ import { TrendUp, TrendDown, Minus } from 'phosphor-react-native';
 export type { OrderStatus } from '../../store/orderStore';
 export type { MaterialCode } from './MaterialChip';
 import type { OrderStatus } from '../../store/orderStore';
+import type { DisputeStatus } from '../../store/orderStore';
 import type { MaterialCode } from './MaterialChip';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ interface OrderCardProps {
   aggregator?: string;
   /** Date string to show in footer */
   date?: string;
+  disputeStatus?: DisputeStatus | null;
   style?: ViewStyle;
 }
 
@@ -72,6 +74,7 @@ export function OrderCard({
   locality,
   aggregator,
   date,
+  disputeStatus,
   style,
 }: OrderCardProps) {
   const isCompleted = status === 'completed';
@@ -105,6 +108,38 @@ export function OrderCard({
 
           <StatusChip status={status} />
         </View>
+        {disputeStatus ? (
+          <View style={styles.disputeChipRow}>
+            <View
+              style={[
+                styles.disputeChip,
+                disputeStatus === 'open'
+                  ? styles.disputeChipOpen
+                  : disputeStatus === 'resolved'
+                    ? styles.disputeChipResolved
+                    : styles.disputeChipDismissed,
+              ]}
+            >
+              <Text
+                variant="caption"
+                style={[
+                  styles.disputeChipText,
+                  disputeStatus === 'open'
+                    ? styles.disputeChipTextOpen
+                    : disputeStatus === 'resolved'
+                      ? styles.disputeChipTextResolved
+                      : styles.disputeChipTextDismissed,
+                ] as any}
+              >
+                {disputeStatus === 'open'
+                  ? 'Dispute Open'
+                  : disputeStatus === 'resolved'
+                    ? 'Dispute Resolved'
+                    : 'Dispute Dismissed'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* ── Materials row ── */}
         <View style={styles.materialsRow}>
@@ -224,6 +259,41 @@ const styles = StyleSheet.create({
     flexWrap:      'wrap',
     gap:           spacing.xs,
   },
+  disputeChipRow: {
+    alignItems: 'flex-start',
+  },
+  disputeChip: {
+    borderRadius: radius.chip,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  disputeChipOpen: {
+    backgroundColor: colorWithAlpha(colors.red, 0.08),
+    borderColor: colorWithAlpha(colors.red, 0.25),
+  },
+  disputeChipResolved: {
+    backgroundColor: colorWithAlpha(colors.teal, 0.08),
+    borderColor: colorWithAlpha(colors.teal, 0.25),
+  },
+  disputeChipDismissed: {
+    backgroundColor: colorWithAlpha(colors.muted, 0.12),
+    borderColor: colorWithAlpha(colors.muted, 0.3),
+  },
+  disputeChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  disputeChipTextOpen: {
+    color: colors.red,
+  },
+  disputeChipTextResolved: {
+    color: colors.teal,
+  },
+  disputeChipTextDismissed: {
+    color: colors.muted,
+  },
   orderFooter: {
     flexDirection:  'row',
     justifyContent: 'space-between',
@@ -259,3 +329,9 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
 });
+
+function colorWithAlpha(hex: string, alpha: number): string {
+  const normalizedAlpha = Math.max(0, Math.min(1, alpha));
+  const alphaHex = Math.round(normalizedAlpha * 255).toString(16).padStart(2, '0');
+  return `${hex}${alphaHex}`;
+}

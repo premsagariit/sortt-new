@@ -4,8 +4,8 @@
     "private": true,
     "main": "expo-router/entry",
     "scripts": {
-        "dev": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --dev-client",
-        "start": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 expo start --dev-client",
+        "dev": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 WATCHMAN_DISABLE=1 EXPO_USE_POLLING=1 CHOKIDAR_USEPOLLING=1 expo start --go --lan --port 8081",
+        "start": "cross-env EXPO_NO_DEPENDENCY_VALIDATION=1 WATCHMAN_DISABLE=1 EXPO_USE_POLLING=1 CHOKIDAR_USEPOLLING=1 expo start --go --lan --port 8081",
         "android": "expo run:android",
         "ios": "expo run:ios",
         "web": "expo start --web",
@@ -28,7 +28,6 @@
         "expo-auth-session": "~7.0.10",
         "expo-constants": "~18.0.13",
         "expo-crypto": "~15.0.8",
-        "expo-dev-client": "^6.0.20",
         "expo-device": "~8.0.10",
         "expo-font": "~14.0.11",
         "expo-image-picker": "~17.0.10",

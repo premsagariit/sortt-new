@@ -5,6 +5,16 @@ type DaySchedule = {
   end: string;
 };
 
+const DAY_NAME_BY_SHORT: Record<string, string> = {
+  mon: 'Monday',
+  tue: 'Tuesday',
+  wed: 'Wednesday',
+  thu: 'Thursday',
+  fri: 'Friday',
+  sat: 'Saturday',
+  sun: 'Sunday',
+};
+
 const SLOT_TO_RANGE: Record<string, { start: number; end: number }> = {
   morning_8_10: { start: 8 * 60, end: 10 * 60 },
   morning_10_12: { start: 10 * 60, end: 12 * 60 },
@@ -57,8 +67,15 @@ export function normalizeAreaValue(value: unknown): string {
 }
 
 export function parseOperatingAreas(value: unknown): string[] {
+  const flattenAreas = (items: unknown[]): string[] => {
+    return items
+      .flatMap((v) => String(v ?? '').split(/[,;|]/))
+      .map((v) => v.trim())
+      .filter(Boolean);
+  };
+
   if (Array.isArray(value)) {
-    return value.map((v) => String(v ?? '').trim()).filter(Boolean);
+    return flattenAreas(value);
   }
 
   if (typeof value !== 'string') return [];
@@ -70,7 +87,7 @@ export function parseOperatingAreas(value: unknown): string[] {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return parsed.map((v) => String(v ?? '').trim()).filter(Boolean);
+        return flattenAreas(parsed);
       }
     } catch {
       // Fall through to CSV parsing.
@@ -169,6 +186,28 @@ export function parseOperatingHoursSchedule(value: unknown): DaySchedule[] {
     ? (raw as any).days
     : (Array.isArray(raw) ? raw : []);
 
+  // Legacy shape: { from: '08:00 AM', to: '07:00 PM', days: ['Mon', ...] }
+  if (
+    !Array.isArray(days[0]) &&
+    days.length > 0 &&
+    typeof days[0] === 'string' &&
+    typeof (raw as any)?.from === 'string' &&
+    typeof (raw as any)?.to === 'string'
+  ) {
+    return days
+      .map((d: any) => String(d ?? '').trim())
+      .filter(Boolean)
+      .map((d: string) => {
+        const normalized = d.toLowerCase().slice(0, 3);
+        return {
+          day: DAY_NAME_BY_SHORT[normalized] ?? d,
+          isOpen: true,
+          start: String((raw as any).from),
+          end: String((raw as any).to),
+        };
+      });
+  }
+
   return days
     .map((d: any) => ({
       day: String(d?.day ?? '').trim(),
@@ -266,7 +305,7 @@ export function isPickupWindowWithinSchedule(schedule: DaySchedule[], preferredW
       const end = parseTimeToMinutes(d.end);
       if (start == null || end == null) return false;
       if (end < start) return false;
-      return requestedRange.start >= start && requestedRange.end <= end;
+      return requestedRange.end > start && requestedRange.start < end;
     });
   }
 
@@ -275,5 +314,5 @@ export function isPickupWindowWithinSchedule(schedule: DaySchedule[], preferredW
   if (start == null || end == null) return false;
   if (end < start) return false;
 
-  return requestedRange.start >= start && requestedRange.end <= end;
+  return requestedRange.end > start && requestedRange.start < end;
 }

@@ -12,22 +12,22 @@ import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { Avatar } from '../../components/ui/Avatar';
 import { MaterialCode } from '../../components/ui/Card';
 import { api } from '../../lib/api';
+import { getLocalizedMaterialLabel } from '../../lib/i18n';
+import { useI18n } from '../../hooks/useI18n';
 
 interface Aggregator {
   id: string;
   name: string;
-  initial: string;
-  distance: string;
+  photoUrl: string | null;
   latitude: number | null;
   longitude: number | null;
   localities: string;
   rating: number;
   reviews: number;
   materials: MaterialCode[];
-  bestRateMaterial: string | null;
-  bestRate: string | null;
   isOnline: boolean;
 }
 
@@ -40,16 +40,6 @@ const MATERIAL_FILTERS: Array<{ key: 'all' | MaterialCode; label: string }> = [
   { key: 'fabric', label: 'Fabric' },
   { key: 'glass', label: 'Glass' },
 ];
-
-const MATERIAL_LABEL: Record<MaterialCode, string> = {
-  metal: '⚙ Metal',
-  plastic: '🧴 Plastic',
-  paper: '📄 Paper',
-  ewaste: '💻 E-Waste',
-  fabric: '👗 Fabric',
-  glass: '🍶 Glass',
-  custom: '📦 Other',
-};
 
 const normalizeSearchText = (value: unknown): string => {
   return String(value ?? '')
@@ -81,6 +71,7 @@ const toOptionalString = (value: unknown): string => {
 
 export default function SellerBrowseScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const [activeFilter, setActiveFilter] = useState<'all' | MaterialCode>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [aggregators, setAggregators] = useState<Aggregator[]>([]);
@@ -104,22 +95,17 @@ export default function SellerBrowseScreen() {
             : [];
 
           const name = toOptionalString(item.name);
-          const initialFromName = name.charAt(0).toUpperCase();
-          const initial = toOptionalString(item.initial).charAt(0).toUpperCase() || initialFromName;
 
           return {
             id: String(item.id),
             name,
-            initial,
-            distance: toOptionalString(item.distance),
+            photoUrl: typeof item.photoUrl === 'string' && item.photoUrl.trim().length > 0 ? item.photoUrl : null,
             latitude: toNumberOrNull(item.latitude),
             longitude: toNumberOrNull(item.longitude),
             localities: toOptionalString(item.localities),
             rating: Number(item.rating ?? 0),
             reviews: Number(item.reviews ?? 0),
             materials,
-            bestRateMaterial: item.bestRateMaterial ? String(item.bestRateMaterial) : null,
-            bestRate: item.bestRate ? String(item.bestRate) : null,
             isOnline: Boolean(item.isOnline),
           };
         });
@@ -146,7 +132,9 @@ export default function SellerBrowseScreen() {
     const normalizedName = normalizeSearchText(agg.name);
     const normalizedLocalities = normalizeSearchText(agg.localities);
     const normalizedMaterials = agg.materials.map((material) => normalizeSearchText(material));
-    const normalizedMaterialLabels = agg.materials.map((material) => normalizeSearchText(MATERIAL_LABEL[material] ?? material));
+    const normalizedMaterialLabels = agg.materials.map((material) =>
+      normalizeSearchText(getLocalizedMaterialLabel(material, { withEmoji: true, fallback: material }))
+    );
     const searchableFields = [normalizedName, normalizedLocalities, ...normalizedMaterials, ...normalizedMaterialLabels];
 
     const matchesSearch =
@@ -160,15 +148,15 @@ export default function SellerBrowseScreen() {
   const hasActiveSearch = tokenizeSearchQuery(searchQuery).length > 0;
   const hasActiveMaterialFilter = activeFilter !== 'all';
   const emptyHeading = loadError
-    ? 'Unable to load aggregators'
+    ? t('Unable to load aggregators')
     : hasActiveSearch || hasActiveMaterialFilter
-      ? 'No results found'
-      : 'No aggregators found';
+      ? t('No results found')
+      : t('No aggregators found');
   const emptyBody = loadError
-    ? 'Please try again in a moment.'
+    ? t('Please try again in a moment.')
     : hasActiveSearch || hasActiveMaterialFilter
-      ? 'Try different keywords or clear filters.'
-      : 'Try adjusting your filters.';
+      ? t('Try different keywords or clear filters.')
+      : t('Try adjusting your filters.');
 
   const renderHeader = () => (
     <View>
@@ -180,7 +168,7 @@ export default function SellerBrowseScreen() {
             style={styles.textInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search aggregators, materials..."
+            placeholder={t('Search aggregators, materials...')}
             placeholderTextColor={colors.muted}
             autoCorrect={false}
           />
@@ -200,8 +188,8 @@ export default function SellerBrowseScreen() {
           {MATERIAL_FILTERS.map((filter) => {
             const isActive = activeFilter === filter.key;
             const label = filter.key === 'all'
-              ? `${filter.label} (${aggregators.length})`
-              : filter.label;
+              ? `${t(filter.label)} (${aggregators.length})`
+              : getLocalizedMaterialLabel(filter.key, { fallback: filter.label });
 
             return (
             <Pressable
@@ -238,13 +226,15 @@ export default function SellerBrowseScreen() {
         } as any)
       }
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{item.initial}</Text>
-      </View>
+      <Avatar
+        name={item.name || 'Aggregator'}
+        userType="aggregator"
+        size="lg"
+        uri={item.photoUrl || undefined}
+      />
       <View style={styles.aggInfo}>
         <View style={styles.aggHeader}>
           <Text variant="body" style={styles.aggName}>{item.name}</Text>
-          <Numeric style={styles.distance}>{item.distance}</Numeric>
         </View>
         <Text variant="caption" color={colors.muted} style={styles.localities}>
           {item.localities}
@@ -263,7 +253,7 @@ export default function SellerBrowseScreen() {
           <Numeric style={styles.reviewText}>{item.rating} ({item.reviews})</Numeric>
         </View>
         <View style={styles.materialsRow}>
-          {item.materials.map(mat => (
+          {item.materials.slice(0, 3).map(mat => (
             <View
               key={mat}
               style={[
@@ -272,16 +262,10 @@ export default function SellerBrowseScreen() {
               ]}
             >
               <Text variant="caption" style={[styles.materialChipText, { color: colors.material[mat].fg }]}>
-                {MATERIAL_LABEL[mat]}
+                {getLocalizedMaterialLabel(mat, { withEmoji: true, fallback: mat })}
               </Text>
             </View>
           ))}
-        </View>
-        <View style={styles.bestRateContainer}>
-          <Text variant="caption" style={styles.bestRateLabel}>
-            Best rate: {item.bestRateMaterial ? item.bestRateMaterial : 'N/A'}
-          </Text>
-          <Numeric style={styles.bestRateValue}>{item.bestRate ? item.bestRate : '--'}</Numeric>
         </View>
       </View>
     </Pressable>
@@ -291,13 +275,13 @@ export default function SellerBrowseScreen() {
     <View style={styles.container}>
       <NavBar
         variant="light"
-        title="Nearby Aggregators"
+        title={t('Nearby Aggregators')}
         rightAction={
           <Pressable
             style={styles.mapButton}
             onPress={() => router.push('/(seller)/browse-map' as any)}
           >
-            <Text variant="caption" style={styles.mapButtonText}>🗺 Map</Text>
+            <Text variant="caption" style={styles.mapButtonText}>🗺 {t('Map')}</Text>
           </Pressable>
         }
       />
@@ -313,7 +297,7 @@ export default function SellerBrowseScreen() {
           isLoadingAggregators ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={colors.navy} />
-              <Text variant="caption" color={colors.muted}>Loading nearby aggregators...</Text>
+              <Text variant="caption" color={colors.muted}>{t('Loading nearby aggregators...')}</Text>
             </View>
           ) : null
         }
@@ -417,19 +401,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: spacing.md,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.teal,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: colors.surface,
-    fontSize: 20,
-    fontWeight: '700',
-  },
   aggInfo: {
     flex: 1,
   },
@@ -441,10 +412,6 @@ const styles = StyleSheet.create({
   aggName: {
     fontWeight: '700',
     color: colors.navy,
-  },
-  distance: {
-    fontSize: 12,
-    color: colors.muted,
   },
   localities: {
     marginTop: 2,
@@ -478,21 +445,6 @@ const styles = StyleSheet.create({
   materialChipText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  bestRateContainer: {
-    marginTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bestRateLabel: {
-    color: colors.amber,
-    fontWeight: '600',
-  },
-  bestRateValue: {
-    color: colors.amber,
-    fontWeight: '700',
-    fontSize: 16,
   },
   loadingContainer: {
     marginTop: spacing.md,

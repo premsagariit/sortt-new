@@ -7,12 +7,13 @@ import sharp from 'sharp';
 import { sanitizeName, sellerSuffix, aggregatorSuffix } from '../lib/idGenerator';
 import { issueToken } from '../lib/jwt';
 import { storageProvider } from '../lib/storage';
+import { resolveProfilePhotosBucket } from '../lib/storageBuckets';
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic'];
     allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type'));
   }
 });
@@ -244,24 +245,39 @@ router.post('/profile', async (req, res) => {
 });
 
 // POST /api/users/profile-photo
-router.post('/profile-photo', upload.single('file'), async (req, res) => {
+router.post('/profile-photo', upload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'photo', maxCount: 1 },
+]), async (req, res) => {
   const userId = req.user?.id;
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  if (!req.file) {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  const uploadedFile = files?.file?.[0] ?? files?.photo?.[0];
+
+  console.log('[Users] profile-photo upload attempt', {
+    userId,
+    contentType: req.headers['content-type'],
+    fileFieldNames: files ? Object.keys(files) : [],
+    hasUploadedFile: !!uploadedFile,
+    mimeType: uploadedFile?.mimetype,
+    size: uploadedFile?.size,
+  });
+
+  if (!uploadedFile) {
     return res.status(400).json({ error: 'File is required' });
   }
 
   try {
-    const normalizedBuffer = await sharp(req.file.buffer)
+    const normalizedBuffer = await sharp(uploadedFile.buffer)
       .rotate()
       .resize({ width: 500, height: 500, fit: 'cover', withoutEnlargement: true })
       .jpeg({ quality: 80 })
       .toBuffer();
 
-    const bucketName = 'sortt-profiles'; 
+    const bucketName = resolveProfilePhotosBucket();
     const storageKey = await storageProvider.uploadWithKey(
       normalizedBuffer,
       `profile_${userId}_${Date.now()}.jpg`,
@@ -369,12 +385,14 @@ router.get('/me', async (req, res) => {
 
     // Fetch signed URL for profile photo
     if (userObj.profile_photo_url) {
-      const bucketName = 'sortt-profiles';
+      const bucketName = resolveProfilePhotosBucket();
       try {
         userObj.profile_photo_url = await storageProvider.getSignedUrl(userObj.profile_photo_url, 3600 * 24 * 7, bucketName);
+        userObj.photo_url = userObj.profile_photo_url;
       } catch (err) {
         console.warn('Failed to get signed URL for profile photo', err);
         userObj.profile_photo_url = null;
+        userObj.photo_url = null;
       }
     }
 
@@ -389,7 +407,7 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// GET /api/users/me/local-rates - seller city-level average from verified active aggregators
+// GET /api/users/me/local-rates - seller city-level average from city material averages
 router.get('/me/local-rates', async (req, res) => {
   const userId = req.user?.id;
   const userType = req.user?.user_type;
@@ -423,25 +441,15 @@ router.get('/me/local-rates', async (req, res) => {
     });
 
     const ratesRes = await query(
-      `WITH eligible_aggregators AS (
-          SELECT u.id
-          FROM users u
-          JOIN aggregator_profiles a ON a.user_id = u.id
-          WHERE u.user_type = 'aggregator'
-            AND u.is_active = true
-            AND LOWER(TRIM(COALESCE(a.city_code, ''))) = LOWER(TRIM($1::text))
-            AND LOWER(TRIM(COALESCE(a.kyc_status, ''))) = 'verified'
-      ),
-      averaged AS (
-          SELECT r.material_code,
-                 AVG(r.rate_per_kg)::numeric(10,2) AS avg_rate_per_kg,
-                 COUNT(*)::int AS contributor_count
-          FROM aggregator_material_rates r
-          JOIN eligible_aggregators e ON e.id = r.aggregator_id
-          WHERE r.material_code IS NOT NULL
-            AND COALESCE(r.is_custom, false) = false
-            AND r.rate_per_kg > 0
-          GROUP BY r.material_code
+      `WITH avg_rates AS (
+          SELECT a.material_code,
+                 a.avg_rate_per_kg,
+                 a.previous_avg_rate_per_kg,
+                 a.change_percent,
+                 a.contributor_count,
+                 a.updated_at
+            FROM aggregator_city_material_avg_rates a
+           WHERE UPPER(TRIM(a.city_code)) = UPPER(TRIM($1::text))
       )
       SELECT mt.code AS material_code,
              COALESCE(
@@ -454,10 +462,13 @@ router.get('/me/local-rates', async (req, res) => {
                mt.code
              ) AS name,
              a.avg_rate_per_kg::float8 AS rate_per_kg,
-             (a.material_code IS NOT NULL) AS is_available,
-             COALESCE(a.contributor_count, 0)::int AS contributor_count
+             a.previous_avg_rate_per_kg::float8 AS previous_rate_per_kg,
+             a.change_percent::float8 AS change_percent,
+             (a.avg_rate_per_kg IS NOT NULL) AS is_available,
+             COALESCE(a.contributor_count, 0)::int AS contributor_count,
+             a.updated_at AS updated_at
       FROM material_types mt
-      LEFT JOIN averaged a ON a.material_code = mt.code
+      LEFT JOIN avg_rates a ON a.material_code = mt.code
       ORDER BY mt.code ASC`,
       [cityCode, language]
     );
@@ -468,8 +479,11 @@ router.get('/me/local-rates', async (req, res) => {
         material_code: row.material_code,
         name: row.name,
         rate_per_kg: row.rate_per_kg != null ? Number(row.rate_per_kg) : null,
+        previous_rate_per_kg: row.previous_rate_per_kg != null ? Number(row.previous_rate_per_kg) : null,
+        change_percent: row.change_percent != null ? Number(row.change_percent) : null,
         is_available: Boolean(row.is_available),
         contributor_count: Number(row.contributor_count ?? 0),
+        updated_at: row.updated_at ?? null,
       })),
       computed_at: new Date().toISOString(),
     });

@@ -25,7 +25,8 @@ export function NotificationWatcher() {
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
       }),
@@ -68,11 +69,11 @@ export function NotificationWatcher() {
         if (data?.screen) {
           try {
             if (data.screen === 'order' && data.orderId) {
-              router.push(`/(shared)/order-detail/${data.orderId}`);
+              router.push(`/(shared)/order-detail/${data.orderId}` as any);
             } else if (data.screen === 'orders') {
-              router.push('/(seller)/orders');
+              router.push('/(seller)/orders' as any);
             } else if (data.screen === 'chat' && data.orderId) {
-              router.push(`/(shared)/chat/${data.orderId}`);
+              router.push(`/(shared)/chat/${data.orderId}` as any);
             }
             console.log(`[NotificationWatcher] Navigated to: ${data.screen}`);
           } catch (err) {

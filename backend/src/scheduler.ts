@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/node';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import { publishEvent } from './lib/realtime';
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 
@@ -59,6 +60,16 @@ async function runPriceScraperAndRefreshView() {
     });
 
     await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY current_price_index`);
+
+    try {
+        await publishEvent('rates:hyd:index', 'rates_updated', {
+            city_code: 'HYD',
+            source: 'ai_scraper',
+            updated_at: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('[Scheduler] Failed to publish rates_updated event', err);
+    }
 }
 
 // Define the jobs and their queries

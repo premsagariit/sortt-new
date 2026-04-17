@@ -7,11 +7,13 @@ import { NavBar } from '../../../components/ui/NavBar';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { BaseCard } from '../../../components/ui/Card';
 import { PrimaryButton } from '../../../components/ui/Button';
-import { Globe, Lock, MapPin, Clock, Hash, NavigationArrow } from 'phosphor-react-native';
+import { Globe, Lock, MapPin, Clock, Hash, NavigationArrow, ImageSquare } from 'phosphor-react-native';
+import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
 import { getOrderDisplayAmount, useOrderStore } from '../../../store/orderStore';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore } from '../../../store/chatStore';
+import { useOrderChannel } from '../../../hooks/useOrderChannel';
 import { ContactCard } from '../../../components/order/ContactCard';
 import { safeBack } from '../../../utils/navigation';
 import { Alert } from 'react-native';
@@ -34,10 +36,17 @@ export default function AggregatorOrderByIdScreen() {
     if (!aggUserId || !id) return 0;
     return (state.messages[id] ?? []).filter(m => m.senderId !== aggUserId && !m.read).length;
   });
+  useOrderChannel(
+    storeOrder?.orderId ?? id ?? '',
+    storeOrder?.orderChannelToken ?? null,
+    storeOrder?.chatChannelToken ?? null
+  );
 
   const [rates, setRates] = useState<any[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
 
   const feedOrder = newOrders.find((o) => o.id === id);
 
@@ -47,10 +56,38 @@ export default function AggregatorOrderByIdScreen() {
       api.get('/api/aggregators/me/rates').then((res) => {
         setRates(Array.isArray(res.data) ? res.data : (res.data?.rates || []));
       }).catch(() => {
-        api.get('/api/rates').then((res) => setRates(res.data.rates || [])).catch(() => {});
+        setRates([]);
       });
     }
   }, [id, fetchOrder]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    setMediaLoading(true);
+    api.get(`/api/orders/${id}/media`)
+      .then(async (res) => {
+        const items: any[] = res.data.media ?? [];
+        const scrapPhotos = items.filter((item: any) => item.media_type === 'scrap_photo');
+
+        if (scrapPhotos.length === 0) {
+          setMediaUrls([]);
+          return;
+        }
+
+        const urls = await Promise.all(
+          scrapPhotos.map((item: any) =>
+            api.get(`/api/orders/${id}/media/${item.id}/url`)
+              .then((urlRes) => urlRes?.data?.url as string)
+              .catch(() => null)
+          )
+        );
+
+        setMediaUrls(urls.filter((url): url is string => typeof url === 'string' && url.length > 0));
+      })
+      .catch(() => setMediaUrls([]))
+      .finally(() => setMediaLoading(false));
+  }, [id]);
 
   useEffect(() => {
     let mounted = true;
@@ -191,6 +228,7 @@ export default function AggregatorOrderByIdScreen() {
     ?? (storeOrder?.createdAt
       ? new Date(storeOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'Flexible');
+  const hasScrapImages = mediaUrls.length > 0;
 
   if (!storeOrder && !feedOrder) {
     return (
@@ -230,33 +268,9 @@ export default function AggregatorOrderByIdScreen() {
               {orderDistance} away
             </Text>
           </View>
-          {totalEst > 0 && (
-            <>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text variant="label" style={[styles.summaryText, { color: colors.amber }]}>
-                  ~₹{totalEst.toLocaleString('en-IN')}
-                </Text>
-              </View>
-            </>
-          )}
         </View>
 
         <View style={styles.content}>
-          {/* BLOCK: Show seller contact card post-acceptance */}
-          {storeOrder && !['created', 'cancelled'].includes(storeOrder.status) && (
-            <View style={{ marginBottom: spacing.md }}>
-              <ContactCard
-                name={storeOrder.sellerName || 'Seller'}
-                phone={storeOrder.sellerPhone || null}
-                role="Seller"
-                userType="seller"
-                onChat={storeOrder.sellerId ? () => router.push(`/(shared)/chat/${storeOrder.orderId}` as any) : undefined}
-                unreadCount={chatUnread}
-              />
-            </View>
-          )}
-
           <View style={styles.sectionHeader}>
             <Text variant="label" color={colors.muted} style={styles.sectionTitle}>
               MATERIALS LIST
@@ -266,8 +280,7 @@ export default function AggregatorOrderByIdScreen() {
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
               <Text variant="caption" style={[styles.col, styles.colMaterial]}>MATERIAL</Text>
-              <Text variant="caption" style={[styles.col, styles.colWeight]}>~WT</Text>
-              <Text variant="caption" style={[styles.col, styles.colRate]}>YOUR RATE</Text>
+              <Text variant="caption" style={[styles.col, styles.colWeight]}>Est. Weight</Text>
             </View>
             {items.map((item, idx) => (
               <View key={`${item.material}-${idx}`} style={[styles.tableRow, idx === items.length - 1 && { borderBottomWidth: 0 }]}>
@@ -275,20 +288,27 @@ export default function AggregatorOrderByIdScreen() {
                 <Numeric size={13} style={[styles.col, styles.colWeight, { color: item.weight > 0 ? colors.slate : colors.muted }]}>
                   {item.weight > 0 ? `${item.weight} kg` : '—'}
                 </Numeric>
-                <Numeric size={13} style={[styles.col, styles.colRate, { color: item.yourRate ? colors.teal : colors.muted }]}>
-                  {item.yourRate ? `₹${item.yourRate}/kg` : '—'}
-                </Numeric>
               </View>
             ))}
-            {totalEst > 0 && (
-              <View style={styles.tableTotalRow}>
-                <Text variant="label" style={styles.tableTotalLabel}>Est. Value</Text>
-                <Numeric size={15} style={styles.tableTotalValue}>
-                  ₹{totalEst.toLocaleString('en-IN')}
-                </Numeric>
+          </View>
+
+            {(mediaLoading || hasScrapImages) && (
+              <View style={styles.mediaCard}>
+                <View style={styles.mediaHeader}>
+                  <ImageSquare size={16} color={colors.navy} />
+                  <Text variant="label" color={colors.slate} style={styles.sectionTitle}>
+                    SCRAP IMAGE
+                  </Text>
+                </View>
+                {mediaLoading ? (
+                  <View style={styles.mediaLoaderWrap}>
+                    <ActivityIndicator color={colors.navy} />
+                  </View>
+                ) : (
+                  <ImageCarouselViewer images={mediaUrls} height={220} autoScrollIntervalMs={4000} />
+                )}
               </View>
             )}
-          </View>
 
           <View style={styles.sectionHeader}>
             <Text variant="label" color={colors.muted} style={styles.sectionTitle}>
@@ -498,6 +518,24 @@ const styles = StyleSheet.create({
     color: colors.amber,
     fontFamily: 'DMMono-Medium',
     fontSize: 15,
+  },
+  mediaCard: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  mediaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mediaLoaderWrap: {
+    height: 220,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   locationCard: {
     padding: spacing.md,

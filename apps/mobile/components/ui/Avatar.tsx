@@ -18,7 +18,7 @@ import { colors } from '../../constants/tokens';
 import { Text } from './Typography';
 
 export type UserType = 'seller' | 'aggregator';
-export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'xxxl';
 
 interface AvatarProps {
   /** Full name or display name — first character used as initial */
@@ -37,6 +37,8 @@ const SIZES: Record<AvatarSize, { box: number; fontSize: number }> = {
   md: { box: 40, fontSize: 16 },
   lg: { box: 48, fontSize: 19 },
   xl: { box: 68, fontSize: 26 },
+  xxl: { box: 82, fontSize: 30 },
+  xxxl: { box: 108, fontSize: 38 },
 };
 
 // ── Background colour by user type ────────────────────────────────

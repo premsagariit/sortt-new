@@ -16,7 +16,6 @@ import { useLanguageStore } from '../../store/languageStore';
 import { useNotificationStore } from '../../store/notificationStore';
 
 const { width } = Dimensions.get('window');
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
 
 interface MenuItemProps {
   icon: React.ReactNode;
@@ -66,11 +65,11 @@ function MenuItem({ icon, title, subtitle, onPress, isLast, isDestructive, hasVe
 }
 
 export default function AggregatorProfileScreen() {
-  const { getLanguageName } = useI18n();
+  const { t, getLanguageName } = useI18n();
   const language = useLanguageStore((state) => state.language);
   const router = useRouter();
   const authStore = useAuthStore();
-  const { fetchMe, name } = authStore;
+  const { fetchMe, name, profilePhoto } = authStore;
   const {
     fetchAggregatorProfile,
     fetchAggregatorOrders,
@@ -164,7 +163,7 @@ export default function AggregatorProfileScreen() {
                 name={displayName}
                 userType="aggregator"
                 size="xl"
-                source={AVATAR_SOURCE}
+                uri={profilePhoto || undefined}
               />
             </View>
 
@@ -213,7 +212,7 @@ export default function AggregatorProfileScreen() {
       <Animated.View style={[styles.compactHeader, { opacity: compactOpacity }]} pointerEvents="none">
         <SafeAreaView edges={['top']}>
           <View style={styles.compactContent}>
-            <Avatar name={displayName} userType="aggregator" size="sm" source={AVATAR_SOURCE} />
+            <Avatar name={displayName} userType="aggregator" size="sm" uri={profilePhoto || undefined} />
             <View style={styles.compactTextWrap}>
               <Text variant="body" style={styles.compactName as any}>{displayName}</Text>
               <View style={styles.compactVerified}>
@@ -235,68 +234,68 @@ export default function AggregatorProfileScreen() {
       >
         <View style={styles.menuGroup}>
           <MenuItem
-            icon={<CurrencyInr size={22} color={colors.navy} />} title="My Buy Rates" subtitle="Update per-material buying prices"
+            icon={<CurrencyInr size={22} color={colors.navy} />} title={t('My Buy Rates')} subtitle={t('Update per-material buying prices')}
             onPress={() => router.push('/(aggregator)/profile/buy-rates')}
           />
           <MenuItem
-            icon={<ChartBar size={22} color={colors.navy} />} title="Order History & Summary" subtitle="View all completed pickups"
+            icon={<ChartBar size={22} color={colors.navy} />} title={t('Order History & Summary')} subtitle={t('View all completed pickups')}
             onPress={() => router.push('/(aggregator)/profile/order-summary')}
           />
           <MenuItem
-            icon={<MapPin size={22} color={colors.navy} />} title="Operating Areas" subtitle={areasSubtitle}
+            icon={<MapPin size={22} color={colors.navy} />} title={t('Operating Areas')} subtitle={areasSubtitle}
             onPress={() => router.push('/(aggregator)/profile/operating-areas')}
           />
           <MenuItem
-            icon={<Clock size={22} color={colors.navy} />} title="Hours & Availability" subtitle={hoursSubtitle}
+            icon={<Clock size={22} color={colors.navy} />} title={t('Hours & Availability')} subtitle={hoursSubtitle}
             onPress={() => router.push('/(aggregator)/profile/hours-availability')}
           />
           <MenuItem
-            icon={<IdentificationCard size={22} color={colors.navy} />} title="KYC Documents" subtitle={kycSubtitle}
+            icon={<IdentificationCard size={22} color={colors.navy} />} title={t('KYC Documents')} subtitle={kycSubtitle}
             onPress={() => router.push('/(aggregator)/profile/kyc-documents')}
             hasVerifiedBadge={profile?.kycStatus === 'verified'}
           />
           <MenuItem
-            icon={<User size={22} color={colors.navy} />} title="Account Settings" subtitle="Personal & secure login"
+            icon={<User size={22} color={colors.navy} />} title={t('Account Settings')} subtitle={t('Personal & secure login')}
             onPress={() => router.push('/(aggregator)/settings')}
           />
 
           <MenuItem
-            icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates"
+            icon={<Bell size={22} color={colors.navy} />} title={t('Notifications')} subtitle={t('Alerts & updates')}
             onPress={() => router.push('/(shared)/notifications')}
             hasUnread={unreadNotificationsCount > 0}
             unreadCount={unreadNotificationsCount}
           />
           <MenuItem
-            icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={getLanguageName(language)}
+            icon={<Globe size={22} color={colors.navy} />} title={t('Language')} subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <MenuItem
-            icon={<Question size={22} color={colors.navy} />} title="Help Center" subtitle="FAQs & support"
+            icon={<Question size={22} color={colors.navy} />} title={t('Help Center')} subtitle={t('FAQs & support')}
             onPress={() => router.push('/(shared)/help' as any)}
           />
           <MenuItem
-            isLast icon={<ShieldCheck size={22} color={colors.navy} />} title="Terms & Privacy" subtitle="Legal information"
+            isLast icon={<ShieldCheck size={22} color={colors.navy} />} title={t('Terms & Privacy')} subtitle={t('Legal information')}
             onPress={() => router.push('/(shared)/terms-privacy' as any)}
           />
         </View>
 
         <View style={styles.logoutContainer}>
           <PrimaryButton
-            label="Log Out"
+            label={t('Log Out')}
             onPress={handleSignOut}
           />
         </View>
 
         <View style={styles.devContainer}>
           <SecondaryButton
-            label="Dev Toggle: Switch to Seller View"
+            label={t('Dev Toggle: Switch to Seller View')}
             color="navy"
             onPress={handleSwitchUserType}
           />
         </View>
 
         <View style={styles.footer}>
-          <Text variant="caption" color={colors.muted}>Sortt v1.0.0 (42)</Text>
+          <Text variant="caption" color={colors.muted}>{t('Sortt v1.0.0 (42)')}</Text>
         </View>
       </Animated.ScrollView>
     </View>

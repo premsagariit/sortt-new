@@ -9,6 +9,8 @@ import { Text, Numeric } from '../../components/ui/Typography';
 import { MaterialCode } from '../../components/ui/Card';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { api } from '../../lib/api';
+import { getLocalizedMaterialLabel } from '../../lib/i18n';
+import { useI18n } from '../../hooks/useI18n';
 import { getMapRenderAvailability } from '../../utils/mapAvailable';
 import { getMapLibreModule } from '../../lib/maplibre';
 import { type AuthenticatedMapStyle, getAuthenticatedMapStyle, OLA_TILE_STYLE_URL } from '../../lib/olaMaps';
@@ -28,16 +30,6 @@ type MapAggregator = {
   longitude: number | null;
 };
 
-const MATERIAL_LABEL: Record<MaterialCode, string> = {
-  metal: '⚙ Metal',
-  plastic: '🧴 Plastic',
-  paper: '📄 Paper',
-  ewaste: '💻 E-Waste',
-  fabric: '👗 Fabric',
-  glass: '🍶 Glass',
-  custom: '📦 Other',
-};
-
 const toNumberOrNull = (value: unknown): number | null => {
   if (value == null) return null;
   if (typeof value === 'string' && value.trim().length === 0) return null;
@@ -51,6 +43,7 @@ const toOptionalString = (value: unknown): string => {
 };
 
 export default function SellerBrowseMapScreen() {
+  const { t } = useI18n();
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [aggregators, setAggregators] = React.useState<MapAggregator[]>([]);
@@ -157,12 +150,12 @@ export default function SellerBrowseMapScreen() {
     <View style={styles.container}>
       <NavBar
         variant="light"
-        title="Aggregator Map"
+        title={t('Aggregator Map')}
         onBack={() => router.back()}
         rightAction={
           <View style={styles.countPill}>
             <Text variant="caption" style={styles.countPillText}>
-              {mappableAggregators.length} pins
+              {mappableAggregators.length} {t('pins')}
             </Text>
           </View>
         }
@@ -196,7 +189,7 @@ export default function SellerBrowseMapScreen() {
 
             <View style={styles.mapHint}>
               <MapPin size={14} color={colors.slate} />
-              <Text variant="caption" color={colors.slate}>Tap a pin to preview aggregator</Text>
+              <Text variant="caption" color={colors.slate}>{t('Tap a pin to preview aggregator')}</Text>
             </View>
           </>
         ) : (
@@ -204,13 +197,13 @@ export default function SellerBrowseMapScreen() {
             <MapPin size={18} color={colors.muted} />
             <Text variant="caption" color={colors.muted} style={styles.centerText}>
               {mapAvailability.canRenderMap
-                ? 'No live coordinates available for map preview yet.'
-                : mapAvailability.heading || 'Live map preview is unavailable.'}
+                ? t('No live coordinates available for map preview yet.')
+                : mapAvailability.heading || t('Live map preview is unavailable.')}
             </Text>
             <Text variant="caption" color={colors.muted} style={styles.centerText}>
               {mapAvailability.canRenderMap
-                ? 'Aggregators will appear once coordinate data is available from backend.'
-                : mapAvailability.body || 'Use an EAS dev/prod build to view map pins.'}
+                ? t('Aggregators will appear once coordinate data is available from backend.')
+                : mapAvailability.body || t('Use an EAS dev/prod build to view map pins.')}
             </Text>
           </View>
         )}
@@ -218,7 +211,7 @@ export default function SellerBrowseMapScreen() {
         {isLoading ? (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={colors.navy} />
-            <Text variant="caption" color={colors.muted}>Loading coordinates...</Text>
+            <Text variant="caption" color={colors.muted}>{t('Loading coordinates...')}</Text>
           </View>
         ) : null}
       </View>
@@ -248,12 +241,12 @@ export default function SellerBrowseMapScreen() {
             <Numeric style={styles.reviewText}>{selected.rating} ({selected.reviews})</Numeric>
             <View style={[styles.statusDot, { backgroundColor: selected.isOnline ? colors.teal : colors.muted }]} />
             <Text variant="caption" color={selected.isOnline ? colors.teal : colors.muted}>
-              {selected.isOnline ? 'Online' : 'Offline'}
+              {selected.isOnline ? t('Online') : t('Offline')}
             </Text>
           </View>
 
           <Text variant="caption" color={colors.muted} style={styles.selectedLocalities}>
-            {selected.localities || 'City-wide service'}
+            {selected.localities || t('City-wide service')}
           </Text>
 
           <View style={styles.materialsRow}>
@@ -270,12 +263,12 @@ export default function SellerBrowseMapScreen() {
                   ]}
                 >
                   <Text variant="caption" style={[styles.materialChipText, { color: colors.material[material].fg }]}>
-                    {MATERIAL_LABEL[material]}
+                    {getLocalizedMaterialLabel(material, { withEmoji: true, fallback: material })}
                   </Text>
                 </View>
               ))
             ) : (
-              <Text variant="caption" color={colors.muted}>No materials listed</Text>
+              <Text variant="caption" color={colors.muted}>{t('No materials listed')}</Text>
             )}
           </View>
         </Pressable>
@@ -284,8 +277,8 @@ export default function SellerBrowseMapScreen() {
       {showEmptyState ? (
         <EmptyState
           icon={<MapPin size={42} color={colors.muted} />}
-          heading={error ? 'Unable to load map' : 'No coordinates available'}
-          body={error ? 'Please try again in a moment.' : 'Aggregators will appear once coordinate data is available.'}
+          heading={error ? t('Unable to load map') : t('No coordinates available')}
+          body={error ? t('Please try again in a moment.') : t('Aggregators will appear once coordinate data is available.')}
         />
       ) : null}
     </View>

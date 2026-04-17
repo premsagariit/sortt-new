@@ -28,9 +28,25 @@ const ALLOWED_ISSUE_TYPES = [
     'other',
 ] as const;
 const ALLOWED_ISSUE_TYPES_SET = new Set<string>(ALLOWED_ISSUE_TYPES);
+const DISPUTE_WINDOW_MS = 30 * 60 * 1000;
+const DISPUTE_PUBLIC_ID_TIMEZONE = 'Asia/Kolkata';
 
 const stripHtml = (text?: string) =>
     text ? sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} }) : '';
+
+const disputePublicIdExpr = (alias: string) =>
+    `CONCAT(${alias}.order_id, '_', TO_CHAR(${alias}.created_at AT TIME ZONE '${DISPUTE_PUBLIC_ID_TIMEZONE}', 'YYYY-MM-DD'))`;
+
+const generateUuid = () =>
+    typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : [
+            crypto.randomBytes(4).toString('hex'),
+            crypto.randomBytes(2).toString('hex'),
+            `4${crypto.randomBytes(2).toString('hex').slice(1)}`,
+            `${((parseInt(crypto.randomBytes(1).toString('hex'), 16) & 0x3f) | 0x80).toString(16)}${crypto.randomBytes(1).toString('hex')}`,
+            crypto.randomBytes(6).toString('hex'),
+        ].join('-');
 
 // POST /api/disputes
 // Body: { order_id, issue_type, description, order_item_id? }
@@ -72,15 +88,16 @@ router.post('/', async (req: Request, res: Response) => {
             });
         }
 
-        let disputeId: string;
-        let createdAt: string;
+        let disputeUuid = '';
+        let disputePublicId = '';
+        let createdAt = '';
 
         await withUser(userId, async (client) => {
             await client.query('BEGIN');
             try {
                 // Guard: fetch current order status (FOR UPDATE to lock the row)
                 const orderRes = await client.query(
-                    'SELECT status, seller_id, aggregator_id FROM orders WHERE id = $1 FOR UPDATE',
+                    'SELECT status, seller_id, aggregator_id, updated_at FROM orders WHERE id = $1 FOR UPDATE',
                     [order_id]
                 );
                 if (orderRes.rows.length === 0) {
@@ -127,14 +144,52 @@ router.post('/', async (req: Request, res: Response) => {
                     return;
                 }
 
-                // 1. INSERT dispute
-                const disputeRes = await client.query(
-                    `INSERT INTO disputes (order_id, raised_by, issue_type, description, status, order_item_id)
-                     VALUES ($1, $2, $3, $4, 'open', $5)
-                     RETURNING id, created_at`,
-                    [order_id, userId, cleanIssueType, cleanDescription, order_item_id || null]
+                const completedAtRes = await client.query(
+                    `SELECT created_at
+                     FROM order_status_history
+                     WHERE order_id = $1
+                       AND new_status = 'completed'
+                     ORDER BY created_at DESC
+                     LIMIT 1`,
+                    [order_id]
                 );
-                disputeId = disputeRes.rows[0].id;
+                const completedAtSource = completedAtRes.rows[0]?.created_at ?? order.updated_at;
+                const completedAt = completedAtSource
+                    ? new Date(completedAtSource)
+                    : null;
+
+                if (!completedAt || Number.isNaN(completedAt.getTime())) {
+                    await client.query('ROLLBACK');
+                    res.status(400).json({
+                        error: 'missing_completion_timestamp',
+                        message: 'Order completion timestamp is unavailable for dispute validation',
+                    });
+                    return;
+                }
+
+                const disputeWindowEndsAt = new Date(completedAt.getTime() + DISPUTE_WINDOW_MS);
+                if (Date.now() > disputeWindowEndsAt.getTime()) {
+                    await client.query('ROLLBACK');
+                    res.status(400).json({
+                        error: 'dispute_window_expired',
+                        message: 'Disputes can only be raised within 30 minutes of order completion',
+                    });
+                    return;
+                }
+
+                // 1. INSERT dispute (id is generated in app as UUID for schema-default drift safety)
+                const newDisputeId = generateUuid();
+                const disputeRes = await client.query(
+                    `INSERT INTO disputes (id, order_id, raised_by, issue_type, description, status, order_item_id)
+                     VALUES ($1, $2, $3, $4, $5, 'open', $6)
+                     RETURNING
+                        id,
+                        created_at,
+                        CONCAT(order_id, '_', TO_CHAR(created_at AT TIME ZONE '${DISPUTE_PUBLIC_ID_TIMEZONE}', 'YYYY-MM-DD')) AS public_id`,
+                    [newDisputeId, order_id, userId, cleanIssueType, cleanDescription, order_item_id || null]
+                );
+                disputeUuid = disputeRes.rows[0].id;
+                disputePublicId = disputeRes.rows[0].public_id;
                 createdAt = disputeRes.rows[0].created_at;
 
                 // 2. UPDATE order status to 'disputed'
@@ -172,14 +227,14 @@ router.post('/', async (req: Request, res: Response) => {
                         for (const recipientId of recipientIds) {
                             await createNotification(recipientId, title, body, 'dispute', {
                                 order_id,
-                                dispute_id: disputeId,
+                                dispute_id: disputePublicId,
                                 kind: 'dispute_created',
                             });
                         }
 
                         await sendPushToUsers(recipientIds, title, body, {
                             order_id,
-                            dispute_id: disputeId,
+                            dispute_id: disputePublicId,
                             kind: 'dispute_created',
                         });
                     } catch (err) {
@@ -187,7 +242,11 @@ router.post('/', async (req: Request, res: Response) => {
                     }
                 });
 
-                res.status(201).json({ disputeId, createdAt });
+                res.status(201).json({
+                    disputeId: disputePublicId,
+                    disputeUuid,
+                    createdAt,
+                });
             } catch (e) {
                 await client.query('ROLLBACK');
                 throw e;
@@ -215,6 +274,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         await withUser(userId, async (client) => {
             const disputeRes = await client.query(
                 `SELECT d.id,
+                        ${disputePublicIdExpr('d')} AS public_id,
                         d.order_id,
                         d.issue_type,
                         d.description,
@@ -226,7 +286,8 @@ router.get('/:id', async (req: Request, res: Response) => {
                         o.aggregator_id
                  FROM disputes d
                  JOIN orders o ON o.id = d.order_id
-                 WHERE d.id = $1
+                      WHERE d.id::text = $1
+                          OR ${disputePublicIdExpr('d')} = $1
                  LIMIT 1`,
                 [disputeId]
             );
@@ -244,15 +305,45 @@ router.get('/:id', async (req: Request, res: Response) => {
             }
 
             const evidenceRes = await client.query(
-                `SELECT id, storage_path, created_at
-                 FROM dispute_evidence
-                 WHERE dispute_id = $1
-                 ORDER BY created_at ASC`,
-                [disputeId]
+                `SELECT de.id,
+                        de.storage_path,
+                        de.created_at,
+                        de.submitted_by,
+                        u.name AS submitted_by_name,
+                        u.user_type AS submitted_by_user_type
+                 FROM dispute_evidence de
+                 LEFT JOIN users u ON u.id = de.submitted_by
+                 WHERE de.dispute_id = $1
+                 ORDER BY de.created_at ASC`,
+                [dispute.id]
             );
 
             const evidence = await Promise.all(
-                evidenceRes.rows.map(async (row: { id: string; storage_path: string; created_at: string }) => {
+                evidenceRes.rows.map(async (row: {
+                    id: string;
+                    storage_path: string;
+                    created_at: string;
+                    submitted_by: string | null;
+                    submitted_by_name: string | null;
+                    submitted_by_user_type: string | null;
+                }) => {
+                    const uploadedByRole =
+                        row.submitted_by === dispute.seller_id
+                            ? 'seller'
+                            : row.submitted_by === dispute.aggregator_id
+                                ? 'aggregator'
+                                : row.submitted_by_user_type === 'admin'
+                                    ? 'admin'
+                                    : 'user';
+                    const uploadedByLabel =
+                        uploadedByRole === 'seller'
+                            ? 'Seller'
+                            : uploadedByRole === 'aggregator'
+                                ? 'Aggregator'
+                                : uploadedByRole === 'admin'
+                                    ? 'Admin'
+                                    : 'User';
+
                     try {
                         const expiresAt = new Date(Date.now() + 300_000).toISOString();
                         const url = await storageProvider.getSignedUrl(row.storage_path, 300);
@@ -261,6 +352,9 @@ router.get('/:id', async (req: Request, res: Response) => {
                             url,
                             created_at: row.created_at,
                             expires_at: expiresAt,
+                            uploaded_by_role: uploadedByRole,
+                            uploaded_by_label: uploadedByLabel,
+                            uploaded_by_name: row.submitted_by_name,
                         };
                     } catch {
                         return {
@@ -268,6 +362,9 @@ router.get('/:id', async (req: Request, res: Response) => {
                             url: null,
                             created_at: row.created_at,
                             expires_at: null,
+                            uploaded_by_role: uploadedByRole,
+                            uploaded_by_label: uploadedByLabel,
+                            uploaded_by_name: row.submitted_by_name,
                         };
                     }
                 })
@@ -275,7 +372,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 
             res.status(200).json({
                 dispute: {
-                    id: dispute.id,
+                    id: dispute.public_id,
+                    uuid: dispute.id,
                     order_id: dispute.order_id,
                     issue_type: dispute.issue_type,
                     description: dispute.description,
@@ -308,10 +406,15 @@ router.post('/:id/evidence', upload.single('file'), async (req: Request, res: Re
 
         await withUser(userId, async (client) => {
             const disputeRes = await client.query(
-                `SELECT d.id, d.order_id, o.seller_id, o.aggregator_id
+                `SELECT d.id,
+                        ${disputePublicIdExpr('d')} AS public_id,
+                        d.order_id,
+                        o.seller_id,
+                        o.aggregator_id
                  FROM disputes d
                  JOIN orders o ON o.id = d.order_id
-                 WHERE d.id = $1
+                 WHERE d.id::text = $1
+                    OR ${disputePublicIdExpr('d')} = $1
                  LIMIT 1`,
                 [disputeId]
             );
@@ -334,14 +437,14 @@ router.post('/:id/evidence', upload.single('file'), async (req: Request, res: Re
                 .toBuffer();
 
             const randomHex = crypto.randomBytes(8).toString('hex');
-            const storagePath = `disputes/${dispute.order_id}/${disputeId}/${Date.now()}-${randomHex}.jpg`;
+            const storagePath = `disputes/${dispute.order_id}/${dispute.id}/${Date.now()}-${randomHex}.jpg`;
             const uploadedKey = await storageProvider.uploadWithKey(strippedBuffer, storagePath);
 
             const insertRes = await client.query(
-                `INSERT INTO dispute_evidence (dispute_id, submitted_by, storage_path)
-                 VALUES ($1, $2, $3)
+                `INSERT INTO dispute_evidence (id, dispute_id, submitted_by, storage_path)
+                 VALUES ($1, $2, $3, $4)
                  RETURNING id, created_at`,
-                [disputeId, userId, uploadedKey]
+                [generateUuid(), dispute.id, userId, uploadedKey]
             );
 
             res.status(201).json({

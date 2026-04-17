@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,10 +13,11 @@ import { useListingStore } from '../../../store/listingStore';
 import { useLanguageStore } from '../../../store/languageStore';
 import { useAuthStore } from '../../../store/authStore';
 import { usePhotoCapture } from '../../../hooks/usePhotoCapture';
-import { MaterialCard } from '../../../components/ui/MaterialCard';
+import { SellerMaterialCard } from '../../../components/ui/SellerMaterialCard';
 import { ImageCarouselViewer } from '../../../components/ui/ImageCarouselViewer';
-import { api } from '../../../lib/api';
 import { MaterialCode } from '../../../components/ui/MaterialChip';
+import { useSellerMaterialRates } from '../../../hooks/useSellerMaterialRates';
+import { api } from '../../../lib/api';
 
 export default function Step1Screen() {
   const { fresh } = useLocalSearchParams<{ fresh?: string }>();
@@ -25,12 +26,28 @@ export default function Step1Screen() {
 
   const language = useLanguageStore((state) => state.language);
   const { photoUri, capturePhoto, permissionDenied, isLoading, reset: resetPhoto } = usePhotoCapture();
+  const { rates, loading } = useSellerMaterialRates();
 
   React.useEffect(() => {
     if (fresh === '1') {
       resetListing();
     }
   }, [fresh, resetListing]);
+
+  const ratesByCode = useMemo(() => new Map(rates.map((rate) => [rate.material_code, rate] as const)), [rates]);
+  const availableMaterialCodes = useMemo(
+    () => new Set(rates.filter((rate) => rate.is_available && rate.rate_per_kg != null).map((rate) => rate.material_code)),
+    [rates]
+  );
+
+  useEffect(() => {
+    if (loading) return;
+
+    const nextSelectedMaterials = selectedMaterials.filter((code) => availableMaterialCodes.has(code));
+    if (nextSelectedMaterials.length !== selectedMaterials.length) {
+      setMaterials(nextSelectedMaterials);
+    }
+  }, [availableMaterialCodes, loading, selectedMaterials, setMaterials]);
 
   const analyzePhoto = async (photoUriToAnalyze: string) => {
     setIsAnalyzing(true);
@@ -103,6 +120,8 @@ export default function Step1Screen() {
   };
 
   const handleToggleMaterial = (code: MaterialCode) => {
+    if (!availableMaterialCodes.has(code)) return;
+
     if (selectedMaterials.includes(code)) {
       setMaterials(selectedMaterials.filter((m) => m !== code));
     } else {
@@ -110,7 +129,7 @@ export default function Step1Screen() {
     }
   };
 
-  const canProceed = !isAnalyzing && selectedMaterials.length > 0;
+  const canProceed = !loading && !isAnalyzing && selectedMaterials.length > 0;
   
   const AVAILABLE_MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass'];
 
@@ -245,11 +264,17 @@ export default function Step1Screen() {
             <View style={styles.grid}>
               {AVAILABLE_MATERIALS.map(code => {
                 const isSelected = selectedMaterials.includes(code);
+                const rate = ratesByCode.get(code);
+                const isAvailable = Boolean(rate?.is_available && rate?.rate_per_kg != null);
                 return (
-                  <MaterialCard
+                  <SellerMaterialCard
                     key={code}
                     code={code}
                     isSelected={isSelected}
+                    isDisabled={!isAvailable}
+                    ratePerKg={rate?.rate_per_kg ?? null}
+                    trend={rate?.trend ?? 'flat'}
+                    helpText="no aggregator is ready to accept this material."
                     onPress={() => handleToggleMaterial(code)}
                   />
                 );

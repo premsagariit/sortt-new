@@ -52,7 +52,7 @@ function InfoRow({ icon, title, subtitle, rowKey, onPress, isLast, badge }: Info
 import { useFocusEffect } from 'expo-router';
 
 export default function SellerProfileScreen() {
-  const { getLanguageName } = useI18n();
+  const { t, getLanguageName } = useI18n();
   const language = useLanguageStore((state) => state.language);
   const router = useRouter();
   const authStore = useAuthStore();
@@ -95,6 +95,7 @@ export default function SellerProfileScreen() {
   const ratingLabel = sellerAvgRating > 0 ? sellerAvgRating.toFixed(1) : '0.0';
 
   const liveName = authStore.name || 'Sortt User';
+  const liveProfilePhoto = authStore.profilePhoto;
   const liveLocation = authStore.locality && authStore.city 
     ? `${authStore.locality}, ${authStore.city}` 
     : authStore.locality || authStore.city || 'Location not set';
@@ -161,6 +162,7 @@ export default function SellerProfileScreen() {
                 name={liveName}
                 userType="seller"
                 size="xl"
+                uri={liveProfilePhoto || undefined}
               />
             </View>
             <Text
@@ -184,7 +186,14 @@ export default function SellerProfileScreen() {
             <View style={styles.heroStatsContainer}>
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Total earned</Text>
-                <Numeric size={20} color={colors.surface}>
+                <Numeric
+                  size={20}
+                  color={colors.surface}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                  style={styles.statValue}
+                >
                   ₹{(totalEarned || 0).toLocaleString('en-IN')}
                 </Numeric>
               </View>
@@ -193,13 +202,29 @@ export default function SellerProfileScreen() {
                 <Text variant="caption" style={styles.statLabelHero}>Rating</Text>
                 <View style={styles.ratingBox}>
                   <Star size={16} color="#FFD700" weight="fill" />
-                  <Numeric size={20} color={colors.surface}>{ratingLabel}</Numeric>
+                  <Numeric
+                    size={20}
+                    color={colors.surface}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.6}
+                    style={styles.ratingValue}
+                  >
+                    {ratingLabel}
+                  </Numeric>
                 </View>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text variant="caption" style={styles.statLabelHero}>Total Orders</Text>
-                <Numeric size={20} color={colors.surface}>
+                <Numeric
+                  size={20}
+                  color={colors.surface}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                  style={styles.statValue}
+                >
                   {totalPickups || 0}
                 </Numeric>
               </View>
@@ -219,6 +244,7 @@ export default function SellerProfileScreen() {
                 name={liveName}
                 userType="seller"
                 size="sm"
+                uri={liveProfilePhoto || undefined}
               />
             </View>
             <View style={styles.compactTextWrap}>
@@ -226,7 +252,7 @@ export default function SellerProfileScreen() {
               <View style={styles.compactPill}>
                 <View style={[styles.badgeDot, { backgroundColor: colors.teal }]} />
                 <Text variant="caption" style={styles.compactPillText}>
-                  SELLER
+                  {t('SELLER')}
                 </Text>
               </View>
             </View>
@@ -245,45 +271,45 @@ export default function SellerProfileScreen() {
 
         <View style={styles.menuContainer}>
           <InfoRow
-            rowKey="listings" icon={<ClipboardText size={22} color={colors.navy} />} title="My Listings" subtitle="Active and past requests"
+            rowKey="listings" icon={<ClipboardText size={22} color={colors.navy} />} title={t('My Listings')} subtitle={t('Active and past requests')}
             onPress={() => router.push({ pathname: '/(seller)/orders', params: { tab: 'All' } })}
           />
           <InfoRow
-            rowKey="addresses" icon={<MapPin size={22} color={colors.navy} />} title="Saved Addresses" subtitle="Manage pickup addresses"
+            rowKey="addresses" icon={<MapPin size={22} color={colors.navy} />} title={t('Saved Addresses')} subtitle={t('Manage pickup addresses')}
             onPress={() => router.push('/(seller)/addresses' as any)}
           />
           <InfoRow
-            rowKey="earnings" icon={<CurrencyInr size={22} color={colors.navy} />} title="Earnings Summary" subtitle="Payouts and history"
+            rowKey="earnings" icon={<CurrencyInr size={22} color={colors.navy} />} title={t('Earnings Summary')} subtitle={t('Payouts and history')}
             onPress={() => router.push('/(seller)/earnings')}
           />
           <InfoRow
-            rowKey="settings" icon={<Gear size={22} color={colors.navy} />} title="Account Settings" subtitle="Preferences & privacy" onPress={() => router.push('/(seller)/settings')}
+            rowKey="settings" icon={<Gear size={22} color={colors.navy} />} title={t('Account Settings')} subtitle={t('Preferences & privacy')} onPress={() => router.push('/(seller)/settings')}
           />
           <InfoRow
-            rowKey="notifications" icon={<Bell size={22} color={colors.navy} />} title="Notifications" subtitle="Alerts & updates" 
+            rowKey="notifications" icon={<Bell size={22} color={colors.navy} />} title={t('Notifications')} subtitle={t('Alerts & updates')} 
             badge={unreadNotificationsCount}
             onPress={() => router.push('/(shared)/notifications')}
           />
           <InfoRow
-            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title="Language" subtitle={getLanguageName(language)}
+            rowKey="language" icon={<Globe size={22} color={colors.navy} />} title={t('Language')} subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <InfoRow
-            rowKey="help" icon={<Question size={22} color={colors.navy} />} title="Help & Support" subtitle="FAQs & contact" onPress={() => router.push('/(shared)/help')}
+            rowKey="help" icon={<Question size={22} color={colors.navy} />} title={t('Help & Support')} subtitle={t('FAQs & contact')} onPress={() => router.push('/(shared)/help')}
           />
           <InfoRow
-            rowKey="terms" icon={<ShieldCheck size={22} color={colors.navy} />} title="Terms & Privacy" subtitle="Legal information" isLast
+            rowKey="terms" icon={<ShieldCheck size={22} color={colors.navy} />} title={t('Terms & Privacy')} subtitle={t('Legal information')} isLast
             onPress={() => router.push('/(shared)/terms-privacy')}
           />
         </View>
 
         <View style={styles.versionContainer}>
-          <Text variant="caption" color={colors.muted}>Sortt Version 1.0.0 (Build 42)</Text>
+          <Text variant="caption" color={colors.muted}>{t('Sortt Version 1.0.0 (Build 42)')}</Text>
         </View>
 
         <View style={styles.logoutContainer}>
           <PrimaryButton
-            label="Log Out"
+            label={t('Log Out')}
             onPress={handleSignOut}
           />
         </View>
@@ -402,16 +428,28 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
+    overflow: 'hidden',
   },
   statLabelHero: {
     color: 'rgba(255,255,255,0.6)',
     marginBottom: 4,
   },
+  statValue: {
+    width: '100%',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
   ratingBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
     gap: 2,
+  },
+  ratingValue: {
+    flexShrink: 1,
   },
   scrollContent: {
     paddingBottom: spacing.xxl,

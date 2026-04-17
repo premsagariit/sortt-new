@@ -7,11 +7,12 @@
  */
 
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, EnvelopeSimple, MapPin, User, CheckCircle } from 'phosphor-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -22,11 +23,15 @@ import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../lib/api';
 
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
+type FileSystemCompat = {
+  cacheDirectory?: string | null;
+  documentDirectory?: string | null;
+  copyAsync: (options: { from: string; to: string }) => Promise<void>;
+};
 
 export default function EditProfile() {
   const router = useRouter();
-  const { name, email, locality, city, accountType, profilePhoto, setName, setEmail, setLocality, setProfilePhoto, token } = useAuthStore();
+  const { name, email, locality, city, accountType, profilePhoto, setName, setEmail, setLocality, setProfilePhoto } = useAuthStore();
 
   const [newName, setNewName] = useState(name);
   const [newEmail, setNewEmail] = useState(email);
@@ -34,6 +39,22 @@ export default function EditProfile() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const ensureUploadableUri = async (uri: string, filename: string): Promise<string> => {
+    if (Platform.OS === 'android' && uri.startsWith('content://')) {
+      const extensionMatch = /\.([a-zA-Z0-9]+)$/.exec(filename);
+      const extension = extensionMatch?.[1] ?? 'jpg';
+      const fs = FileSystem as unknown as FileSystemCompat;
+      const safeDir = fs.cacheDirectory ?? fs.documentDirectory;
+      if (!safeDir) return uri;
+
+      const copiedUri = `${safeDir}profile_upload_${Date.now()}.${extension}`;
+      await fs.copyAsync({ from: uri, to: copiedUri });
+      return copiedUri;
+    }
+
+    return uri;
+  };
 
   const handlePickImage = async () => {
     try {
@@ -50,26 +71,60 @@ export default function EditProfile() {
         setIsUploadingPhoto(true);
         setError(null);
         
-        const localUri = asset.uri;
-        const filename = localUri.split('/').pop() || 'profile.jpg';
+        const filename = asset.fileName || asset.uri.split('/').pop() || 'profile.jpg';
+        const localUri = await ensureUploadableUri(asset.uri, filename);
         const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        const type = asset.mimeType || (match ? `image/${match[1].toLowerCase()}` : 'image/jpeg');
         
-        const formData = new FormData();
-        formData.append('photo', {
-          uri: localUri,
-          name: filename,
-          type,
-        } as any);
+        const authToken = useAuthStore.getState().token;
+        const url = `${api.defaults.baseURL}/api/users/profile-photo`;
+        const maxAttempts = 3;
+        let uploadedUrl: string | null = null;
 
-        const uploadRes = await api.post('/api/users/profile-photo', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          const formData = new FormData();
+          formData.append('file', {
+            uri: localUri,
+            name: filename,
+            type,
+          } as any);
 
-        if (uploadRes.data?.profile_photo_url) {
-          setProfilePhoto(uploadRes.data.profile_photo_url);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 90000);
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+              },
+              body: formData,
+              signal: controller.signal,
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const err: any = new Error(payload?.error || `Profile photo upload failed (${response.status})`);
+              err.response = { status: response.status, data: payload };
+              throw err;
+            }
+
+            uploadedUrl = typeof payload?.profile_photo_url === 'string' ? payload.profile_photo_url : null;
+            break;
+          } catch (uploadErr: any) {
+            const status = uploadErr?.response?.status;
+            const retryable = !status || status >= 500 || uploadErr?.name === 'AbortError';
+            if (attempt < maxAttempts && retryable) {
+              await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+              continue;
+            }
+            throw uploadErr;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        }
+
+        if (uploadedUrl) {
+          setProfilePhoto(uploadedUrl);
         }
       }
     } catch (err: any) {
@@ -151,16 +206,18 @@ export default function EditProfile() {
             <Avatar 
               name={name} 
               userType="seller" 
-              size="lg" 
+              size="xxxl" 
               uri={profilePhoto || undefined}
             />
             <View style={styles.cameraIcon}>
               <Camera size={18} color={colors.surface} weight="fill" />
             </View>
           </Pressable>
-          <Text variant="label" color={colors.teal} style={{ marginTop: 12, fontWeight: '600' }}>
-            {isUploadingPhoto ? 'Uploading...' : 'Change Photo'}
-          </Text>
+          {isUploadingPhoto && (
+            <Text variant="label" color={colors.teal} style={{ marginTop: 12, fontWeight: '600' }}>
+              Uploading...
+            </Text>
+          )}
         </View>
 
         {/* Form */}

@@ -179,7 +179,7 @@ export default function AdminDashboard() {
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Platform Overview</h1>
+          <h1 className="text-2xl font-bold" style={{color: '#1e3a8a'}} >Platform Overview</h1>
           <p className="text-[13px] text-muted mt-1">
             {lastUpdated
               ? `Last refreshed at ${lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`

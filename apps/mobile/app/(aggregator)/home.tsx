@@ -30,35 +30,20 @@ import { useAggregatorStore, NewOrderRequest } from '../../store/aggregatorStore
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { NotificationBell } from '../../components/ui/NotificationBell';
-import type { MaterialCode } from '../../components/ui/MaterialChip';
 import { api } from '../../lib/api';
 import { useAggregatorFeedChannel } from '../../hooks/useAggregatorFeedChannel';
+import { useI18n } from '../../hooks/useI18n';
+import type { MaterialCode } from '../../components/ui/MaterialChip';
 
 // ── Note: Feed is now sourced from aggregatorStore.newOrders ────────
 
-interface MockCompactRate {
-  code: MaterialCode;
-  label: string;
-  rateDisplay: string;
-  changePercent: string;
+interface MarketRate {
+  material_code: string;
+  name: string;
+  rate_per_kg: number;
+  change_percent?: number | null;
   trend: 'up' | 'down' | 'flat';
 }
-
-const MOCK_COMPACT_RATES: MockCompactRate[] = [
-  { code: 'metal', label: 'Iron scrap', rateDisplay: '₹28/kg', changePercent: '2.1%', trend: 'up' },
-  { code: 'paper', label: 'Newspaper', rateDisplay: '₹10/kg', changePercent: '0.8%', trend: 'up' },
-  { code: 'plastic', label: 'PET Bottles', rateDisplay: '₹12/kg', changePercent: '0.5%', trend: 'down' },
-];
-
-const MATERIAL_LABEL: Record<MaterialCode, string> = {
-  metal: 'Iron',
-  plastic: 'Plastic',
-  paper: 'Paper',
-  ewaste: 'E-Waste',
-  fabric: 'Fabric',
-  glass: 'Glass',
-  custom: 'Other',
-};
 
 // ── Mock fallbacks (replaced by backend data on Day 4) ──────────────
 const MOCK_AGG_NAME = 'Suresh Metals';
@@ -84,6 +69,7 @@ function normalizeArea(value: unknown): string {
 // ── Main Screen ────────────────────────────────────────────────────
 
 export default function AggregatorHomeScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -91,6 +77,7 @@ export default function AggregatorHomeScreen() {
   const lastFeedSyncAt = useAggregatorStore((s) => s.lastFeedSyncAt);
   const lastFeedError = useAggregatorStore((s) => s.lastFeedError);
   const aggregatorName = useAuthStore((s: any) => s.name);
+  const profilePhoto = useAuthStore((s: any) => s.profilePhoto);
   const fetchMe = useAuthStore((s: any) => s.fetchMe);
   const userType = useAuthStore((s: any) => s.userType);
 
@@ -113,8 +100,7 @@ export default function AggregatorHomeScreen() {
   );
 
   const [screenState, setScreenState] = React.useState<'loading' | 'error' | 'empty' | 'populated'>('loading');
-  // liveRates stored as { material_code: rate_per_kg } map for O(1) lookup in render
-  const [liveRates, setLiveRates] = React.useState<Record<string, number> | null>(null);
+  const [marketRates, setMarketRates] = React.useState<MarketRate[]>([]);
 
   // ── Heartbeat & Polling ──────────────────────────────────────────
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -165,11 +151,7 @@ export default function AggregatorHomeScreen() {
         fetchAggregatorRates(),
       ]);
       if (ratesRes) {
-        const map: Record<string, number> = {};
-        for (const r of (ratesRes.data.rates ?? [])) {
-          map[r.material_code] = r.rate_per_kg;
-        }
-        setLiveRates(map);
+        setMarketRates((ratesRes.data?.rates ?? []) as MarketRate[]);
       }
       setScreenState('populated');
     } catch {
@@ -217,10 +199,10 @@ export default function AggregatorHomeScreen() {
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning,';
-    if (hour < 17) return 'Good afternoon,';
-    return 'Good evening,';
-  }, []);
+    if (hour < 12) return t('Good morning,');
+    if (hour < 17) return t('Good afternoon,');
+    return t('Good evening,');
+  }, [t]);
 
   const lastFeedSyncLabel = useMemo(() => {
     if (!lastFeedSyncAt) return null;
@@ -254,7 +236,7 @@ export default function AggregatorHomeScreen() {
         {isLocked && (
           <View style={styles.lockedOverlay}>
             <View style={styles.lockedBadge}>
-              <Text variant="caption" style={styles.lockedBadgeText}>Locked: Rate too low</Text>
+                <Text variant="caption" style={styles.lockedBadgeText}>{t('Locked: Rate too low')}</Text>
             </View>
           </View>
         )}
@@ -264,7 +246,7 @@ export default function AggregatorHomeScreen() {
           <View style={styles.feedTopLeft}>
             <Text variant="body" style={styles.feedLocality}>{item.locality}</Text>
             <Text variant="caption" color={colors.muted}>
-              {item.sellerType ? `${item.sellerType} · ` : ''}~{item.estimatedKg} kg
+              {item.sellerType || t('Seller')}
             </Text>
           </View>
           <View style={styles.distanceBadge}>
@@ -274,52 +256,38 @@ export default function AggregatorHomeScreen() {
           </View>
         </View>
 
-        {/* Meta row: window + est. value */}
+        {/* Meta row: window + total weight */}
         <View style={styles.headerInfo}>
           <View style={styles.headerInfoItem}>
             <Calendar size={12} color={colors.muted} />
             <Text variant="caption" color={colors.muted}>
-              {typeof item.window === 'string' && item.window ? item.window : 'Flexible pickup'}
+              {typeof item.window === 'string' && item.window ? item.window : t('Flexible pickup')}
             </Text>
           </View>
-          {item.estimatedPrice > 0 && (
+          {typeof item.estimatedKg === 'number' && item.estimatedKg > 0 && (
             <View style={[styles.headerInfoItem, { marginLeft: 'auto' }]}>
               <Text variant="caption" style={styles.estValueText}>
-                ~₹{item.estimatedPrice.toLocaleString('en-IN')}
+                ~{item.estimatedKg} {t('kg total')}
               </Text>
             </View>
           )}
         </View>
 
-        {/* Material tags */}
-        <View style={styles.feedMats}>
-          {item.materials.map((mat) => (
-            <View
-              key={mat}
-              style={[styles.feedMatPill, { backgroundColor: colors.material[mat].bg }]}
-            >
-              <Text variant="caption" style={[styles.feedMatText, { color: colors.material[mat].fg }]}>
-                {MATERIAL_LABEL[mat]}
-              </Text>
-            </View>
-          ))}
-        </View>
-
         {/* Action buttons — exactly half-width each */}
-        <View style={styles.feedActions}>
+        <View style={[styles.feedActions, { marginTop: spacing.md }]}>
           {isLocked ? (
             <Pressable
               style={[styles.feedBtn, styles.feedBtnUpdate]}
               onPress={() => router.push('/(aggregator)/price-index')}
             >
-              <Text variant="button" style={styles.feedBtnUpdateText}>Update rates to bid</Text>
+              <Text variant="button" style={styles.feedBtnUpdateText}>{t('Update rates to bid')}</Text>
             </Pressable>
           ) : (
             <Pressable
               style={[styles.feedBtn, styles.feedBtnAccept]}
               onPress={() => router.push({ pathname: '/(aggregator)/order/[id]', params: { id: item.id } } as any)}
             >
-              <Text variant="button" style={styles.feedBtnAcceptText}>View Order</Text>
+              <Text variant="button" style={styles.feedBtnAcceptText}>{t('View Order')}</Text>
             </Pressable>
           )}
           <View style={styles.feedBtnDivider} />
@@ -332,7 +300,7 @@ export default function AggregatorHomeScreen() {
               }
             }}
           >
-            <Text variant="button" style={styles.feedBtnRejectText}>Dismiss</Text>
+            <Text variant="button" style={styles.feedBtnRejectText}>{t('Dismiss')}</Text>
           </Pressable>
         </View>
       </View>
@@ -394,7 +362,7 @@ export default function AggregatorHomeScreen() {
             >
               <View style={[styles.onlineDot, { backgroundColor: isOnline ? colors.statusOnline : colors.muted }]} />
               <Text variant="caption" style={[styles.onlineText, { color: isOnline ? colors.statusOnline : colors.muted }]}>
-                {isOnline ? 'Online' : 'Offline'}
+                {isOnline ? t('Online') : t('Offline')}
               </Text>
             </Pressable>
           </View>
@@ -404,15 +372,15 @@ export default function AggregatorHomeScreen() {
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>₹{Number(allTimeEarnings?.total_earned ?? 0).toLocaleString('en-IN')}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Earnings</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('Earnings')}</Text>
             </View>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{Number(allTimeEarnings?.orders_completed ?? 0)}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Pickups</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('Pickups')}</Text>
             </View>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{activeFeed.length}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>New</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('New')}</Text>
             </View>
           </View>
         </Animated.View>
@@ -421,9 +389,9 @@ export default function AggregatorHomeScreen() {
       <View style={styles.listContentPad}>
         {/* Section: New Orders Nearby */}
         <View style={styles.sectionHeader}>
-          <Text variant="subheading" style={styles.sectionTitle}>New Orders Nearby</Text>
+          <Text variant="subheading" style={styles.sectionTitle}>{t('New Orders Nearby')}</Text>
           <Pressable onPress={() => router.push('/(aggregator)/orders')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all</Text>
+            <Text variant="caption" color={colors.red} style={styles.seeAllText}>{t('See all')}</Text>
             <ArrowRight size={14} color={colors.red} weight="bold" />
           </Pressable>
         </View>
@@ -434,7 +402,7 @@ export default function AggregatorHomeScreen() {
             onPress={() => loadDataAsync()}
           >
             <Text variant="caption" style={styles.inactivityText}>
-              Stale feed? Pull to refresh for latest orders
+              {t('Stale feed? Pull to refresh for latest orders')}
             </Text>
             <View style={styles.refreshIconSmall}>
               <ArrowRight size={12} color={colors.surface} />
@@ -444,12 +412,12 @@ export default function AggregatorHomeScreen() {
 
         {lastFeedSyncLabel && (
           <Text variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
-            Updated {lastFeedSyncLabel}
+            {t('Updated')} {lastFeedSyncLabel}
           </Text>
         )}
         {lastFeedError && (
           <Text variant="caption" style={{ color: colors.red, marginTop: 4 }}>
-            Feed refresh failed. Retrying automatically.
+            {t('Feed refresh failed. Retrying automatically.')}
           </Text>
         )}
       </View>
@@ -460,33 +428,30 @@ export default function AggregatorHomeScreen() {
     <View style={styles.listContentPad}>
       {/* Section: Today's Rate Index (ROW LAYOUT per user request) */}
       <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
-        <Text variant="subheading" style={styles.sectionTitle}>Today's Rate Index</Text>
+        <Text variant="subheading" style={styles.sectionTitle}>{t("Today's Rate Index")}</Text>
         <Pressable onPress={() => router.push('/(aggregator)/price-index' as any)} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-          <Text variant="caption" color={colors.red} style={styles.seeAllText}>See All</Text>
+          <Text variant="caption" color={colors.red} style={styles.seeAllText}>{t('See all')}</Text>
           <ArrowRight size={14} color={colors.red} weight="bold" />
         </Pressable>
       </View>
 
       <View style={styles.ratesList}>
-        {MOCK_COMPACT_RATES.map((rate) => {
+        {marketRates.slice(0, 3).map((rate) => {
+          const rateCode = String(rate.material_code ?? '').toLowerCase() as MaterialCode;
           const changeColor = rate.trend === 'up' ? colors.teal : rate.trend === 'down' ? colors.red : colors.muted;
           return (
-            <View key={rate.code} style={styles.rateCard}>
-              <View style={[styles.rateBorder, { backgroundColor: (colors.material[rate.code as keyof typeof colors.material] ?? colors.material.metal).fg }]} />
+            <View key={rate.material_code} style={styles.rateCard}>
+              <View style={[styles.rateBorder, { backgroundColor: (colors.material[rateCode as keyof typeof colors.material] ?? colors.material.metal).fg }]} />
               <View style={styles.rateInfo}>
-                <Text variant="body" style={styles.rateMaterial}>{rate.label}</Text>
+                <Text variant="body" style={styles.rateMaterial}>{rate.name}</Text>
                 <View style={styles.rateRight}>
-                  {liveRates ? (
-                    <Numeric style={styles.ratePrice}>₹{liveRates[rate.code]}/kg</Numeric>
-                  ) : (
-                    <Numeric style={styles.ratePrice}>{rate.rateDisplay}</Numeric>
-                  )}
+                  <Numeric style={styles.ratePrice}>₹{Number(rate.rate_per_kg ?? 0)}/kg</Numeric>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                     {rate.trend === 'up' && <CaretUp size={10} color={colors.teal} weight="bold" />}
                     {rate.trend === 'down' && <CaretDown size={10} color={colors.red} weight="bold" />}
                     {rate.trend === 'flat' && <Minus size={10} color={colors.muted} weight="bold" />}
                     <Text variant="caption" style={[styles.rateChange, { color: changeColor }]}>
-                      {rate.changePercent}
+                      {(rate.change_percent ?? 0) > 0 ? '+' : ''}{Number(rate.change_percent ?? 0).toFixed(2)}%
                     </Text>
                   </View>
                 </View>
@@ -494,6 +459,9 @@ export default function AggregatorHomeScreen() {
             </View>
           );
         })}
+        {marketRates.length === 0 && (
+          <Text variant="caption" color={colors.muted}>{t('Rates unavailable — check back soon.')}</Text>
+        )}
       </View>
     </View>
   );
@@ -540,6 +508,7 @@ export default function AggregatorHomeScreen() {
                   name={displayName}
                   userType="aggregator"
                   size="sm"
+                  uri={profilePhoto || undefined}
                 />
               </Pressable>
             </View>
@@ -584,8 +553,8 @@ export default function AggregatorHomeScreen() {
                 <View style={styles.cardPad}>
                   <EmptyState
                     icon={<House size={48} color={colors.border} weight="thin" />}
-                    heading="No orders nearby"
-                    body="Online status is active. New requests will appear here."
+                    heading={t('No orders nearby')}
+                    body={t('Online status is active. New requests will appear here.')}
                   />
                 </View>
               }
@@ -850,22 +819,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 11,
   },
-  feedMats: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  feedMatPill: {
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: 6,
-  },
-  feedMatText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
+
   feedActions: {
     flexDirection: 'row',
     borderTopWidth: 1,

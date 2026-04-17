@@ -16,10 +16,26 @@ import { CancelOrderModal } from '../../components/domain/CancelOrderModal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { SkeletonLoader } from '../../components/ui/SkeletonLoader';
 import { openExternalDirections } from '../../utils/mapNavigation';
+import { useI18n } from '../../hooks/useI18n';
 
 type TabType = 'new' | 'active' | 'completed' | 'cancelled';
 
+const normalizeDisputeStatus = (value: unknown): 'open' | 'resolved' | 'dismissed' | null => {
+  if (typeof value !== 'string') return null;
+  const status = value.trim().toLowerCase();
+  if (status === 'closed') return 'resolved';
+  if (status === 'open' || status === 'resolved' || status === 'dismissed') return status;
+  return null;
+};
+
+const isOpenDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && normalizeDisputeStatus(order?.dispute_status ?? order?.disputeStatus) === 'open';
+
+const isResolvedDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && ['resolved', 'dismissed'].includes(normalizeDisputeStatus(order?.dispute_status ?? order?.disputeStatus) || '');
+
 export default function AggregatorOrdersScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const { newOrders, aggOrders, dismissFeedOrderApi, acceptOrderApi, fetchAggregatorOrders, error, isLoading } = useAggregatorStore();
   const materials = useAggregatorStore((s) => s.materials);
@@ -75,7 +91,10 @@ export default function AggregatorOrdersScreen() {
   const activeOrders = useMemo(() =>
     (aggOrders || [])
       .filter((o: any) =>
-        ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) &&
+        (
+          ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(o.status) ||
+          isOpenDisputeOrder(o)
+        ) &&
         (!matKey || o.materials?.includes(matKey as any) || o.material_codes?.includes(matKey as any))
       )
       .map((o) => mapStoreOrder(o, materials))
@@ -85,7 +104,7 @@ export default function AggregatorOrdersScreen() {
 
   const completedOrders = useMemo(() =>
     (aggOrders || [])
-      .filter((o: any) => o.status === 'completed')
+      .filter((o: any) => o.status === 'completed' || isResolvedDisputeOrder(o))
       .map((o) => mapStoreOrder(o, materials))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     [aggOrders, materials]
@@ -135,11 +154,12 @@ export default function AggregatorOrdersScreen() {
       pickupLng,
       price,
       locality: o.pickupLocality ?? o.pickup_locality,
-      window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Flexible'),
+      window: o.preferredPickupWindow?.type ?? o.preferred_pickup_window?.type ?? (o.createdAt || o.created_at ? new Date(o.createdAt ?? o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : t('Flexible')),
       materials: (o.materials || o.material_codes || []) as MaterialCode[],
       sellerType: o.sellerType ?? o.seller_name ?? 'Seller',
       rating: Number.isFinite(Number(o.rating)) && Number(o.rating) > 0 ? Number(o.rating) : 0,
       status: o.status as OrderStatus,
+      disputeStatus: normalizeDisputeStatus(o.dispute_status ?? o.disputeStatus),
       createdAt: String(o.createdAt ?? o.created_at ?? ''),
       updatedAt: String(o.updatedAt ?? o.updated_at ?? ''),
     };
@@ -191,7 +211,7 @@ export default function AggregatorOrdersScreen() {
             numberOfLines={1}
             style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}
           >
-            {tab.label}
+                  {t(tab.label)}
           </Text>
         </Pressable>
       ))}
@@ -223,7 +243,7 @@ export default function AggregatorOrdersScreen() {
                   (selectedMaterial === m || (m === 'All' && !selectedMaterial)) && styles.filterTextActive
                 ]}
               >
-                {m}
+                {t(m)}
               </Text>
             </Pressable>
           ))}
@@ -308,18 +328,21 @@ export default function AggregatorOrdersScreen() {
 
   // ── Active/Completed/Cancelled order card ──────────────────────
   const renderOrderCard = (order: ReturnType<typeof mapStoreOrder>) => {
-    const isActive = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
-    const isHistorical = order.status === 'completed' || order.status === 'cancelled';
+    const isExecutionActive = ['accepted', 'en_route', 'arrived', 'weighing_in_progress'].includes(order.status);
+    const isDisputed = order.status === 'disputed';
 
     const handleCardPress = () => {
-      if (isActive) {
+      if (isExecutionActive) {
         router.push({ pathname: '/(aggregator)/active-order-detail', params: { id: order.id } } as any);
         return;
       }
 
-      if (order.status === 'completed') {
+      if (isDisputed || order.status === 'completed') {
         router.push({ pathname: '/(aggregator)/execution/receipt/[id]', params: { id: order.id } } as any);
-      } else if (order.status === 'cancelled') {
+        return;
+      }
+
+      if (order.status === 'cancelled') {
         router.push({ pathname: '/(aggregator)/order-history-detail', params: { id: order.id, status: order.status } });
       } else {
         routeToExecutionStage(order);
@@ -353,6 +376,7 @@ export default function AggregatorOrdersScreen() {
           <View style={[styles.cardTopBar, {
             backgroundColor:
               order.status === 'completed' ? colors.teal :
+                  order.status === 'disputed' ? colors.red :
                 order.status === 'cancelled' ? colors.muted : colors.navy
           }]} />
           <View style={styles.cardContent}>
@@ -378,13 +402,46 @@ export default function AggregatorOrdersScreen() {
                   fontWeight: '700',
                   fontSize: 10,
                 }}>
-                  {order.status === 'en_route' ? 'On the Way' :
-                    order.status === 'arrived' ? 'Arrived' :
-                      order.status === 'completed' ? 'Completed' :
-                        order.status === 'cancelled' ? 'Cancelled' : 'Accepted'}
+                  {order.status === 'en_route' ? t('On the Way') :
+                    order.status === 'arrived' ? t('Arrived') :
+                      order.status === 'disputed' ? t('Disputed') :
+                      order.status === 'completed' ? t('Completed') :
+                        order.status === 'cancelled' ? t('Cancelled') : t('Accepted')}
                 </Text>
               </View>
             </View>
+            {order.disputeStatus ? (
+              <View style={styles.cardRow}>
+                <View
+                  style={[
+                    styles.disputeStatusChip,
+                    order.disputeStatus === 'open'
+                      ? styles.disputeStatusChipOpen
+                      : order.disputeStatus === 'resolved'
+                        ? styles.disputeStatusChipResolved
+                        : styles.disputeStatusChipDismissed,
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    style={[
+                      styles.disputeStatusText,
+                      order.disputeStatus === 'open'
+                        ? styles.disputeStatusTextOpen
+                        : order.disputeStatus === 'resolved'
+                          ? styles.disputeStatusTextResolved
+                          : styles.disputeStatusTextDismissed,
+                    ] as any}
+                  >
+                    {order.disputeStatus === 'open'
+                      ? t('Dispute Open')
+                      : order.disputeStatus === 'resolved'
+                        ? t('Dispute Resolved')
+                        : t('Dispute Dismissed')}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
             <View style={[styles.cardRow, { marginTop: 0 }]}>
               <View style={styles.rowLeft}>
@@ -399,17 +456,17 @@ export default function AggregatorOrdersScreen() {
               ))}
             </View>
 
-            {isActive && (
+            {isExecutionActive && (
               <View style={styles.actionRow}>
                 <PrimaryButton
                   label={
                     order.status === 'weighing_in_progress'
-                      ? 'Continue OTP'
+                      ? t('Continue OTP')
                       : order.status === 'arrived'
-                        ? 'Start Weighing'
+                        ? t('Start Weighing')
                         : order.status === 'en_route'
-                          ? 'Mark Arrived'
-                          : 'Navigate'
+                          ? t('Mark Arrived')
+                          : t('Navigate')
                   }
                   style={styles.actionBtn}
                   onPress={() => {
@@ -421,7 +478,7 @@ export default function AggregatorOrdersScreen() {
                   }}
                 />
                 <SecondaryButton
-                  label="Cancel"
+                  label={t('Cancel')}
                   style={[styles.chatBtn, { borderColor: colors.red }]}
                   textStyle={{ color: colors.red }}
                   onPress={() => setCancelOrderId(order.id)}
@@ -448,7 +505,7 @@ export default function AggregatorOrdersScreen() {
       <EmptyState
         icon={<Package size={48} color={colors.muted} weight="thin" />}
         heading={message}
-        body="Try again later or adjust filters."
+        body={t('Try again later or adjust filters.')}
       />
     </View>
   );
@@ -456,7 +513,7 @@ export default function AggregatorOrdersScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <NavBar title="Order Feed"/>
+      <NavBar title={t('Order Feed')}/>
 
       <>
         {renderTabs()}
@@ -482,7 +539,7 @@ export default function AggregatorOrdersScreen() {
               {isLoading ? (
                 <ActivityIndicator size="small" color={colors.surface} />
               ) : (
-                <Text variant="caption" style={styles.retryText}>Retry</Text>
+                <Text variant="caption" style={styles.retryText}>{t('Retry')}</Text>
               )}
             </Pressable>
           </View>
@@ -492,19 +549,19 @@ export default function AggregatorOrdersScreen() {
         ) : activeTab === 'new' ? (
           filteredNewOrders.length > 0
             ? filteredNewOrders.map(renderNewOrderCard)
-            : renderEmptyState('No new order requests')
+            : renderEmptyState(t('No new order requests'))
         ) : activeTab === 'active' ? (
           activeOrders.length > 0
             ? activeOrders.map(renderOrderCard)
-            : renderEmptyState('No active orders')
+            : renderEmptyState(t('No active orders'))
         ) : activeTab === 'completed' ? (
           completedOrders.length > 0
             ? completedOrders.map(renderOrderCard)
-            : renderEmptyState('No completed orders yet')
+            : renderEmptyState(t('No completed orders yet'))
         ) : (
           cancelledOrders.length > 0
             ? cancelledOrders.map(renderOrderCard)
-            : renderEmptyState('No cancelled orders')
+            : renderEmptyState(t('No cancelled orders'))
         )}
         </ScrollView>
       </>
@@ -582,6 +639,38 @@ const styles = StyleSheet.create({
   highValueBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, backgroundColor: colors.tealLight },
   highValueText: { fontFamily: 'DMSans-SemiBold', fontSize: 9 },
   statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  disputeStatusChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  disputeStatusChipOpen: {
+    backgroundColor: `${colors.red}12`,
+    borderColor: `${colors.red}40`,
+  },
+  disputeStatusChipResolved: {
+    backgroundColor: `${colors.teal}12`,
+    borderColor: `${colors.teal}40`,
+  },
+  disputeStatusChipDismissed: {
+    backgroundColor: `${colors.muted}1A`,
+    borderColor: `${colors.muted}4D`,
+  },
+  disputeStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  disputeStatusTextOpen: {
+    color: colors.red,
+  },
+  disputeStatusTextResolved: {
+    color: colors.teal,
+  },
+  disputeStatusTextDismissed: {
+    color: colors.muted,
+  },
   materialsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   actionRow: { flexDirection: 'row', marginTop: spacing.md, gap: spacing.sm },
   acceptBtn: { flex: 1, height: 40, backgroundColor: colors.teal },

@@ -53,7 +53,7 @@ function SettingRow({ icon, title, subtitle, hasToggle, toggleState, onToggle, o
 }
 
 export default function SettingsScreen() {
-  const { getLanguageName } = useI18n();
+  const { t, getLanguageName } = useI18n();
   const language = useLanguageStore((state) => state.language);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={[]}>
       <NavBar
-        title="Settings"
+        title={t('Settings')}
         variant="light"
         onBack={() => safeBack()}
       />
@@ -85,15 +85,15 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingRow
             icon={<User size={20} color={colors.navy} />}
-            title="Edit Profile"
-            subtitle="Update name, location, and photo"
+            title={t('Edit Profile')}
+            subtitle={t('Update name, location, and photo')}
             onPress={() => router.push('/(seller)/edit-profile')}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Bell size={20} color={colors.navy} />}
-            title="Push Notifications"
-            subtitle="Order updates and price alerts"
+            title={t('Push Notifications')}
+            subtitle={t('Order updates and price alerts')}
             hasToggle
             toggleState={notificationsEnabled}
             onToggle={setNotificationsEnabled}
@@ -104,15 +104,15 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingRow
             icon={<Globe size={20} color={colors.navy} />}
-            title="Language"
+            title={t('Language')}
             subtitle={getLanguageName(language)}
             onPress={() => router.push('/(shared)/language')}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Moon size={20} color={colors.navy} />}
-            title="Dark Mode"
-            subtitle="System default"
+            title={t('Dark Mode')}
+            subtitle={t('System default')}
             hasToggle
             toggleState={darkMode}
             onToggle={setDarkMode}
@@ -123,26 +123,26 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingRow
             icon={<Article size={20} color={colors.navy} />}
-            title="Terms of Service"
+            title={t('Terms of Service')}
             onPress={() => router.push('/(shared)/terms-of-service')}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<ShieldCheck size={20} color={colors.navy} />}
-            title="Privacy Policy"
+            title={t('Privacy Policy')}
             onPress={() => router.push('/(shared)/privacy-policy')}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<User size={20} color={colors.red} />}
-            title="Log Out"
-            subtitle="Sign out of this device"
+            title={t('Log Out')}
+            subtitle={t('Sign out of this device')}
             onPress={() => { void handleLogout(); }}
           />
         </View>
 
         <View style={styles.versionContainer}>
-          <Text variant="caption" color={colors.muted}>Sortt for Sellers v1.0.0 (Build 42)</Text>
+          <Text variant="caption" color={colors.muted}>{t('Sortt for Sellers v1.0.0 (Build 42)')}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

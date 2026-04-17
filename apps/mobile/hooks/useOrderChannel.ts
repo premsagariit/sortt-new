@@ -1,6 +1,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useEffect } from 'react';
 import { getRealtimeClient } from '../lib/realtime';
+import { api } from '../lib/api';
 import { useOrderStore } from '../store/orderStore';
 import type { OrderStatus } from '../store/orderStore';
 import { useChatStore } from '../store/chatStore';
@@ -105,6 +106,12 @@ export function useOrderChannel(
         read: false,
         status: 'sent',
       });
+
+      // If this screen is focused, immediately ack fresh inbound messages as read.
+      if (focused && selfId) {
+        useChatStore.getState().markAllReceived(orderId, selfId);
+        api.patch('/api/messages/read', { order_id: orderId }).catch(() => {});
+      }
     });
 
     // Cleanup when screen blurs, unmounts, or deps change (tokens updated).

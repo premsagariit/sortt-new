@@ -134,7 +134,7 @@ export default function AddressFormScreen() {
   const validate = () => {
     if (!city.trim()) return 'City is required';
     if (!/^\d{6}$/.test(pincode.trim())) return 'Pincode must be exactly 6 digits';
-    if (!pickupLocality.trim()) return 'Locality is required';
+    if (!pickupLocality.trim()) return 'Area is required';
     if (!cityCode) return 'Please adjust pin on map to resolve city code';
     return null;
   };
@@ -256,7 +256,7 @@ export default function AddressFormScreen() {
             <Input label="Label" value={label} onChangeText={setLabel} placeholder="Home / Office" />
             <Input label="Building / House" value={buildingName} onChangeText={setBuildingName} placeholder="Flat 4B" />
             <Input label="Street" value={street} onChangeText={setStreet} placeholder="Street, landmark near pickup" />
-            <Input label="Colony / Area" value={colony} onChangeText={setColony} placeholder="Colony or area name" />
+            <Input label="Colony" value={colony} onChangeText={setColony} placeholder="Colony name" />
             <Input label="City" value={city} onChangeText={setCity} placeholder="City" />
             <Input
               label="Pincode"
@@ -266,7 +266,7 @@ export default function AddressFormScreen() {
               placeholder="6-digit pincode"
               mono
             />
-            <Input label="Pickup Locality" value={pickupLocality} onChangeText={setPickupLocality} placeholder="Locality visible to buyers before acceptance" />
+            <Input label="Area" value={pickupLocality} onChangeText={setPickupLocality} placeholder="Area or locality name" />
           </View>
 
           <View style={styles.defaultRow}>

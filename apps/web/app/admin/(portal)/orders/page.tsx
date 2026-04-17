@@ -23,7 +23,11 @@ interface Order {
   id: string;
   status: string;
   created_at: string;
+    order_number: number;
+  completed_at: string | null;
   amount_due: number | null;
+  estimated_value: number | null;
+  confirmed_value: number | null;
   pickup_address: string;
   city_code: string;
   seller_name: string;
@@ -61,12 +65,27 @@ export default function AdminOrdersPage() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  const filtered = orders.filter(o =>
-    !search ||
-    o.id.toLowerCase().includes(search.toLowerCase()) ||
-    o.seller_name?.toLowerCase().includes(search.toLowerCase()) ||
-    o.seller_phone?.includes(search)
-  );
+  const filtered = orders.filter(o => {
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
+    const searchNum = parseFloat(search);
+    
+    return (
+      o.id.toLowerCase().includes(searchLower) ||
+      o.seller_name?.toLowerCase().includes(searchLower) ||
+      o.seller_phone?.includes(search) ||
+      o.aggregator_business_name?.toLowerCase().includes(searchLower) ||
+      o.aggregator_phone?.includes(search) ||
+      (
+        !isNaN(searchNum) && 
+        (
+          (o.amount_due != null && Math.floor(o.amount_due) === Math.floor(searchNum)) ||
+          (o.estimated_value != null && Math.floor(o.estimated_value) === Math.floor(searchNum)) ||
+          (o.confirmed_value != null && Math.floor(o.confirmed_value) === Math.floor(searchNum))
+        )
+      )
+    );
+  });
 
   useEffect(() => {
     filtered.slice(0, 12).forEach((order) => {
@@ -103,7 +122,7 @@ export default function AdminOrdersPage() {
           />
         </div>
         <div className={styles.statusTabs}>
-          {['', 'created', 'accepted', 'picked_up', 'completed', 'cancelled'].map(s => (
+          {['', 'created', 'accepted', 'completed', 'cancelled'].map(s => (
             <button
               key={s}
               className={`${styles.tab} ${statusFilter === s ? styles.tabActive : ''}`}
@@ -130,12 +149,14 @@ export default function AdminOrdersPage() {
             <thead>
               <tr>
                 <th>Order ID</th>
+                  <th>Order #</th>
                 <th>Status</th>
                 <th>Seller</th>
                 <th>Aggregator</th>
                 <th>City</th>
                 <th>Amount</th>
                 <th>Created</th>
+                <th>Completed</th>
                 <th></th>
               </tr>
             </thead>
@@ -143,6 +164,7 @@ export default function AdminOrdersPage() {
               {filtered.map(order => {
                 const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.created;
                 const Icon = cfg.icon;
+                const displayAmount = order.status === 'completed' ? order.confirmed_value : (order.estimated_value || order.amount_due);
                 return (
                   <tr
                     key={order.id}
@@ -151,6 +173,7 @@ export default function AdminOrdersPage() {
                     onMouseEnter={() => router.prefetch(`/admin/orders/${order.id}`)}
                   >
                     <td className={styles.orderId}>{order.id}</td>
+                      <td className={styles.orderNumber}>#{order.order_number}</td>
                     <td>
                       <span className={styles.statusBadge} style={{ background: cfg.color + '22', color: cfg.color }}>
                         <Icon size={12} />
@@ -173,10 +196,13 @@ export default function AdminOrdersPage() {
                     </td>
                     <td><span className={styles.city}>{order.city_code}</span></td>
                     <td className={styles.amount}>
-                      {order.amount_due != null ? `₹${Number(order.amount_due).toFixed(2)}` : '—'}
+                      {displayAmount != null ? `₹${Number(displayAmount).toFixed(2)}` : '—'}
                     </td>
                     <td className={styles.date}>
                       {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className={styles.date}>
+                      {order.completed_at ? new Date(order.completed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                     </td>
                     <td><ChevronRight size={16} className={styles.chevron} /></td>
                   </tr>

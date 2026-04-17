@@ -4,7 +4,7 @@
   "private": true,
   "description": "Sortt scrap marketplace — pnpm monorepo",
   "scripts": {
-    "dev:mobile": "pnpm --filter mobile dev",
+    "dev:mobile": "node scripts/dev-mobile.cjs",
     "dev:mobile:clean": "pnpm --filter mobile dev -- --clear",
     "dev:web": "pnpm --filter web dev",
     "dev:backend": "pnpm --filter backend dev",

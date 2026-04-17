@@ -144,12 +144,6 @@ const inferCityName = (cityCode: string | null, displayAddress: string): string 
   return null;
 };
 
-const inferLocalityName = (displayAddress: string): string | null => {
-  const segments = displayAddress.split(',').map((segment) => segment.trim()).filter(Boolean);
-  if (segments.length >= 1) return segments[0];
-  return null;
-};
-
 router.get('/geocode', async (req, res) => {
   const address = String(req.query.address ?? '').trim();
   if (!address) return res.status(400).json({ error: 'address query param is required' });
@@ -167,7 +161,7 @@ router.get('/geocode', async (req, res) => {
 
       return res.json({
         city_code: geo?.city_code ?? inferCityCodeFromAddress(displayAddress),
-        locality: geo?.locality ?? inferLocalityName(displayAddress),
+        locality: geo?.locality,
         display_address: displayAddress,
         lat: parsedCoordinates.lat,
         lng: parsedCoordinates.lng,
@@ -210,7 +204,7 @@ router.get('/reverse', async (req, res) => {
     return res.json({
       display_address: displayAddress,
       city_code: geo?.city_code ?? inferCityCodeFromAddress(displayAddress),
-      locality: geo?.locality ?? inferLocalityName(displayAddress),
+      locality: geo?.locality,
       city: inferCityName(geo?.city_code ?? inferCityCodeFromAddress(displayAddress), displayAddress),
       pincode: parsePincode(displayAddress),
     });

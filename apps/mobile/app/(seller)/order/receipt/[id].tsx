@@ -30,6 +30,7 @@ import { EmptyState } from '../../../../components/ui/EmptyState';
 import { useOrderStore } from '../../../../store/orderStore';
 import { useAuthStore } from '../../../../store/authStore';
 import { useChatStore } from '../../../../store/chatStore';
+import { useOrderChannel } from '../../../../hooks/useOrderChannel';
 import { ContactCard } from '../../../../components/order/ContactCard';
 import { OrderTimeline } from '../../../../components/order/OrderTimeline';
 import { PrimaryButton } from '../../../../components/ui/Button';
@@ -82,8 +83,18 @@ export default function SellerOrderReceiptScreen() {
 
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = React.useState(false);
+  const [disputeSummary, setDisputeSummary] = React.useState<{
+    dispute: { id: string; status: string } | null;
+    can_raise_dispute: boolean;
+  } | null>(null);
+  const [disputeSummaryLoaded, setDisputeSummaryLoaded] = React.useState(false);
 
   const order = orders.find((o: any) => o.orderId === routeOrderId);
+  useOrderChannel(
+    order?.orderId ?? routeOrderId ?? '',
+    order?.orderChannelToken ?? null,
+    order?.chatChannelToken ?? null
+  );
 
   React.useEffect(() => {
     if (!routeOrderId) return;
@@ -126,10 +137,36 @@ export default function SellerOrderReceiptScreen() {
   }, [routeOrderId]);
 
   React.useEffect(() => {
-    if (order?.sellerHasRated) {
-      setRatingSubmitted(true);
-    }
-  }, [order?.sellerHasRated]);
+    if (!routeOrderId) return;
+    setDisputeSummaryLoaded(false);
+    api.get(`/api/orders/${routeOrderId}/dispute`)
+      .then((res) => {
+        setDisputeSummary({
+          dispute: res?.data?.dispute
+            ? { id: String(res.data.dispute.id), status: String(res.data.dispute.status || '') }
+            : null,
+          can_raise_dispute: Boolean(res?.data?.can_raise_dispute),
+        });
+      })
+      .catch(() => {
+        setDisputeSummary(null);
+      })
+      .finally(() => {
+        setDisputeSummaryLoaded(true);
+      });
+  }, [routeOrderId]);
+
+  React.useEffect(() => {
+    // Keep per-order review state isolated when route id changes.
+    setRatingScore(0);
+    setRatingReview('');
+    setRatingError(null);
+    setRatingSubmitted(false);
+  }, [routeOrderId]);
+
+  React.useEffect(() => {
+    setRatingSubmitted(Boolean(order?.sellerHasRated));
+  }, [routeOrderId, order?.sellerHasRated]);
 
   const isCompleted = order?.status === 'completed';
   const invoiceOrderId = order?.orderId ?? routeOrderId ?? null;
@@ -151,6 +188,31 @@ export default function SellerOrderReceiptScreen() {
     const expiryTime = new Date(completedAtDate.getTime() + 30 * 60 * 1000); // 30 minutes
     return new Date() > expiryTime;
   }, [completedAtDate]);
+
+  const localDisputeWindowOpen = useMemo(() => {
+    if (!completedAtDate) return false;
+    if (order?.status !== 'completed') return false;
+    const disputeExpiryTime = new Date(completedAtDate.getTime() + 30 * 60 * 1000);
+    return new Date() <= disputeExpiryTime;
+  }, [completedAtDate, order?.status]);
+  const canViewDispute = Boolean(disputeSummary?.dispute?.id);
+  const canRaiseDispute = canViewDispute
+    ? false
+    : (disputeSummaryLoaded ? Boolean(disputeSummary?.can_raise_dispute) : localDisputeWindowOpen);
+  const showDisputeAction = canViewDispute || canRaiseDispute;
+  const handleOpenDisputeStatus = React.useCallback(() => {
+    if (!routeOrderId || !canViewDispute || !disputeSummary?.dispute?.id) return;
+    router.push({
+      pathname: '/(shared)/dispute',
+      params: {
+        orderId: routeOrderId,
+        disputeId: disputeSummary.dispute.id,
+        fallbackRoute: routeOrderId
+          ? `/(seller)/order/receipt/${routeOrderId}`
+          : '/(seller)/orders',
+      },
+    } as any);
+  }, [routeOrderId, canViewDispute, disputeSummary?.dispute?.id]);
 
   const handleDownloadInvoice = React.useCallback(async () => {
     if (!invoiceOrderId) {
@@ -317,7 +379,7 @@ export default function SellerOrderReceiptScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={[]}>
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -370,6 +432,43 @@ export default function SellerOrderReceiptScreen() {
               <Text variant="caption" color={colors.teal} style={styles.completedPillText}>Completed</Text>
             </View>
           </View>
+          {disputeSummary?.dispute?.status ? (
+            <Pressable
+              onPress={handleOpenDisputeStatus}
+              style={styles.disputeStatusPressable}
+              accessibilityRole="button"
+              accessibilityLabel="Open dispute status"
+            >
+              <View
+              style={[
+                styles.disputeStatusChip,
+                disputeSummary.dispute.status === 'open'
+                  ? styles.disputeStatusChipOpen
+                  : disputeSummary.dispute.status === 'resolved'
+                    ? styles.disputeStatusChipResolved
+                    : styles.disputeStatusChipDismissed,
+              ]}
+            >
+                <Text
+                variant="caption"
+                style={[
+                  styles.disputeStatusText,
+                  disputeSummary.dispute.status === 'open'
+                    ? styles.disputeStatusTextOpen
+                    : disputeSummary.dispute.status === 'resolved'
+                      ? styles.disputeStatusTextResolved
+                      : styles.disputeStatusTextDismissed,
+                ] as any}
+                >
+                {disputeSummary.dispute.status === 'open'
+                  ? 'Dispute Open'
+                  : disputeSummary.dispute.status === 'resolved'
+                    ? 'Dispute Resolved'
+                    : 'Dispute Dismissed'}
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
@@ -394,10 +493,10 @@ export default function SellerOrderReceiptScreen() {
           <View style={styles.card}>
             <ContactCard
               name={order.aggregatorName || 'Aggregator'}
-              phone={order.aggregatorPhone || null}
+              phone={isCompleted ? null : (order.aggregatorPhone || null)}
               role="Aggregator"
               userType="aggregator"
-                onChat={order.aggregatorId && order.status !== 'completed' ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined}
+              onChat={isCompleted ? undefined : (order.aggregatorId ? () => router.push(`/(shared)/chat/${order.orderId}` as any) : undefined)}
               unreadCount={chatUnread}
             />
           </View>
@@ -572,6 +671,27 @@ export default function SellerOrderReceiptScreen() {
               </>
             )}
           </View>
+          {showDisputeAction ? (
+            <View style={styles.actions}>
+              <Pressable
+                onPress={() => router.push({
+                  pathname: '/(shared)/dispute',
+                  params: {
+                    orderId: routeOrderId,
+                    disputeId: canViewDispute ? disputeSummary?.dispute?.id : undefined,
+                    fallbackRoute: routeOrderId
+                      ? `/(seller)/order/receipt/${routeOrderId}`
+                      : '/(seller)/orders',
+                  },
+                } as any)}
+                style={styles.reportIssue}
+              >
+                <Text variant="caption" style={styles.reportIssueText}>
+                  {canViewDispute ? 'View Dispute' : 'Raise Dispute'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -669,6 +789,42 @@ const styles = StyleSheet.create({
   },
   completedPillText: {
     fontFamily: 'DMSans-Bold',
+  },
+  disputeStatusChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  disputeStatusPressable: {
+    alignSelf: 'flex-start',
+  },
+  disputeStatusChipOpen: {
+    backgroundColor: `${colors.red}12`,
+    borderColor: `${colors.red}40`,
+  },
+  disputeStatusChipResolved: {
+    backgroundColor: `${colors.teal}12`,
+    borderColor: `${colors.teal}40`,
+  },
+  disputeStatusChipDismissed: {
+    backgroundColor: `${colors.muted}1A`,
+    borderColor: `${colors.muted}4D`,
+  },
+  disputeStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  disputeStatusTextOpen: {
+    color: colors.red,
+  },
+  disputeStatusTextResolved: {
+    color: colors.teal,
+  },
+  disputeStatusTextDismissed: {
+    color: colors.muted,
   },
   card: {
     backgroundColor: colors.surface,
@@ -819,5 +975,17 @@ const styles = StyleSheet.create({
   },
   submittedText: {
     marginTop: spacing.sm,
+  },
+  actions: {
+    marginTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  reportIssue: {
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  reportIssueText: {
+    color: colors.muted,
+    textDecorationLine: 'underline',
   },
 });

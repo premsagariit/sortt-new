@@ -21,7 +21,7 @@ import { useAuthStore } from '../../../store/authStore';
 export default function AggregatorProfileSetup() {
   const router = useRouter();
   const {
-    fullName, businessName, aggregatorType, primaryArea,
+    fullName, businessName, aggregatorType, vehicleNumber, primaryArea,
     operatingHours, operatingDays, setProfile
   } = useAggregatorStore();
   const { token, setSession, user } = useAuthStore((s) => ({
@@ -30,7 +30,9 @@ export default function AggregatorProfileSetup() {
     user: s.user,
   }));
 
-  const isNextDisabled = !fullName || !aggregatorType || !primaryArea;
+  const normalizedVehicleNumber = vehicleNumber.trim();
+  const isVehicleRequired = aggregatorType === 'mobile';
+  const isNextDisabled = !fullName || !aggregatorType || !primaryArea || (isVehicleRequired && !normalizedVehicleNumber);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const handleNext = async () => {
@@ -47,6 +49,7 @@ export default function AggregatorProfileSetup() {
         name: fullName,
         business_name: businessName || fullName,
         aggregator_type: aggregatorType,
+        vehicle_number: aggregatorType === 'mobile' ? normalizedVehicleNumber.toUpperCase() : null,
         city_code: 'HYD', // Hardcoded for MVP
       });
 
@@ -63,6 +66,7 @@ export default function AggregatorProfileSetup() {
 
       await api.patch('/api/aggregators/profile', {
         aggregator_type: aggregatorType,
+        vehicle_number: aggregatorType === 'mobile' ? normalizedVehicleNumber.toUpperCase() : null,
         operating_hours: { days: operatingDays, from: operatingHours.from, to: operatingHours.to }
       });
       router.push('/(auth)/aggregator/area-setup' as any);
@@ -155,6 +159,18 @@ export default function AggregatorProfileSetup() {
             placeholder="e.g. Banjara Hills, Hyderabad"
           />
         </View>
+
+        {aggregatorType === 'mobile' && (
+          <View style={styles.section}>
+            <Text variant="label" style={styles.label}>Vehicle Number</Text>
+            <Input
+              value={vehicleNumber}
+              onChangeText={(txt) => setProfile({ vehicleNumber: txt.toUpperCase() })}
+              placeholder="e.g. TS09AB1234"
+              autoCapitalize="characters"
+            />
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text variant="label" style={styles.label}>Operating Hours</Text>

@@ -30,25 +30,43 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Avatar } from '../../components/ui/Avatar';
 import { SorttLogo } from '../../components/ui/SorttLogo';
 import { NotificationBell } from '../../components/ui/NotificationBell';
+import { useI18n } from '../../hooks/useI18n';
 import { router } from 'expo-router';
 
-// ── Rate shape from GET /api/rates ───────────────────────────────────
-interface RateEntry { material_code: string; name: string; rate_per_kg: number; trend: 'up' | 'down' | 'flat'; }
-
-// ── Avatar image source ────────────────────────────────────────────────
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
-
+// ── Rate shape from GET /api/users/me/local-rates ─────────────────────
+interface RateEntry {
+  material_code: string;
+  name: string;
+  rate_per_kg: number | null;
+  previous_rate_per_kg?: number | null;
+  change_percent?: number | null;
+  is_available: boolean;
+}
 
 const ACTIVE_STATUSES = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'];
 
+const isOpenDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && (order?.disputeStatus == null || order?.disputeStatus === 'open');
+
+const isResolvedDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && (order?.disputeStatus === 'resolved' || order?.disputeStatus === 'dismissed');
+
+const isActiveOrder = (order: any) =>
+  ACTIVE_STATUSES.includes(order.status) || isOpenDisputeOrder(order);
+
+const isCompletedOrder = (order: any) =>
+  order.status === 'completed' || isResolvedDisputeOrder(order);
+
 export default function SellerHomeScreen() {
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
 
   // ── Store ────────────────────────────────────────────────────────
-  const displayName = useAuthStore((s) => s.name) || 'You';
+  const displayName = useAuthStore((s) => s.name) || t('You');
+  const profilePhoto = useAuthStore((s) => s.profilePhoto);
   const displayLocality = useAuthStore((s) => s.locality) || '—';
-  const displayCity = useAuthStore((s) => s.city) || 'Your city';
+  const displayCity = useAuthStore((s) => s.city) || t('Your city');
   const fetchMe = useAuthStore((s) => s.fetchMe);
 
   const orders = useOrderStore((s) => s.orders);
@@ -68,11 +86,11 @@ export default function SellerHomeScreen() {
     return value > 0 ? `₹${value.toLocaleString('en-IN')}` : '₹0';
   }, [lifetimeEarnings, computedTotalEarned]);
   const ordersCount = String(orders.length).padStart(2, '0');
-  const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
+  const activeOrders = useMemo(() => orders.filter((o) => isActiveOrder(o)), [orders]);
   const activeCount = String(activeOrders.length).padStart(2, '0');
   const recentOrders = useMemo(() => {
     return orders
-      .filter(o => ACTIVE_STATUSES.includes(o.status) || o.status === 'completed')
+      .filter((o) => isActiveOrder(o) || isCompletedOrder(o))
       .sort((a, b) => {
         const aTime = new Date(a.updatedAt || a.createdAt).getTime();
         const bTime = new Date(b.updatedAt || b.createdAt).getTime();
@@ -81,7 +99,7 @@ export default function SellerHomeScreen() {
       .slice(0, 5);
   }, [orders]);
 
-  // ── Live rates from GET /api/rates ─────────────────────────────
+  // ── Live rates from GET /api/users/me/local-rates ──────────────
   const [rates, setRates] = useState<RateEntry[]>([]);
   const [ratesLoading, setRatesLoading] = useState(false);
   const fetchLifetimeEarnings = useCallback(async () => {
@@ -96,8 +114,8 @@ export default function SellerHomeScreen() {
   const fetchRates = useCallback(async (silent = false) => {
     if (!silent) setRatesLoading(true);
     try {
-      const res = await api.get('/api/rates');
-      setRates(res.data.rates || []);
+      const res = await api.get('/api/users/me/local-rates');
+      setRates(res.data?.rates || []);
     } catch { /* non-fatal: rates section stays empty */ } finally {
       if (!silent) setRatesLoading(false);
     }
@@ -151,7 +169,10 @@ export default function SellerHomeScreen() {
     if (fromDisplay > 0) return fromDisplay;
 
     const weights: Record<string, number> = order?.estimatedWeights ?? {};
-    return rates.reduce((sum, r) => sum + (Number(weights[r.material_code] ?? 0) * Number(r.rate_per_kg ?? 0)), 0);
+    return rates.reduce((sum, r) => {
+      const rateValue = typeof r.rate_per_kg === 'number' ? r.rate_per_kg : 0;
+      return sum + (Number(weights[r.material_code] ?? 0) * rateValue);
+    }, 0);
   }, [rates]);
 
 
@@ -186,10 +207,10 @@ export default function SellerHomeScreen() {
   // Calculate greeting text once
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning,';
-    if (hour < 17) return 'Good afternoon,';
-    return 'Good evening,';
-  }, []);
+    if (hour < 12) return t('Good morning,');
+    if (hour < 17) return t('Good afternoon,');
+    return t('Good evening,');
+  }, [t]);
 
   // Home screen should not go away when offline according to requirements.
   // Instead, the Navbar will turn red and show a refresh button.
@@ -227,15 +248,15 @@ export default function SellerHomeScreen() {
           <View style={styles.heroStats}>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{totalEarned}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Earned</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('Earned')}</Text>
             </View>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{ordersCount}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Orders</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('Orders')}</Text>
             </View>
             <View style={styles.heroStatCard}>
               <Numeric size={20} color={colors.surface} style={styles.heroStatVal}>{activeCount}</Numeric>
-              <Text variant="caption" style={styles.heroStatLabel}>Active</Text>
+              <Text variant="caption" style={styles.heroStatLabel}>{t('Active')}</Text>
             </View>
           </View>
         </Animated.View>
@@ -249,8 +270,8 @@ export default function SellerHomeScreen() {
             <House size={22} color={colors.surface} weight="bold" />
           </View>
           <View style={styles.ctaTextCol}>
-            <Text variant="subheading" style={styles.ctaTitle}>SELL SCRAP</Text>
-            <Text variant="caption" style={styles.ctaSub}>List your scrap for pickup</Text>
+            <Text variant="subheading" style={styles.ctaTitle}>{t('SELL SCRAP')}</Text>
+            <Text variant="caption" style={styles.ctaSub}>{t('List your scrap for pickup')}</Text>
           </View>
           <ArrowRight size={20} color={colors.surface} weight="bold" />
         </Pressable>
@@ -261,24 +282,24 @@ export default function SellerHomeScreen() {
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.surface2 }]}>
               <Wallet size={20} color={colors.navy} weight="bold" />
             </View>
-            <Text variant="caption" style={styles.secCtaTitle}>Market Rates</Text>
-            <Text variant="caption" color={colors.muted}>Today's prices</Text>
+            <Text variant="caption" style={styles.secCtaTitle}>{t('Market Rates')}</Text>
+            <Text variant="caption" color={colors.muted}>{t("Today's prices")}</Text>
           </Pressable>
           <Pressable style={styles.secCtaCard} onPress={handleMyOrders} hitSlop={12}>
             <View style={[styles.secCtaIcon, { backgroundColor: colorExtended.tealLight }]}>
               <Calendar size={20} color={colors.teal} weight="bold" />
             </View>
-            <Text variant="caption" style={styles.secCtaTitle}>My Orders</Text>
-            <Text variant="caption" color={colors.muted}>Track pickups</Text>
+            <Text variant="caption" style={styles.secCtaTitle}>{t('My Orders')}</Text>
+            <Text variant="caption" color={colors.muted}>{t('Track pickups')}</Text>
           </Pressable>
         </View>
 
         {/* Today's Rates Section */}
         <View style={styles.ratesSection}>
           <View style={styles.sectionHeader}>
-            <Text variant="subheading" style={styles.ratesTitle} numberOfLines={1}>Today's Rates</Text>
+            <Text variant="subheading" style={styles.ratesTitle} numberOfLines={1}>{t("Today's Rates")}</Text>
             <Pressable onPress={() => router.push('/(seller)/prices')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-              <Text variant="caption" color={colors.red} style={styles.seeAllText}>See all</Text>
+              <Text variant="caption" color={colors.red} style={styles.seeAllText}>{t('See all')}</Text>
               <ArrowRight size={14} color={colors.red} weight="bold" />
             </Pressable>
           </View>
@@ -286,27 +307,38 @@ export default function SellerHomeScreen() {
           <View style={styles.ratesList}>
             {ratesLoading ? (
               <ActivityIndicator size="small" color={colors.muted} style={{ marginVertical: 12 }} />
-            ) : rates.length > 0 ? rates.slice(0, 3).map(r => (
+            ) : rates.filter((r) => r.is_available && r.rate_per_kg != null).length > 0 ? rates
+              .filter((r) => r.is_available && r.rate_per_kg != null)
+              .slice(0, 3)
+              .map(r => (
               <View key={r.material_code} style={styles.rateCard}>
                 <View style={styles.rateInfo}>
                   <Text variant="body" style={styles.rateMaterial}>{r.name}</Text>
-                  <Numeric style={styles.ratePrice}>₹{r.rate_per_kg}/kg</Numeric>
+                  <View style={styles.rateRight}>
+                    <Numeric style={styles.ratePrice}>₹{r.rate_per_kg}/kg</Numeric>
+                    <Text variant="caption" style={[
+                      styles.rateChange,
+                      { color: (r.change_percent ?? 0) > 0 ? colors.teal : (r.change_percent ?? 0) < 0 ? colors.red : colors.muted }
+                    ]}>
+                      {(r.change_percent ?? 0) > 0 ? '+' : ''}{Number(r.change_percent ?? 0).toFixed(2)}%
+                    </Text>
+                  </View>
                 </View>
-                {r.trend === 'up' ? <ArrowUp size={18} color={colors.teal} weight="bold" /> :
-                 r.trend === 'down' ? <ArrowUp size={18} color={colors.red} weight="bold" style={{ transform: [{ rotate: '180deg' }] }} /> :
-                 <View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><View style={{ width: 12, height: 2, backgroundColor: colors.muted }} /></View>}
+                <View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}>
+                  <View style={{ width: 12, height: 2, backgroundColor: colors.muted }} />
+                </View>
               </View>
             )) : (
-              <Text variant="caption" color={colors.muted} style={{ paddingVertical: 8 }}>Rates unavailable — check back soon.</Text>
+              <Text variant="caption" color={colors.muted} style={{ paddingVertical: 8 }}>{t('Rates unavailable — check back soon.')}</Text>
             )}
           </View>
         </View>
 
         {/* Section header */}
         <View style={styles.sectionHeader}>
-          <Text variant="subheading">Recent Orders</Text>
+          <Text variant="subheading">{t('Recent Orders')}</Text>
           <Pressable onPress={() => router.push('/(seller)/orders')}>
-            <Text variant="caption" color={colors.red}>See all</Text>
+            <Text variant="caption" color={colors.red}>{t('See all')}</Text>
           </Pressable>
         </View>
       </View>
@@ -349,6 +381,7 @@ export default function SellerHomeScreen() {
               name={displayName}
               userType="seller"
               size="sm"
+              uri={profilePhoto || undefined}
             />
           </Pressable>
         </View>
@@ -368,16 +401,21 @@ export default function SellerHomeScreen() {
         scrollEventThrottle={16}
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => router.push(`/(seller)/order/${item.orderId}` as any)}
+              onPress={() => router.push(
+                isCompletedOrder(item) || item.status === 'disputed'
+                  ? (`/(seller)/order/receipt/${item.orderId}` as any)
+                  : (`/(seller)/order/${item.orderId}` as any)
+              )}
             style={styles.cardPad}
           >
             <OrderCard
               orderId={item.orderId}
               orderNumber={item.orderNumber}
               status={item.status}
+              disputeStatus={item.disputeStatus ?? null}
               materials={item.materials}
               amountRupees={calculateEstimate(item)}
-              date={new Date(item.createdAt).toDateString() === new Date().toDateString() ? 'Today' : new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+              date={new Date(item.createdAt).toDateString() === new Date().toDateString() ? t('Today') : new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
             />
           </Pressable>
         )}
@@ -386,8 +424,8 @@ export default function SellerHomeScreen() {
           <View style={styles.cardPad}>
             <EmptyState
               icon={<Tray size={48} />}
-              heading="No pickups yet"
-              body="Create your first listing to get started."
+              heading={t('No pickups yet')}
+              body={t('Create your first listing to get started.')}
             />
           </View>
         }
@@ -728,6 +766,14 @@ const styles = StyleSheet.create({
   },
   ratePrice: {
     color: colors.navy,
+    fontWeight: '600',
+  },
+  rateRight: {
+    alignItems: 'flex-end',
+  },
+  rateChange: {
+    fontSize: 11,
+    marginTop: 2,
     fontWeight: '600',
   },
   trendIcon: {

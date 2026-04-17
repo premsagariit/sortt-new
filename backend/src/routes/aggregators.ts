@@ -6,6 +6,7 @@ import { query } from '../lib/db';
 import { verifyRole } from '../middleware/auth';
 import { issueToken } from '../lib/jwt';
 import { storageProvider } from '../lib/storage';
+import { resolveProfilePhotosBucket } from '../lib/storageBuckets';
 import { publishEvent } from '../lib/realtime';
 import { channelName } from '../utils/channelHelper';
 import { createNotification } from '../lib/notifications';
@@ -187,7 +188,8 @@ router.get('/browse', verifyRole('seller'), async (req: Request, res: Response) 
 
         const browseBaseSelect = `
             SELECT u.id,
-                   COALESCE(NULLIF(a.business_name, ''), NULLIF(u.name, ''), 'Aggregator') AS display_name,
+                   u.profile_photo_url,
+                     COALESCE(NULLIF(u.name, ''), NULLIF(a.business_name, ''), 'Aggregator') AS display_name,
                    a.business_name,
                    a.operating_area,
                    a.operating_hours,
@@ -281,7 +283,8 @@ router.get('/browse', verifyRole('seller'), async (req: Request, res: Response) 
 
         const normalizedSellerLocality = normalizeText(sellerLocality);
 
-        const mapped = aggregatorRows.map((row: any) => {
+        const bucketName = resolveProfilePhotosBucket();
+        const mapped = await Promise.all(aggregatorRows.map(async (row: any) => {
             const operatingAreas = parseOperatingAreas(row.operating_area);
             const isAreaMatch =
                 normalizedSellerLocality.length > 0 &&
@@ -304,10 +307,21 @@ router.get('/browse', verifyRole('seller'), async (req: Request, res: Response) 
             const rawMaterials = Array.isArray(row.material_codes) ? row.material_codes : [];
             const materialCodes = [...new Set(rawMaterials.map((code: unknown) => String(code).toLowerCase()).filter(Boolean))];
 
+            let photoUrl: string | null = null;
+            const profilePhotoKey = String(row.profile_photo_url ?? '').trim();
+            if (profilePhotoKey) {
+                try {
+                    photoUrl = await storageProvider.getSignedUrl(profilePhotoKey, 3600, bucketName);
+                } catch {
+                    photoUrl = null;
+                }
+            }
+
             return {
                 id: row.id,
                 name: row.display_name,
                 initial: String(row.display_name || 'A').charAt(0).toUpperCase(),
+                photoUrl,
                 distance: formatDistanceLabel(distanceKm, isAreaMatch),
                 distanceKm,
                 latitude: repLat,
@@ -322,7 +336,7 @@ router.get('/browse', verifyRole('seller'), async (req: Request, res: Response) 
                 lastPingAt: row.last_ping_at,
                 areaRank: isAreaMatch ? 0 : 1,
             };
-        });
+        }));
 
         mapped.sort((a, b) => {
             if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
@@ -425,15 +439,20 @@ router.post('/profile', verifyRole('aggregator'), async (req: Request, res: Resp
         const normalizedAggregatorType = aggregatorType === 'shop' || aggregatorType === 'mobile'
             ? aggregatorType
             : null;
+        const vehicleNumberInput = (req.body as any).vehicle_number ?? (req.body as any).vehicleNumber;
+        const normalizedVehicleNumber = typeof vehicleNumberInput === 'string' && vehicleNumberInput.trim().length > 0
+            ? vehicleNumberInput.trim().toUpperCase()
+            : null;
 
         await query(
-            `INSERT INTO aggregator_profiles (user_id, business_name, city_code, aggregator_type)
-             VALUES ($1, $2, $3, COALESCE($4, 'mobile'))
+            `INSERT INTO aggregator_profiles (user_id, business_name, city_code, aggregator_type, vehicle_number)
+             VALUES ($1, $2, $3, COALESCE($4, 'mobile'), $5)
              ON CONFLICT (user_id) DO UPDATE SET
                 business_name = EXCLUDED.business_name,
                 city_code = EXCLUDED.city_code,
-                aggregator_type = COALESCE(EXCLUDED.aggregator_type, aggregator_profiles.aggregator_type)`,
-            [finalUserId, business_name, city_code, normalizedAggregatorType]
+                aggregator_type = COALESCE(EXCLUDED.aggregator_type, aggregator_profiles.aggregator_type),
+                vehicle_number = COALESCE(EXCLUDED.vehicle_number, aggregator_profiles.vehicle_number)`,
+            [finalUserId, business_name, city_code, normalizedAggregatorType, normalizedVehicleNumber]
         );
 
         await query('COMMIT');
@@ -477,6 +496,12 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
     const aggregatorType = aggregatorTypeInput === 'shop' || aggregatorTypeInput === 'mobile'
         ? aggregatorTypeInput
         : null;
+    const vehicleNumberInput = (req.body as any).vehicle_number ?? (req.body as any).vehicleNumber;
+    const vehicleNumber = vehicleNumberInput === null
+        ? null
+        : typeof vehicleNumberInput === 'string'
+            ? vehicleNumberInput.trim().toUpperCase()
+            : undefined;
 
     const diagPayload: Record<string, any> = { userId };
     if (name !== undefined) diagPayload.name = name;
@@ -485,6 +510,7 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
     if (email !== undefined) diagPayload.email = email;
     if (operating_hours !== undefined) diagPayload.operating_hours = JSON.stringify(operating_hours);
     if (aggregatorType !== null) diagPayload.aggregator_type = aggregatorType;
+    if (vehicleNumber !== undefined) diagPayload.vehicle_number = vehicleNumber;
     console.log('[DIAG] PATCH /api/aggregators/profile', diagPayload);
 
     try {
@@ -584,6 +610,11 @@ router.patch('/profile', verifyRole('aggregator'), async (req: Request, res: Res
             values.push(aggregatorType);
         }
 
+        if (vehicleNumber !== undefined) {
+            updateFields.push(`vehicle_number = $${placeholderIdx++}`);
+            values.push(vehicleNumber);
+        }
+
         if (updateFields.length === 0) {
             await query('COMMIT');
             return res.json({ success: true, message: 'No fields to update', id_changed: finalUserId !== userId ? finalUserId : undefined });
@@ -627,6 +658,7 @@ router.get('/me', verifyRole('aggregator'), async (req: Request, res: Response) 
                     u.email,
                     a.business_name,
                           a.aggregator_type,
+                      a.vehicle_number,
                     a.city_code,
                     a.operating_area,
                     a.operating_hours,
@@ -1160,11 +1192,13 @@ router.get('/:id/public-profile', verifyRole('seller'), async (req: Request, res
                 const profileRes = await query(
                         `SELECT u.id,
                                         COALESCE(NULLIF(a.business_name, ''), NULLIF(u.name, ''), 'Aggregator') AS display_name,
+                                        COALESCE(NULLIF(u.name, ''), 'Aggregator') AS aggregator_name,
                                         a.business_name,
+                            u.profile_photo_url,
                                         a.operating_area,
                                         a.operating_hours,
                                         a.kyc_status,
-                                        a.created_at,
+                                        u.created_at,
                                         COALESCE(av.is_online, false) AS is_online,
                                         COALESCE(rating_stats.avg_rating, 0)::float8 AS avg_rating,
                                         COALESCE(rating_stats.total_reviews, 0)::int AS total_reviews,
@@ -1251,11 +1285,25 @@ router.get('/:id/public-profile', verifyRole('seller'), async (req: Request, res
                 const row = profileRes.rows[0];
                 const operatingAreas = parseOperatingAreas(row.operating_area);
                 const memberSinceYear = row.created_at ? new Date(row.created_at).getFullYear() : new Date().getFullYear();
+                const profilePhotoKey = String(row.profile_photo_url ?? '').trim();
+                let photoUrl: string | null = null;
+
+                if (profilePhotoKey.length > 0) {
+                    try {
+                        photoUrl = await storageProvider.getSignedUrl(profilePhotoKey, 3600 * 24 * 7, resolveProfilePhotosBucket());
+                    } catch (err) {
+                        console.warn('Failed to get signed URL for aggregator profile photo', err);
+                        photoUrl = null;
+                    }
+                }
 
                 return res.json({
                         id: row.id,
                         name: row.display_name,
-                    createdAt: row.created_at,
+                        aggregatorName: row.aggregator_name,
+                        businessName: row.business_name,
+                    photoUrl,
+                        createdAt: row.created_at,
                         aggregatorTypeLabel: `Aggregator · Since ${memberSinceYear}`,
                         isOnline: Boolean(row.is_online),
                         isVerified: String(row.kyc_status || '').toLowerCase() === 'verified',
@@ -1287,3 +1335,4 @@ router.get('/:id/public-profile', verifyRole('seller'), async (req: Request, res
 });
 
 export default router;
+

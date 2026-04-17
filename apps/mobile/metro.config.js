@@ -14,17 +14,23 @@ process.env.CHOKIDAR_USEPOLLING = '1';
 
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const fs = require('fs');
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
-const sharedPackagesRoot = path.resolve(workspaceRoot, 'packages');
+const workspacePackagesRoot = path.resolve(workspaceRoot, 'packages');
+
+// Watch only workspace packages actually consumed by the mobile app.
+const packageWatchFolders = ['auth', 'realtime', 'maps', 'storage']
+  .map((pkg) => path.join(workspacePackagesRoot, pkg))
+  .filter((pkgPath) => fs.existsSync(pkgPath));
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(projectRoot);
 
-// ── Monorepo: watch only shared workspace packages to avoid watcher overload ──
-// Watching the whole workspace root in OneDrive paths can exceed watcher limits.
-config.watchFolders = [...(config.watchFolders || []), sharedPackagesRoot];
+// ── Monorepo: watch only required workspace packages to avoid watcher overload ──
+// Watching a broad root in OneDrive paths can exceed watcher startup limits.
+config.watchFolders = [...(config.watchFolders || []), ...packageWatchFolders];
 
 // ── Resolver: look up modules from the workspace root first ──
 config.resolver.nodeModulesPaths = [

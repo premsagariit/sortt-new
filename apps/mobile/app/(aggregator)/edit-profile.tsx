@@ -7,11 +7,12 @@
  */
 
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, Pressable, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Briefcase, Camera, EnvelopeSimple, MapPin, User } from 'phosphor-react-native';
+import { Briefcase, Camera, EnvelopeSimple, IdentificationCard, MapPin, User } from 'phosphor-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { safeBack } from '../../utils/navigation';
 
 import { colors, colorExtended, spacing, radius } from '../../constants/tokens';
@@ -23,20 +24,42 @@ import { useAuthStore } from '../../store/authStore';
 import { useAggregatorStore } from '../../store/aggregatorStore';
 import { api } from '../../lib/api';
 
-const AVATAR_SOURCE = require('../../assets/avatar_placeholder.png');
+type FileSystemCompat = {
+    cacheDirectory?: string | null;
+    documentDirectory?: string | null;
+    copyAsync: (options: { from: string; to: string }) => Promise<void>;
+};
 
 export default function AggregatorEditProfileScreen() {
     const router = useRouter();
-    const { name, email, locality, city, profilePhoto, setName, setEmail, setLocality, setProfilePhoto, token } = useAuthStore();
+    const { name, email, locality, city, profilePhoto, setName, setEmail, setLocality, setProfilePhoto } = useAuthStore();
     const { profile, fetchAggregatorProfile } = useAggregatorStore();
 
     const [newFullName, setNewFullName] = useState(profile?.name || name);
     const [newEmail, setNewEmail] = useState(profile?.email || email);
     const [newBusinessName, setNewBusinessName] = useState(profile?.businessName || '');
     const [newLocality, setNewLocality] = useState(profile?.operatingArea || locality);
+    const [newVehicleNumber, setNewVehicleNumber] = useState(profile?.vehicleNumber || '');
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const isMobileAggregator = profile?.aggregatorType === 'mobile';
+
+    const ensureUploadableUri = async (uri: string, filename: string): Promise<string> => {
+        if (Platform.OS === 'android' && uri.startsWith('content://')) {
+            const extensionMatch = /\.([a-zA-Z0-9]+)$/.exec(filename);
+            const extension = extensionMatch?.[1] ?? 'jpg';
+            const fs = FileSystem as unknown as FileSystemCompat;
+            const safeDir = fs.cacheDirectory ?? fs.documentDirectory;
+            if (!safeDir) return uri;
+
+            const copiedUri = `${safeDir}profile_upload_${Date.now()}.${extension}`;
+            await fs.copyAsync({ from: uri, to: copiedUri });
+            return copiedUri;
+        }
+
+        return uri;
+    };
 
     const handlePickImage = async () => {
         try {
@@ -53,26 +76,60 @@ export default function AggregatorEditProfileScreen() {
                 setIsUploadingPhoto(true);
                 setError(null);
                 
-                const localUri = asset.uri;
-                const filename = localUri.split('/').pop() || 'profile.jpg';
+                const filename = asset.fileName || asset.uri.split('/').pop() || 'profile.jpg';
+                const localUri = await ensureUploadableUri(asset.uri, filename);
                 const match = /\.(\w+)$/.exec(filename);
-                const type = match ? `image/${match[1]}` : 'image/jpeg';
+                const type = asset.mimeType || (match ? `image/${match[1].toLowerCase()}` : 'image/jpeg');
                 
-                const formData = new FormData();
-                formData.append('photo', {
-                    uri: localUri,
-                    name: filename,
-                    type,
-                } as any);
+                const authToken = useAuthStore.getState().token;
+                const url = `${api.defaults.baseURL}/api/users/profile-photo`;
+                const maxAttempts = 3;
+                let uploadedUrl: string | null = null;
 
-                const uploadRes = await api.post('/api/users/profile-photo', formData, {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                    },
-                });
+                for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+                    const formData = new FormData();
+                    formData.append('file', {
+                        uri: localUri,
+                        name: filename,
+                        type,
+                    } as any);
 
-                if (uploadRes.data?.profile_photo_url) {
-                    setProfilePhoto(uploadRes.data.profile_photo_url);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 90000);
+                    try {
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                            },
+                            body: formData,
+                            signal: controller.signal,
+                        });
+
+                        const payload = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            const err: any = new Error(payload?.error || `Profile photo upload failed (${response.status})`);
+                            err.response = { status: response.status, data: payload };
+                            throw err;
+                        }
+
+                        uploadedUrl = typeof payload?.profile_photo_url === 'string' ? payload.profile_photo_url : null;
+                        break;
+                    } catch (uploadErr: any) {
+                        const status = uploadErr?.response?.status;
+                        const retryable = !status || status >= 500 || uploadErr?.name === 'AbortError';
+                        if (attempt < maxAttempts && retryable) {
+                            await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+                            continue;
+                        }
+                        throw uploadErr;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                }
+
+                if (uploadedUrl) {
+                    setProfilePhoto(uploadedUrl);
                 }
             }
         } catch (err: any) {
@@ -93,12 +150,14 @@ export default function AggregatorEditProfileScreen() {
         setNewEmail(profile?.email || email);
         setNewBusinessName(profile?.businessName || '');
         setNewLocality(profile?.operatingArea || locality);
+        setNewVehicleNumber(profile?.vehicleNumber || '');
     }, [profile, name, email, locality]);
 
     const handleSave = async () => {
         const trimmedName = newFullName.trim();
         const trimmedEmail = newEmail.trim();
         const trimmedLocality = newLocality.trim();
+        const trimmedVehicleNumber = newVehicleNumber.trim().toUpperCase();
 
         if (trimmedName.length === 0) {
             setError('Name cannot be empty');
@@ -120,6 +179,16 @@ export default function AggregatorEditProfileScreen() {
             return;
         }
 
+        if (isMobileAggregator && trimmedVehicleNumber.length === 0) {
+            setError('Vehicle number is required for mobile aggregators');
+            return;
+        }
+
+        if (trimmedVehicleNumber.length > 20) {
+            setError('Vehicle number is too long (max 20 chars)');
+            return;
+        }
+
         setIsSaving(true);
         setError(null);
 
@@ -129,6 +198,7 @@ export default function AggregatorEditProfileScreen() {
                 email: trimmedEmail || null,
                 business_name: newBusinessName.trim(),
                 operating_area: trimmedLocality,
+                vehicle_number: isMobileAggregator ? (trimmedVehicleNumber || null) : undefined,
             });
             setName(newFullName.trim());
             setEmail(trimmedEmail);
@@ -161,16 +231,18 @@ export default function AggregatorEditProfileScreen() {
                         <Avatar
                             name={name}
                             userType="aggregator"
-                            size="lg"
+                            size="xxxl"
                             uri={profilePhoto || undefined}
                         />
                         <View style={styles.cameraIcon}>
                             <Camera size={18} color={colors.surface} weight="fill" />
                         </View>
                     </Pressable>
-                    <Text variant="label" color={colors.red} style={{ marginTop: 12, fontWeight: '600' }}>
-                        {isUploadingPhoto ? 'Uploading...' : 'Change Photo'}
-                    </Text>
+                    {isUploadingPhoto && (
+                        <Text variant="label" color={colors.red} style={{ marginTop: 12, fontWeight: '600' }}>
+                            Uploading...
+                        </Text>
+                    )}
                 </View>
 
                 {/* Form */}
@@ -237,6 +309,24 @@ export default function AggregatorEditProfileScreen() {
                             />
                         </View>
                     </View>
+
+                    {isMobileAggregator && (
+                        <View style={styles.inputGroup}>
+                            <Text variant="label" color={colors.muted} style={styles.inputLabel}>VEHICLE NUMBER</Text>
+                            <View style={styles.inputWrap}>
+                                <IdentificationCard size={20} color={colors.muted} />
+                                <TextInput
+                                    style={styles.input}
+                                    value={newVehicleNumber}
+                                    onChangeText={(txt) => setNewVehicleNumber(txt.toUpperCase())}
+                                    placeholder="e.g. TS09AB1234"
+                                    placeholderTextColor={colors.muted}
+                                    autoCapitalize="characters"
+                                    maxLength={20}
+                                />
+                            </View>
+                        </View>
+                    )}
 
                     <View style={styles.inputGroup}>
                         <Text variant="label" color={colors.muted} style={styles.inputLabel}>CITY</Text>

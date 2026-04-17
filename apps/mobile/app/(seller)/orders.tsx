@@ -9,11 +9,24 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ClipboardText, CaretRight, WarningCircle, ArrowClockwise } from 'phosphor-react-native';
 import { getOrderDisplayAmount, useOrderStore } from '../../store/orderStore';
 import { api } from '../../lib/api';
+import { useI18n } from '../../hooks/useI18n';
 
 const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
 type FilterType = typeof FILTERS[number];
 
 const ACTIVE_STATUSES: OrderStatus[] = ['created', 'accepted', 'en_route', 'arrived', 'weighing_in_progress'];
+
+const isOpenDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && (order?.disputeStatus == null || order?.disputeStatus === 'open');
+
+const isResolvedDisputeOrder = (order: any) =>
+  order?.status === 'disputed' && (order?.disputeStatus === 'resolved' || order?.disputeStatus === 'dismissed');
+
+const isActiveOrder = (order: any) =>
+  ACTIVE_STATUSES.includes(order.status) || isOpenDisputeOrder(order);
+
+const isCompletedOrder = (order: any) =>
+  order.status === 'completed' || isResolvedDisputeOrder(order);
 
 // Simple animated skeleton row
 function SkeletonRow() {
@@ -26,6 +39,7 @@ function SkeletonRow() {
 }
 
 export default function SellerOrdersScreen() {
+  const { t } = useI18n();
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<FilterType>('Active');
   const { tab } = useLocalSearchParams();
@@ -76,8 +90,8 @@ export default function SellerOrdersScreen() {
   const displayOrders = useMemo(() => {
     const filtered = orders.filter(order => {
       if (activeFilter === 'All') return true;
-      if (activeFilter === 'Active') return ACTIVE_STATUSES.includes(order.status);
-      if (activeFilter === 'Completed') return order.status === 'completed';
+      if (activeFilter === 'Active') return isActiveOrder(order);
+      if (activeFilter === 'Completed') return isCompletedOrder(order);
       if (activeFilter === 'Cancelled') return order.status === 'cancelled';
       return true;
     });
@@ -91,7 +105,7 @@ export default function SellerOrdersScreen() {
     });
   }, [orders, activeFilter]);
 
-  const activeOrders = useMemo(() => orders.filter(o => ACTIVE_STATUSES.includes(o.status)), [orders]);
+  const activeOrders = useMemo(() => orders.filter((o) => isActiveOrder(o)), [orders]);
   const hasActiveOrder = activeOrders.length > 0;
   const firstActive = activeOrders[0];
 
@@ -124,7 +138,7 @@ export default function SellerOrdersScreen() {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === today.toDateString()) return t('Today');
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
@@ -132,7 +146,7 @@ export default function SellerOrdersScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <NavBar variant="light" title="My Orders" />
+      <NavBar variant="light" title={t('My Orders')} />
 
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
@@ -153,7 +167,7 @@ export default function SellerOrdersScreen() {
                   numberOfLines={1}
                   style={[styles.tabText, isActive && styles.tabTextActive]}
                 >
-                  {filter}
+                  {t(filter)}
                 </Text>
               </Pressable>
             );
@@ -172,10 +186,10 @@ export default function SellerOrdersScreen() {
         >
           <View>
             <Text variant="label" style={{ color: colors.amber, fontWeight: '700' } as any}>
-              {activeOrders.length} active order{activeOrders.length > 1 ? 's' : ''} for pickup
+              {t('active orders for pickup', { count: activeOrders.length })}
             </Text>
             <Text variant="caption" color={colors.muted} style={{ marginTop: 2 } as any}>
-              Tap to track
+              {t('Tap to track')}
             </Text>
           </View>
           <CaretRight size={16} color={colors.muted} />
@@ -227,7 +241,7 @@ export default function SellerOrdersScreen() {
             <Pressable
               key={order.orderId}
               onPress={() => router.push(
-                order.status === 'completed'
+                isCompletedOrder(order) || order.status === 'disputed'
                   ? (`/(seller)/order/receipt/${order.orderId}` as any)
                   : (`/(seller)/order/${order.orderId}` as any)
               )}
@@ -239,9 +253,10 @@ export default function SellerOrdersScreen() {
                 orderId={order.orderId}
                 orderNumber={order.orderNumber}
                 status={order.status}
+                disputeStatus={order.disputeStatus ?? null}
                 materials={order.materials}
                 amountRupees={calculateEstimate(order)}
-                aggregator={order.aggregatorName || 'Aggregator'}
+                aggregator={order.aggregatorName || t('Aggregator')}
                 date={formatDate(order.createdAt)}
               />
             </Pressable>
@@ -249,10 +264,10 @@ export default function SellerOrdersScreen() {
         ) : (
           <EmptyState
             icon={<ClipboardText size={48} color={colors.border} weight="thin" />}
-            heading={activeFilter === 'All' ? 'No orders yet' : `No ${activeFilter.toLowerCase()} orders`}
+            heading={activeFilter === 'All' ? t('No orders yet') : t('No filtered orders', { filter: t(activeFilter) })}
             body={activeFilter === 'All'
-              ? 'Your pickup history will appear here.'
-              : `You have no ${activeFilter.toLowerCase()} pickups right now.`
+              ? t('Your pickup history will appear here.')
+              : t('You have no filtered pickups right now.', { filter: t(activeFilter) })
             }
           />
         )}

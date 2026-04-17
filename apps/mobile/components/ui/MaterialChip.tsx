@@ -18,6 +18,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { colors, radius, spacing } from '../../constants/tokens';
 import { Text } from './Typography';
+import { getLocalizedMaterialLabel } from '../../lib/i18n';
 
 export type MaterialCode = 'metal' | 'plastic' | 'paper' | 'ewaste' | 'fabric' | 'glass' | 'custom';
 export type MaterialVariant = 'chip' | 'listitem';
@@ -46,7 +47,7 @@ export function MaterialChip({
   label,
 }: MaterialChipProps) {
   const { fg, bg } = colors.material[material];
-  const displayLabel = label ?? MATERIAL_LABELS[material];
+  const displayLabel = label ?? getLocalizedMaterialLabel(material, { fallback: MATERIAL_LABELS[material] });
 
   if (variant === 'listitem') {
     return (

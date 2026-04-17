@@ -30,6 +30,96 @@ const CITY_CODE_BY_NAME: Record<string, string> = {
   kolkata: 'KOL',
 };
 
+const STREET_HINT_REGEX = /\b(road|rd|street|st|lane|ln|cross|main|sector|phase|block|marg|path|no\.?|highway|hw)\b/i;
+const STATE_TOKEN_REGEX = /^(telangana|karnataka|maharashtra|tamil nadu|west bengal|delhi|new delhi)$/i;
+
+function splitAddressDisplay(displayAddress: string, resolvedCity: string) {
+  const parts = displayAddress
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  let pincode = '';
+  const pincodeMatch = displayAddress.match(/\b\d{6}\b/);
+  if (pincodeMatch) pincode = pincodeMatch[0];
+
+  let normalizedParts = [...parts];
+  if (normalizedParts.length > 0) {
+    const last = normalizedParts[normalizedParts.length - 1] || '';
+    const lastWithoutPincode = last.replace(/\b\d{6}\b/g, '').trim();
+    if (!lastWithoutPincode) {
+      normalizedParts = normalizedParts.slice(0, -1);
+    } else if (lastWithoutPincode !== last) {
+      normalizedParts[normalizedParts.length - 1] = lastWithoutPincode;
+    }
+  }
+
+  normalizedParts = normalizedParts.filter((part) => !STATE_TOKEN_REGEX.test(part));
+
+  const normalizedResolvedCity = resolvedCity.trim().toLowerCase();
+  if (normalizedResolvedCity) {
+    normalizedParts = normalizedParts.filter((part) => part.trim().toLowerCase() !== normalizedResolvedCity);
+  }
+
+  if (normalizedParts.length === 0) {
+    return {
+      building_name: '',
+      street: '',
+      colony: '',
+      pincode,
+    };
+  }
+
+  let streetIndex = normalizedParts.findIndex((part) => STREET_HINT_REGEX.test(part));
+  if (streetIndex < 0 && normalizedParts.length >= 3) {
+    streetIndex = 1;
+  }
+
+  let buildingParts: string[] = [];
+  let street = '';
+  let colonyParts: string[] = [];
+
+  if (streetIndex >= 0) {
+    buildingParts = normalizedParts.slice(0, streetIndex);
+    street = normalizedParts[streetIndex] || '';
+    colonyParts = normalizedParts.slice(streetIndex + 1);
+  } else if (normalizedParts.length === 1) {
+    street = normalizedParts[0] || '';
+  } else {
+    buildingParts = [normalizedParts[0] || ''];
+    street = normalizedParts[1] || '';
+    colonyParts = normalizedParts.slice(2);
+  }
+
+  return {
+    building_name: buildingParts.join(', ').trim(),
+    street: street.trim(),
+    colony: colonyParts.join(', ').trim(),
+    pincode,
+  };
+}
+
+function splitColonyAndArea(localityValue: string) {
+  const parts = localityValue
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { colony: '', area: '' };
+  }
+
+  if (parts.length === 1) {
+    const single = parts[0] || '';
+    return { colony: single, area: single };
+  }
+
+  return {
+    colony: parts.slice(0, -1).join(', ').trim(),
+    area: parts[parts.length - 1] || '',
+  };
+}
+
 export default function AddressMapScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const addressId = typeof params.id === 'string' ? params.id : undefined;
@@ -123,6 +213,8 @@ export default function AddressMapScreen() {
         const resolvedCity = String(reverseRes.data?.city || '').trim();
         const resolvedPincode = String(reverseRes.data?.pincode || '').trim();
         const resolvedCityCode = reverseRes.data?.city_code != null ? String(reverseRes.data.city_code).trim() : '';
+        const splitAddress = splitAddressDisplay(displayAddress, resolvedCity);
+        const splitLocality = splitColonyAndArea(splitAddress.colony || resolvedLocality);
 
         const base = draft || {
           label: 'Home',
@@ -139,11 +231,13 @@ export default function AddressMapScreen() {
 
         setDraft({
           ...base,
-          street: displayAddress || base.street,
+          building_name: splitAddress.building_name || base.building_name,
+          street: splitAddress.street || base.street,
+          colony: splitLocality.colony || base.colony,
           city: resolvedCity || base.city,
-          pincode: resolvedPincode || base.pincode,
+          pincode: splitAddress.pincode || resolvedPincode || base.pincode,
           city_code: resolvedCityCode || base.city_code,
-          pickup_locality: resolvedLocality || base.pickup_locality,
+          pickup_locality: splitLocality.area || base.pickup_locality,
           latitude,
           longitude,
         });
@@ -156,7 +250,15 @@ export default function AddressMapScreen() {
             const fallbackStreet = [fallback.name, fallback.street].filter(Boolean).join(', ');
             const fallbackCity = String(fallback.city || fallback.subregion || '').trim();
             const fallbackPincode = String(fallback.postalCode || '').trim();
-            const fallbackLocality = String(fallback.district || fallback.subregion || fallbackCity).trim();
+            const fallbackNeighborhood = (fallback as any)?.neighborhood as string | undefined;
+            const fallbackColony = String(
+              fallbackNeighborhood ||
+              fallback.subregion ||
+              fallback.district ||
+              ''
+            ).trim();
+            const fallbackLocality = fallbackColony || String(fallback.street || fallback.name || '').trim();
+            const fallbackSplitLocality = splitColonyAndArea(fallbackLocality);
 
             const base = draft || {
               label: 'Home',
@@ -174,10 +276,11 @@ export default function AddressMapScreen() {
             setDraft({
               ...base,
               street: fallbackStreet || base.street,
+              colony: fallbackSplitLocality.colony || fallbackColony || base.colony,
               city: fallbackCity || base.city,
               pincode: fallbackPincode || base.pincode,
               city_code: CITY_CODE_BY_NAME[fallbackCity.toLowerCase()] || base.city_code,
-              pickup_locality: fallbackLocality || base.pickup_locality,
+              pickup_locality: fallbackSplitLocality.area || fallbackLocality || base.pickup_locality,
               latitude,
               longitude,
             });

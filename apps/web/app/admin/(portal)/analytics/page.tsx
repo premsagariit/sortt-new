@@ -373,7 +373,7 @@ export default function AnalyticsPage() {
     <div className="space-y-8 pb-10">
       {/* ── Page title ── */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Analytics</h1>
+        <h1 className="text-2xl font-bold" style={{color: '#1e3a8a'}}>Analytics</h1>
         <p className="text-gray-400 text-sm mt-1">Platform insights and trends</p>
       </div>
 
@@ -382,7 +382,7 @@ export default function AnalyticsPage() {
 
       {/* ── Orders per Day ── */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-4">Orders — Last 30 Days</h2>
+        <h2 className="text-lg font-semibold" style={{color: '#000000'}} >Orders — Last 30 Days</h2>
         <div className="rounded-2xl bg-[#1a1f36] border border-white/8 p-5">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={analytics.daily_orders}>
@@ -422,7 +422,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pie */}
         <section>
-          <h2 className="text-lg font-semibold text-white mb-4">Order Status Distribution</h2>
+          <h2 className="text-lg font-semibold" style={{color: '#000000'}}>Order Status Distribution</h2>
           <div className="rounded-2xl bg-[#1a1f36] border border-white/8 p-5 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -452,7 +452,7 @@ export default function AnalyticsPage() {
 
         {/* City breakdown */}
         <section>
-          <h2 className="text-lg font-semibold text-white mb-4">Orders by City</h2>
+          <h2 className="text-lg font-semibold" style={{color: '#000000'}}>Orders by City</h2>
           <div className="rounded-2xl bg-[#1a1f36] border border-white/8 p-5 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics.city_breakdown.slice(0, 8)} layout="vertical">
@@ -472,7 +472,7 @@ export default function AnalyticsPage() {
 
       {/* ── Weekly Revenue ── */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-4">Weekly GMV — Last 12 Weeks</h2>
+        <h2 className="text-lg font-semibold" style={{color: '#000000'}}>Weekly GMV — Last 12 Weeks</h2>
         <div className="rounded-2xl bg-[#1a1f36] border border-white/8 p-5">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={analytics.revenue_weekly}>
@@ -497,7 +497,7 @@ export default function AnalyticsPage() {
 
       {/* ── Hourly Distribution ── */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-4">Hourly Order Distribution</h2>
+        <h2 className="text-lg font-semibold" style={{color: '#000000'}}>Hourly Order Distribution</h2>
         <div className="rounded-2xl bg-[#1a1f36] border border-white/8 p-5">
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={analytics.hourly_distribution}>

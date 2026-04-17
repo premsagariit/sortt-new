@@ -19,6 +19,7 @@
 
 import React from 'react';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   AGGREGATOR_TABS,
@@ -28,12 +29,22 @@ import {
 } from '../../components/ui/TabBar';
 
 export default function AggregatorLayout() {
+  const insets = useSafeAreaInsets();
+  const tabBarStyle = React.useMemo(
+    () => ({
+      ...TAB_BAR_STYLE,
+      height: TAB_BAR_STYLE.height + insets.bottom,
+      paddingBottom: Math.max(TAB_BAR_STYLE.paddingBottom, insets.bottom),
+    }),
+    [insets.bottom]
+  );
+
   return (
     <Tabs
       backBehavior="history"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: TAB_BAR_STYLE,
+        tabBarStyle,
         tabBarActiveTintColor: TAB_ACTIVE_TINT,
         tabBarInactiveTintColor: TAB_INACTIVE_TINT,
         tabBarLabelStyle: {

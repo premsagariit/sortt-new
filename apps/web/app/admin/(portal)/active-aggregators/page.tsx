@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import NextImage from 'next/image';
 import { adminApi, type FlaggedAggregator } from '../../../../lib/adminApi';
 import { BoneyardCardList } from '@/components/ui/Boneyard';
 
@@ -133,8 +134,19 @@ export default function ActiveAggregatorsPage() {
               >
                 <div className="flex items-start gap-4">
                   {/* Avatar */}
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal/20 to-teal/10 border border-teal/20 flex items-center justify-center text-teal font-black text-[14px] flex-shrink-0">
-                    {initials}
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal/20 to-teal/10 border border-teal/20 flex items-center justify-center text-teal font-black text-[14px] flex-shrink-0 overflow-hidden">
+                    {agg.photo_url ? (
+                      <NextImage
+                        src={agg.photo_url}
+                        alt={agg.business_name}
+                        width={48}
+                        height={48}
+                        className="w-full h-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      initials
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0">

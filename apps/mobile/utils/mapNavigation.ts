@@ -16,9 +16,6 @@ type OpenExternalDirectionsInput = {
 const buildAndroidGeoUrl = ({ destination }: OpenExternalDirectionsInput): string =>
   `geo:${destination.latitude},${destination.longitude}?q=${destination.latitude},${destination.longitude}`;
 
-const buildAndroidGoogleNavUrl = ({ destination }: OpenExternalDirectionsInput): string =>
-  `google.navigation:q=${destination.latitude},${destination.longitude}&mode=d`;
-
 const buildAppleMapsUrl = ({ destination, origin }: OpenExternalDirectionsInput): string => {
   const params = new URLSearchParams();
   params.set('daddr', `${destination.latitude},${destination.longitude}`);
@@ -29,27 +26,13 @@ const buildAppleMapsUrl = ({ destination, origin }: OpenExternalDirectionsInput)
   return `maps://?${params.toString()}`;
 };
 
-const buildGoogleMapsIosUrl = ({ destination, origin }: OpenExternalDirectionsInput): string => {
-  const params = new URLSearchParams();
-  params.set('daddr', `${destination.latitude},${destination.longitude}`);
-  params.set('directionsmode', 'driving');
-  if (origin) {
-    params.set('saddr', `${origin.latitude},${origin.longitude}`);
-  }
-  return `comgooglemaps://?${params.toString()}`;
-};
-
 export async function openExternalDirections(input: OpenExternalDirectionsInput): Promise<void> {
   // Native app deep links first (no website redirect).
   const targets = Platform.select<string[]>({
     android: [
       buildAndroidGeoUrl(input),
-      buildAndroidGoogleNavUrl(input),
     ],
-    ios: [
-      buildAppleMapsUrl(input),
-      buildGoogleMapsIosUrl(input),
-    ],
+    ios: [buildAppleMapsUrl(input)],
     default: [buildAndroidGeoUrl(input)],
   }) ?? [buildAndroidGeoUrl(input)];
 

@@ -3,30 +3,19 @@ Use this from PowerShell after opening a new terminal.
 From workspace root:
 
 ```powershell
-# 1) Start Metro dev server
-cd C:\Users\Prem Sagar\Downloads\Sortt\apps\mobile
-pnpm exec expo start --dev-client --localhost --port 8081
+# 1) Start Expo Go server
+cd C:\Users\Prem Sagar\Downloads\Sortt
+pnpm dev:mobile
 ```
 
-In a second terminal (keep Metro running in first terminal):
+Open the Expo Go app on the Android device, make sure the phone is on the same Wi-Fi network, then scan the QR code shown in the terminal.
 
-```powershell
-# 2) Connect USB device to Metro port
-$adb = "C:\Users\Prem Sagar\AppData\Local\Android\Sdk\platform-tools\adb.exe"
-& $adb reverse --remove-all
-& $adb reverse tcp:8081 tcp:8081
+Important: scan from inside the Expo Go app scanner, not from the phone camera app.
 
-# 3) Open app on device
-& $adb shell am start -a android.intent.action.VIEW -d "exp+sortt-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
-```
+If the QR banner is delayed but Metro is running, open Expo Go and enter this URL manually:
 
-If app is not installed, run once:
+exp://192.168.1.100:8081
 
-```powershell
-cd C:\Users\Prem Sagar\Downloads\Sortt\apps\mobile
-pnpm exec expo run:android --no-bundler
-```
+If the Expo Go app is not installed, install it from the Play Store first, then rerun the command above.
 
-Then keep using only the first two blocks for normal daily reruns.
-
-Try untill the app opens.
+Keep this as the normal workflow. If you want the development build flow later, ask and I will switch it back.

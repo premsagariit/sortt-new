@@ -31,6 +31,7 @@ import { EmptyState } from '../../../../components/ui/EmptyState';
 import { useOrderStore } from '../../../../store/orderStore';
 import { useAuthStore } from '../../../../store/authStore';
 import { useChatStore } from '../../../../store/chatStore';
+import { useOrderChannel } from '../../../../hooks/useOrderChannel';
 import { useAggregatorStore } from '../../../../store/aggregatorStore';
 import { OrderTimeline } from '../../../../components/order/OrderTimeline';
 import { PrimaryButton, SecondaryButton } from '../../../../components/ui/Button';
@@ -61,6 +62,12 @@ export default function AggregatorReceiptScreen() {
     if (!receiptUserId || !routeOrderId) return 0;
     return (state.messages[routeOrderId] ?? []).filter((m: any) => m.senderId !== receiptUserId && !m.read).length;
   });
+  const order = orders.find((o: any) => o.orderId === routeOrderId);
+  useOrderChannel(
+    order?.orderId ?? routeOrderId ?? '',
+    order?.orderChannelToken ?? null,
+    order?.chatChannelToken ?? null
+  );
 
   const { executionDraftByOrderId, clearExecutionDraft } = useAggregatorStore();
 
@@ -75,8 +82,12 @@ export default function AggregatorReceiptScreen() {
 
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
   const [mediaLoading, setMediaLoading] = React.useState(false);
+  const [disputeSummary, setDisputeSummary] = React.useState<{
+    dispute: { id: string; status: string } | null;
+    can_raise_dispute: boolean;
+  } | null>(null);
+  const [disputeSummaryLoaded, setDisputeSummaryLoaded] = React.useState(false);
 
-  const order = orders.find((o: any) => o.orderId === routeOrderId);
   const draft = routeOrderId ? executionDraftByOrderId[routeOrderId] : undefined;
 
   React.useEffect(() => {
@@ -84,8 +95,8 @@ export default function AggregatorReceiptScreen() {
     (async () => {
       await Promise.all([
         fetchOrder ? fetchOrder(routeOrderId).catch(() => null) : Promise.resolve(),
-        api.get('/api/rates')
-          .then(res => setRates(res.data.rates || []))
+        api.get('/api/aggregators/me/rates')
+          .then(res => setRates(Array.isArray(res.data) ? res.data : (res.data?.rates || [])))
           .catch(() => setRates([])),
       ]);
     })();
@@ -120,10 +131,36 @@ export default function AggregatorReceiptScreen() {
   }, [routeOrderId]);
 
   React.useEffect(() => {
-    if (order?.aggregatorHasRated) {
-      setRatingSubmitted(true);
-    }
-  }, [order?.aggregatorHasRated]);
+    if (!routeOrderId) return;
+    setDisputeSummaryLoaded(false);
+    api.get(`/api/orders/${routeOrderId}/dispute`)
+      .then((res) => {
+        setDisputeSummary({
+          dispute: res?.data?.dispute
+            ? { id: String(res.data.dispute.id), status: String(res.data.dispute.status || '') }
+            : null,
+          can_raise_dispute: Boolean(res?.data?.can_raise_dispute),
+        });
+      })
+      .catch(() => {
+        setDisputeSummary(null);
+      })
+      .finally(() => {
+        setDisputeSummaryLoaded(true);
+      });
+  }, [routeOrderId]);
+
+  React.useEffect(() => {
+    // Keep per-order review state isolated when route id changes.
+    setRatingScore(0);
+    setRatingReview('');
+    setRatingError(null);
+    setRatingSubmitted(false);
+  }, [routeOrderId]);
+
+  React.useEffect(() => {
+    setRatingSubmitted(Boolean(order?.aggregatorHasRated));
+  }, [routeOrderId, order?.aggregatorHasRated]);
 
   const invoiceOrderId = order?.orderId ?? routeOrderId ?? null;
 
@@ -186,13 +223,37 @@ export default function AggregatorReceiptScreen() {
   }, [invoiceOrderId, isInvoiceExpired]);
 
   const completedAt = useMemo(() => {
-    if (!completedAtDate) return '—';
+    if (!completedAtDate) return '-';
     return completedAtDate.toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
   }, [completedAtDate]);
+  const localDisputeWindowOpen = useMemo(() => {
+    if (!completedAtDate) return false;
+    if (order?.status !== 'completed') return false;
+    const disputeExpiryTime = new Date(completedAtDate.getTime() + 30 * 60 * 1000);
+    return new Date() <= disputeExpiryTime;
+  }, [completedAtDate, order?.status]);
+  const canViewDispute = Boolean(disputeSummary?.dispute?.id);
+  const canRaiseDispute = canViewDispute
+    ? false
+    : (disputeSummaryLoaded ? Boolean(disputeSummary?.can_raise_dispute) : localDisputeWindowOpen);
+  const showDisputeAction = canViewDispute || canRaiseDispute;
+  const handleOpenDisputeStatus = React.useCallback(() => {
+    if (!routeOrderId || !canViewDispute || !disputeSummary?.dispute?.id) return;
+    router.push({
+      pathname: '/(shared)/dispute',
+      params: {
+        orderId: routeOrderId,
+        disputeId: disputeSummary.dispute.id,
+        fallbackRoute: routeOrderId
+          ? `/(aggregator)/execution/receipt/${routeOrderId}`
+          : '/(aggregator)/orders',
+      },
+    } as any);
+  }, [routeOrderId, canViewDispute, disputeSummary?.dispute?.id]);
 
 
 
@@ -298,7 +359,7 @@ export default function AggregatorReceiptScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={[]}>
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -351,6 +412,43 @@ export default function AggregatorReceiptScreen() {
               <Text variant="caption" color={colors.teal} style={styles.completedPillText}>Completed</Text>
             </View>
           </View>
+          {disputeSummary?.dispute?.status ? (
+            <Pressable
+              onPress={handleOpenDisputeStatus}
+              style={styles.disputeStatusPressable}
+              accessibilityRole="button"
+              accessibilityLabel="Open dispute status"
+            >
+              <View
+              style={[
+                styles.disputeStatusChip,
+                disputeSummary.dispute.status === 'open'
+                  ? styles.disputeStatusChipOpen
+                  : disputeSummary.dispute.status === 'resolved'
+                    ? styles.disputeStatusChipResolved
+                    : styles.disputeStatusChipDismissed,
+              ]}
+            >
+                <Text
+                variant="caption"
+                style={[
+                  styles.disputeStatusText,
+                  disputeSummary.dispute.status === 'open'
+                    ? styles.disputeStatusTextOpen
+                    : disputeSummary.dispute.status === 'resolved'
+                      ? styles.disputeStatusTextResolved
+                      : styles.disputeStatusTextDismissed,
+                ] as any}
+                >
+                {disputeSummary.dispute.status === 'open'
+                  ? 'Dispute Open'
+                  : disputeSummary.dispute.status === 'resolved'
+                    ? 'Dispute Resolved'
+                    : 'Dispute Dismissed'}
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
@@ -549,22 +647,27 @@ export default function AggregatorReceiptScreen() {
             )}
           </View>
           
-          <View style={styles.actions}>
-            <Pressable
-              onPress={() => router.push({
-                pathname: '/(shared)/dispute',
-                params: {
-                  orderId: routeOrderId,
-                  fallbackRoute: '/(aggregator)/orders',
-                },
-              } as any)}
-              style={styles.reportIssue}
-            >
-              <Text variant="caption" style={styles.reportIssueText}>
-                Report an issue
-              </Text>
-            </Pressable>
-          </View>
+          {showDisputeAction ? (
+            <View style={styles.actions}>
+              <Pressable
+                onPress={() => router.push({
+                  pathname: '/(shared)/dispute',
+                  params: {
+                    orderId: routeOrderId,
+                    disputeId: canViewDispute ? disputeSummary?.dispute?.id : undefined,
+                    fallbackRoute: routeOrderId
+                      ? `/(aggregator)/execution/receipt/${routeOrderId}`
+                      : '/(aggregator)/orders',
+                  },
+                } as any)}
+                style={styles.reportIssue}
+              >
+                <Text variant="caption" style={styles.reportIssueText}>
+                  {canViewDispute ? 'View Dispute' : 'Raise Dispute'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -662,6 +765,42 @@ const styles = StyleSheet.create({
   },
   completedPillText: {
     fontFamily: 'DMSans-Bold',
+  },
+  disputeStatusChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  disputeStatusPressable: {
+    alignSelf: 'flex-start',
+  },
+  disputeStatusChipOpen: {
+    backgroundColor: `${colors.red}12`,
+    borderColor: `${colors.red}40`,
+  },
+  disputeStatusChipResolved: {
+    backgroundColor: `${colors.teal}12`,
+    borderColor: `${colors.teal}40`,
+  },
+  disputeStatusChipDismissed: {
+    backgroundColor: `${colors.muted}1A`,
+    borderColor: `${colors.muted}4D`,
+  },
+  disputeStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  disputeStatusTextOpen: {
+    color: colors.red,
+  },
+  disputeStatusTextResolved: {
+    color: colors.teal,
+  },
+  disputeStatusTextDismissed: {
+    color: colors.muted,
   },
   card: {
     backgroundColor: colors.surface,
@@ -827,3 +966,4 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 });
+

@@ -175,7 +175,7 @@ export default function ActiveOrderDetailScreen() {
             <View style={styles.summaryItem}>
                 <NavigationArrow size={16} color={colors.muted} weight="fill" />
                 <Text variant="label" color={colors.navy} style={styles.monoText}>
-                    {activeOrder.distance} away
+                    {activeOrder.distance}
                 </Text>
             </View>
             <View style={styles.summaryDivider} />
@@ -313,7 +313,7 @@ export default function ActiveOrderDetailScreen() {
                 ) : (
                     <>
                         <SecondaryButton
-                            label="Cancel Order"
+                            label="Cancel"
                             style={styles.cancelBtn}
                             textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
                             onPress={() => setShowCancelModal(true)}

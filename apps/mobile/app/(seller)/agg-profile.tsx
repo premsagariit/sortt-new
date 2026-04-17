@@ -11,9 +11,12 @@ import { Star } from 'phosphor-react-native';
 import { colors, spacing, radius } from '../../constants/tokens';
 import { NavBar } from '../../components/ui/NavBar';
 import { Text, Numeric } from '../../components/ui/Typography';
+import { Avatar } from '../../components/ui/Avatar';
 import { StatusBar } from 'expo-status-bar';
 import { safeBack } from '../../utils/navigation';
 import { api } from '../../lib/api';
+import { getLocalizedMaterialLabel } from '../../lib/i18n';
+import { useI18n } from '../../hooks/useI18n';
 
 type AggregatorRate = {
   materialCode: string;
@@ -31,6 +34,9 @@ type AggregatorProfileResponse = {
   id: string;
   createdAt: string;
   name: string;
+  aggregatorName?: string;
+  businessName?: string | null;
+  photoUrl?: string | null;
   aggregatorTypeLabel: string;
   isOnline: boolean;
   isVerified: boolean;
@@ -47,15 +53,6 @@ type AggregatorProfileResponse = {
   reviews: AggregatorReview[];
 };
 
-const MATERIAL_LABEL: Record<string, string> = {
-  metal: '⚙️ Metal (Iron)',
-  paper: '📄 Paper',
-  plastic: '🧴 Plastic',
-  ewaste: '💻 E-Waste',
-  fabric: '👗 Fabric',
-  glass: '🍶 Glass',
-};
-
 const formatReviewDate = (value: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -66,14 +63,29 @@ const formatReviewDate = (value: string): string => {
   });
 };
 
-const calculateYearsActive = (createdAtIso: string): number => {
+const formatTenure = (createdAtIso: string): string => {
   try {
     const createdDate = new Date(createdAtIso);
     const now = new Date();
-    const years = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-    return Math.floor(years);
+    if (Number.isNaN(createdDate.getTime())) return 'Recently joined';
+
+    const elapsedMs = Math.max(0, now.getTime() - createdDate.getTime());
+    const elapsedDays = Math.max(1, Math.floor(elapsedMs / (1000 * 60 * 60 * 24)));
+
+    if (elapsedDays < 365) {
+      return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'}`;
+    }
+
+    let years = now.getFullYear() - createdDate.getFullYear();
+    const hasNotCompletedYear =
+      now.getMonth() < createdDate.getMonth() ||
+      (now.getMonth() === createdDate.getMonth() && now.getDate() < createdDate.getDate());
+    if (hasNotCompletedYear) years -= 1;
+
+    years = Math.max(1, years);
+    return `${years} year${years === 1 ? '' : 's'}`;
   } catch {
-    return 0;
+    return 'Recently joined';
   }
 };
 
@@ -86,6 +98,7 @@ const resolveRouteParam = (value: string | string[] | undefined): string => {
 };
 
 export default function AggregatorProfileScreen() {
+  const { t } = useI18n();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const aggregatorId = resolveRouteParam(id);
 
@@ -122,9 +135,11 @@ export default function AggregatorProfileScreen() {
     };
   }, [aggregatorId]);
 
-  const displayName = profile?.name ?? '';
-  const avatarInitial = displayName.charAt(0).toUpperCase();
+  const displayName = profile?.aggregatorName || profile?.name || '';
+  const businessName = String(profile?.businessName ?? '').trim();
+  const showBusinessName = businessName.length > 0 && businessName.toLowerCase() !== displayName.toLowerCase();
   const heroSubtitle = profile?.aggregatorTypeLabel ?? '';
+  const tenureText = profile?.createdAt ? formatTenure(profile.createdAt) : t('Recently joined');
   const ratingValue = Number(profile?.rating ?? 0);
   const ratingStars = Math.max(0, Math.min(5, Math.round(ratingValue)));
 
@@ -133,7 +148,7 @@ export default function AggregatorProfileScreen() {
       <StatusBar style="light" />
       <NavBar
         variant="dark"
-        title="Aggregator Profile"
+        title={t('Aggregator Profile')}
         onBack={() => safeBack('/(seller)/home')}
       />
 
@@ -148,13 +163,17 @@ export default function AggregatorProfileScreen() {
         {/* Dark Hero Section */}
         <View style={styles.heroSection}>
           <View style={styles.heroHeader}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{avatarInitial || ' '}</Text>
-            </View>
+            <Avatar
+              name={displayName || 'Aggregator'}
+              userType="aggregator"
+              size="xl"
+              uri={profile?.photoUrl ?? undefined}
+            />
             <View style={styles.heroInfo}>
               {profile ? (
                 <>
                   <Text style={styles.aggName}>{displayName}</Text>
+                  {showBusinessName && <Text style={styles.businessName}>{businessName}</Text>}
                   <Text style={styles.aggType}>{heroSubtitle}</Text>
                   <View style={styles.ratingRow}>
                     <View style={styles.stars}>
@@ -168,18 +187,18 @@ export default function AggregatorProfileScreen() {
                       ))}
                     </View>
                     <Numeric style={styles.ratingText}>
-                      {ratingValue.toFixed(1)} · {profile.stats.pickups} pickups
+                      {ratingValue.toFixed(1)} · {profile.stats.pickups} {t('pickups')}
                     </Numeric>
                   </View>
                 </>
               ) : (
                 <Text style={styles.aggType}>
-                  {isLoading ? 'Loading profile from backend...' : 'Profile details unavailable'}
+                  {isLoading ? t('Loading profile from backend...') : t('Profile details unavailable')}
                 </Text>
               )}
             </View>
             <View style={styles.kycBadge}>
-              <Text style={styles.kycText}>{profile ? (profile.isVerified ? '✓ Verified' : 'Pending') : '...'}</Text>
+              <Text style={styles.kycText}>{profile ? (profile.isVerified ? `✓ ${t('Verified')}` : t('Pending')) : '...'}</Text>
             </View>
           </View>
         </View>
@@ -188,7 +207,7 @@ export default function AggregatorProfileScreen() {
           {isLoading && (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="small" color={colors.navy} />
-              <Text variant="caption" color={colors.muted}>Loading aggregator profile...</Text>
+              <Text variant="caption" color={colors.muted}>{t('Loading aggregator profile...')}</Text>
             </View>
           )}
 
@@ -204,37 +223,40 @@ export default function AggregatorProfileScreen() {
           <View style={styles.statsStrip}>
             <View style={styles.statCard}>
               <Numeric style={styles.statValue}>{profile.stats.pickups}</Numeric>
-              <Text variant="caption" color={colors.muted}>Pickups</Text>
+              <Text variant="caption" color={colors.muted}>{t('Pickups')}</Text>
             </View>
             <View style={styles.statCard}>
               <Numeric style={[styles.statValue, { color: colors.teal }]}>
                 {Math.round(profile.stats.completionRate)}%
               </Numeric>
-              <Text variant="caption" color={colors.muted}>Completion</Text>
+              <Text variant="caption" color={colors.muted}>{t('Completion')}</Text>
             </View>
             <View style={styles.statCard}>
               <Numeric style={[styles.statValue, { fontSize: 16 }]}> 
                 {Math.round(profile.stats.avgPickupMinutes || 0)} min
               </Numeric>
-              <Text variant="caption" color={colors.muted}>Avg. pickup</Text>
+              <Text variant="caption" color={colors.muted}>{t('Avg. pickup')}</Text>
             </View>
           </View>
 
           {/* Material Rates */}
           <View style={styles.card}>
-            <Text variant="body" style={styles.cardTitle}>Material Rates</Text>
+            <Text variant="body" style={styles.cardTitle}>{t('Material Rates')}</Text>
             <View style={styles.table}>
               <View style={styles.tableHeader}>
-                <Text variant="caption" color={colors.muted} style={styles.thLeft}>Material</Text>
+                <Text variant="caption" color={colors.muted} style={styles.thLeft}>{t('Material')}</Text>
               </View>
               {profile.rates.length === 0 ? (
                 <View style={[styles.tableRow, styles.tableRowLast]}>
-                  <Text variant="caption" color={colors.muted}>No rates configured yet.</Text>
+                  <Text variant="caption" color={colors.muted}>{t('No rates configured yet.')}</Text>
                 </View>
               ) : (
                 profile.rates.map((rate, index) => {
                   const isLast = index === profile.rates.length - 1;
-                  const label = MATERIAL_LABEL[rate.materialCode] ?? rate.materialCode;
+                  const label = getLocalizedMaterialLabel(rate.materialCode, {
+                    withEmoji: true,
+                    fallback: rate.materialCode,
+                  });
                   return (
                     <View key={`${rate.materialCode}-${index}`} style={[styles.tableRow, isLast && styles.tableRowLast]}>
                       <Text variant="body">{label}</Text>
@@ -247,43 +269,36 @@ export default function AggregatorProfileScreen() {
 
           {/* Operating Details */}
           <View style={styles.card}>
-            <Text variant="body" style={styles.cardTitle}>Operating Details</Text>
+            <Text variant="body" style={styles.cardTitle}>{t('Operating Details')}</Text>
             <View style={styles.listRow}>
               <Text variant="body" style={styles.iconEmoji}>📍</Text>
               <View style={styles.listContent}>
                 <Text variant="body" style={styles.listTitle}>
                   {profile.operatingAreas.length > 0
                     ? profile.operatingAreas.join(', ')
-                    : 'Not configured'}
+                    : t('Not configured')}
                 </Text>
-                <Text variant="caption" color={colors.muted}>Operating area</Text>
-              </View>
-            </View>
-            <View style={[styles.listRow, styles.tableRowLast]}>
-              <Text variant="body" style={styles.iconEmoji}>🕐</Text>
-              <View style={styles.listContent}>
-                <Text variant="body" style={styles.listTitle}>{profile.operatingHoursSummary || 'Not set'}</Text>
-                <Text variant="caption" color={colors.muted}>Operating hours</Text>
+                <Text variant="caption" color={colors.muted}>{t('Operating area')}</Text>
               </View>
             </View>
               <View style={[styles.listRow, styles.tableRowLast]}>
                 <Text variant="body" style={styles.iconEmoji}>📅</Text>
                 <View style={styles.listContent}>
                   <Text variant="body" style={styles.listTitle}>
-                    {calculateYearsActive(profile.createdAt) || 'Recently joined'} year{calculateYearsActive(profile.createdAt) !== 1 ? 's' : ''}
+                    {tenureText}
                   </Text>
-                  <Text variant="caption" color={colors.muted}>Using app</Text>
+                  <Text variant="caption" color={colors.muted}>{t('Using app')}</Text>
                 </View>
               </View>
           </View>
 
           {/* Recent Reviews */}
           <View style={styles.reviewsSection}>
-            <Text variant="body" style={styles.cardTitle}>Recent Reviews</Text>
+            <Text variant="body" style={styles.cardTitle}>{t('Recent Reviews')}</Text>
 
             {profile.reviews.length === 0 ? (
               <View style={styles.reviewCard}>
-                <Text variant="caption" style={styles.reviewText}>No reviews yet.</Text>
+                <Text variant="caption" style={styles.reviewText}>{t('No reviews yet.')}</Text>
               </View>
             ) : (
               profile.reviews.map((review, index) => {
@@ -309,7 +324,7 @@ export default function AggregatorProfileScreen() {
                       </View>
                     </View>
                     <Text variant="caption" style={styles.reviewText}>
-                      {review.review || 'No written feedback.'}
+                      {review.review || t('No written feedback.')}
                     </Text>
                     <Numeric style={styles.reviewDate}>{formatReviewDate(review.createdAt)}</Numeric>
                   </View>
@@ -353,19 +368,6 @@ const styles = StyleSheet.create({
     gap: 14,
     alignItems: 'center',
   },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.teal,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: colors.surface,
-    fontSize: 28,
-    fontWeight: '700',
-  },
   heroInfo: {
     flex: 1,
   },
@@ -378,6 +380,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.55)',
     fontSize: 13,
     marginTop: 3,
+  },
+  businessName: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 14,
+    marginTop: 2,
+    fontWeight: '600',
   },
   ratingRow: {
     flexDirection: 'row',

@@ -5,6 +5,7 @@ import type { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
 import { isNetworkError } from '../utils/error';
 import { mapApiOrder, type OrderStatus } from './orderStore';
+import { useAuthStore } from './authStore';
 
 export interface NearbyOrder {
   orderId: string;
@@ -27,6 +28,7 @@ export interface AggregatorProfile {
   email: string | null;
   businessName: string | null;
   aggregatorType: 'shop' | 'mobile' | null;
+  vehicleNumber: string | null;
   operatingArea: string | null;
   operatingHours: any | null;
   kycStatus: string | null;
@@ -104,6 +106,7 @@ interface AggregatorStoreState {
   fullName: string;
   businessName: string;
   aggregatorType: 'shop' | 'mobile' | null;
+  vehicleNumber: string;
   primaryArea: string;
   operatingHours: { from: string; to: string };
   operatingDays: string[];
@@ -147,7 +150,7 @@ interface AggregatorStoreState {
   kycVehiclePhotoUri: string | null;
 
   // ── Sync Actions ───────────────────────────────────────────────
-  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'aggregatorType' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
+  setProfile: (p: Partial<Pick<AggregatorStoreState, 'fullName' | 'businessName' | 'aggregatorType' | 'vehicleNumber' | 'primaryArea' | 'operatingHours' | 'operatingDays' | 'weeklySchedule'>>) => void;
   setOperatingAreas: (areas: string[]) => void;
   setMaterialSelected: (id: string, selected: boolean) => void;
   setMaterialRate: (id: string, rate: number) => void;
@@ -192,7 +195,7 @@ interface AggregatorStoreState {
   /** GET /api/aggregators/earnings?period=... */
   fetchAggregatorEarnings: (period: 'today' | 'week' | 'month' | 'all') => Promise<void>;
   /** PATCH /api/aggregators/profile — updates name, business_name, operating_area */
-  updateProfile: (payload: { name?: string; email?: string | null; business_name?: string; aggregator_type?: 'shop' | 'mobile' | null; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
+  updateProfile: (payload: { name?: string; email?: string | null; business_name?: string; aggregator_type?: 'shop' | 'mobile' | null; vehicle_number?: string | null; operating_area?: string | string[]; operating_hours?: any }) => Promise<void>;
   /** PATCH /api/aggregators/rates — updates material rates (standard + custom) */
   updateRates: (rates: { material_code?: string; rate_per_kg: number; is_custom?: boolean; custom_label?: string }[]) => Promise<void>;
   /** POST /api/aggregators/heartbeat — updates online status */
@@ -393,6 +396,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   fullName: '',
   businessName: '',
   aggregatorType: null,
+  vehicleNumber: '',
   primaryArea: '',
   operatingHours: { from: '08:00 AM', to: '07:00 PM' },
   operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -567,7 +571,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
   }),
 
   reset: () => set({
-    fullName: '', businessName: '', aggregatorType: null, primaryArea: '',
+    fullName: '', businessName: '', aggregatorType: null, vehicleNumber: '', primaryArea: '',
     operatingHours: { from: '08:00 AM', to: '07:00 PM' },
     operatingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     weeklySchedule: WEEKLY_SCHEDULE_DEFAULT,
@@ -679,6 +683,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       const operatingArea = payload.operating_area ?? payload.aggregator_locality ?? null;
       const businessName = payload.business_name ?? payload.aggregator_business_name ?? null;
       const aggregatorType = payload.aggregator_type ?? payload.aggregatorType ?? null;
+      const vehicleNumber = payload.vehicle_number ?? payload.vehicleNumber ?? null;
       const cityCode = payload.city_code ?? payload.aggregator_city_code ?? null;
       const kycStatus = payload.kyc_status ?? payload.aggregator_kyc_status ?? null;
 
@@ -710,6 +715,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
           email,
           businessName,
           aggregatorType,
+          vehicleNumber,
           operatingArea: primaryAreaText,
           operatingHours: { ...operatingHours, days: parsedSchedule },
           kycStatus,
@@ -717,6 +723,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
         },
         fullName: name ?? '',
         businessName: businessName ?? '',
+        vehicleNumber: vehicleNumber ?? '',
         primaryArea: primaryAreaText,
         operatingAreas: areasArray,
         weeklySchedule: parsedSchedule,
@@ -818,6 +825,12 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
       if (payload.aggregator_type !== undefined) {
         set((state) => ({
           profile: state.profile ? { ...state.profile, aggregatorType: payload.aggregator_type ?? null } : state.profile,
+        }));
+      }
+      if (payload.vehicle_number !== undefined) {
+        set((state) => ({
+          vehicleNumber: payload.vehicle_number ?? '',
+          profile: state.profile ? { ...state.profile, vehicleNumber: payload.vehicle_number ?? null } : state.profile,
         }));
       }
       if (payload.operating_area !== undefined) {
@@ -1005,9 +1018,30 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
             type: mimeType,
           } as any);
 
-          await api.post(`/api/orders/${orderId}/media`, formData, {
-            timeout: 90000,
-          });
+          const authToken = useAuthStore.getState().token;
+          const url = `${api.defaults.baseURL}/api/orders/${orderId}/media`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 90000);
+          let response: Response;
+          try {
+            response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+              },
+              body: formData,
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            const err: any = new Error(body?.error || `Upload failed with status ${response.status}`);
+            err.response = { status: response.status, data: body };
+            throw err;
+          }
 
           set({ isLoading: false, error: null });
           return;
@@ -1019,7 +1053,7 @@ export const useAggregatorStore = create<AggregatorStoreState>((set, get) => ({
             throw new Error(tooLargeMessage);
           }
 
-          const retryable = isNetworkError(e) || e?.code === 'ECONNABORTED' || status === 429 || status >= 500;
+          const retryable = !status || isNetworkError(e) || e?.code === 'ECONNABORTED' || status === 429 || status >= 500;
           if (attempt < maxAttempts && retryable) {
             await sleep(attempt * 700);
             continue;

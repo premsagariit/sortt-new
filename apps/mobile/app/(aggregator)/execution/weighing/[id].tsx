@@ -87,14 +87,8 @@ export default function WeighingScreen() {
                     if (!active) return;
                     setLiveRates(Array.isArray(res.data) ? res.data : (res.data?.rates || []));
                 } catch {
-                    try {
-                        const fallback = await api.get('/api/rates');
-                        if (!active) return;
-                        setLiveRates(fallback.data?.rates || []);
-                    } catch {
-                        if (!active) return;
-                        setLiveRates([]);
-                    }
+                    if (!active) return;
+                    setLiveRates([]);
                 }
             })();
 
@@ -222,10 +216,10 @@ export default function WeighingScreen() {
         try {
             for (const uri of scalePhotoUris) {
                 try {
-                    await uploadOrderMediaApi(id, uri, 'scale_photo');
+                    await uploadOrderMediaApi(id, uri, 'scrap_photo');
                 } catch (uploadErr) {
-                    // Scale photos are optional; do not block order progression on media failure.
-                    console.warn('Scale photo upload failed (non-blocking):', uploadErr);
+                    // Scrap photos are optional; do not block order progression on media failure.
+                    console.warn('Scrap photo upload failed (non-blocking):', uploadErr);
                     break;
                 }
             }
@@ -261,7 +255,7 @@ export default function WeighingScreen() {
             });
         } catch (err: any) {
             console.error('Failed to submit weighing step:', err);
-            setErrorMsg(err?.response?.data?.error ?? err?.message ?? 'Failed to upload scale photo');
+            setErrorMsg(err?.response?.data?.error ?? err?.message ?? 'Failed to upload scrap photo');
         } finally {
             setIsSubmitting(false);
         }
@@ -422,7 +416,7 @@ export default function WeighingScreen() {
             <View style={styles.footer}>
                 <View style={styles.footerRow}>
                     <SecondaryButton
-                        label="Cancel Order"
+                        label="Cancel"
                         style={styles.cancelBtn}
                         textStyle={{ color: colors.red, fontFamily: 'DMSans-Bold' }}
                         onPress={() => setShowCancelModal(true)}

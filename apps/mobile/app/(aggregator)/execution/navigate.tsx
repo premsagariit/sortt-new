@@ -3,17 +3,20 @@ import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import { Globe, Phone, ChatCenteredText, MapPin } from 'phosphor-react-native';
+import { Globe, MapPin } from 'phosphor-react-native';
 import { colors, spacing, radius, colorExtended } from '../../../constants/tokens';
 import { Text, Numeric } from '../../../components/ui/Typography';
 import { PrimaryButton, SecondaryButton } from '../../../components/ui/Button';
 import { NavBar } from '../../../components/ui/NavBar';
 import { BaseCard } from '../../../components/ui/Card';
+import { ChatActionButton } from '../../../components/ui/ChatActionButton';
+import { PhoneActionButton } from '../../../components/ui/PhoneActionButton';
 import { safeBack } from '../../../utils/navigation';
 import { useOrderStore } from '../../../store/orderStore';
 import { useAggregatorStore } from '../../../store/aggregatorStore';
 import { useAuthStore } from '../../../store/authStore';
 import { useChatStore } from '../../../store/chatStore';
+import { useOrderChannel } from '../../../hooks/useOrderChannel';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { CancelOrderModal } from '../../../components/domain/CancelOrderModal';
 import { api } from '../../../lib/api';
@@ -100,6 +103,11 @@ export default function NavigateScreen() {
     const { orders, fetchOrder } = useOrderStore();
     const { updateOrderStatusApi } = useAggregatorStore();
     const order = orders.find((o) => o.orderId === id);
+    useOrderChannel(
+        order?.orderId ?? id ?? '',
+        order?.orderChannelToken ?? null,
+        order?.chatChannelToken ?? null
+    );
 
     React.useEffect(() => {
         let isMounted = true;
@@ -491,8 +499,8 @@ export default function NavigateScreen() {
                             ) : null}
                         </View>
                         <View style={styles.cardActions}>
-                            <TouchableOpacity
-                                style={[styles.callButton, !displayPhone && styles.callButtonDisabled]}
+                            <PhoneActionButton
+                                style={styles.callButton}
                                 disabled={!displayPhone}
                                 onPress={async () => {
                                     if (!displayPhone) return;
@@ -502,24 +510,15 @@ export default function NavigateScreen() {
                                         await Linking.openURL(telUrl);
                                     }
                                 }}
-                            >
-                                <Phone size={24} color={colors.teal} weight="fill" />
-                            </TouchableOpacity>
-                            <View style={styles.chatBtnWrapper}>
-                                <TouchableOpacity
-                                    style={styles.callButton}
-                                    onPress={() => router.push(`/(shared)/chat/${internalOrderId}` as any)}
-                                >
-                                    <ChatCenteredText size={24} color={colors.navy} weight="fill" />
-                                </TouchableOpacity>
-                                {chatUnread > 0 && (
-                                    <View style={styles.chatBadge}>
-                                        <Text variant="caption" color={colors.surface} style={styles.chatBadgeText}>
-                                            {chatUnread > 99 ? '99+' : String(chatUnread)}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
+                            />
+                            <ChatActionButton
+                                onPress={() => router.push(`/(shared)/chat/${internalOrderId}` as any)}
+                                unreadCount={chatUnread}
+                                backgroundColor={colorExtended.tealLight}
+                                iconColor={colors.navy}
+                                style={styles.chatBtnWrapper}
+                                buttonStyle={{ marginLeft: 0 }}
+                            />
                         </View>
                     </View>
                 </BaseCard>
@@ -638,16 +637,8 @@ const styles = StyleSheet.create({
         lineHeight: 20,
     },
     callButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: colorExtended.tealLight,
-        alignItems: 'center',
-        justifyContent: 'center',
+        marginLeft: 0,
         marginTop: spacing.xs,
-    },
-    callButtonDisabled: {
-        opacity: 0.5,
     },
     bottomBar: {
         position: 'absolute',
@@ -683,26 +674,6 @@ const styles = StyleSheet.create({
         marginTop: spacing.xs,
     },
     chatBtnWrapper: {
-        position: 'relative',
-    },
-    chatBadge: {
-        position: 'absolute',
-        top: -6,
-        right: -6,
-        minWidth: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: colors.red,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-        borderWidth: 1.5,
-        borderColor: colors.surface,
-        zIndex: 10,
-    },
-    chatBadgeText: {
-        fontSize: 10,
-        lineHeight: 12,
-        fontFamily: 'DMSans-Bold',
+        marginLeft: 0,
     },
 });

@@ -4,14 +4,13 @@
  * Admin portal shell layout (authenticated routes only).
  * Included:
  * - AdminAuthGuard
- * - InactivityGuard
  * - Sidebar (collapsible on desktop)
  * ─────────────────────────────────────────────────────────────────
  */
 
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -22,7 +21,6 @@ import {
   SignOut,
   Globe,
   WarningCircle,
-  Timer,
   List,
   X,
   UserCircle,
@@ -34,7 +32,6 @@ import {
 } from 'phosphor-react';
 import Image from 'next/image';
 import { AdminAuthGuard } from '../../../components/admin/AdminAuthGuard';
-import { InactivityGuard, formatCountdown } from '../../../components/admin/InactivityGuard';
 
 type IconComponent = React.ComponentType<{ size?: number | string; weight?: IconWeight; className?: string }>;
 
@@ -45,7 +42,6 @@ const GearIcon: IconComponent = Gear;
 const SignOutIcon: IconComponent = SignOut;
 const GlobeIcon: IconComponent = Globe;
 const WarningCircleIcon: IconComponent = WarningCircle;
-const TimerIcon: IconComponent = Timer;
 const UserCircleIcon: IconComponent = UserCircle;
 const ShoppingBagIcon: IconComponent = ShoppingBag;
 const ChartLineIcon: IconComponent = ChartLine;
@@ -68,20 +64,14 @@ const NAV_ITEMS = [
 export default function AdminPortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [remainingMs, setRemainingMs] = useState(15 * 60 * 1000);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  const handleTick = useCallback((ms: number) => setRemainingMs(ms), []);
 
   const handleLogout = () => {
     sessionStorage.removeItem('admin_token');
     document.cookie = 'admin_token=; path=/; max-age=0; samesite=strict';
-    sessionStorage.removeItem('lastActivity');
-    router.push('/admin/login?reason=timeout');
+    router.push('/admin/login');
   };
-
-  const isNearTimeout = remainingMs < 2 * 60 * 1000;
 
   useEffect(() => {
     const targets = [...NAV_ITEMS.map((item) => item.href), '/admin/config'];
@@ -179,8 +169,6 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
 
   return (
     <AdminAuthGuard>
-      <InactivityGuard onTick={handleTick} />
-
       <div className="flex h-screen overflow-hidden bg-bg" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
         {/* Mobile slide-out menu */}
@@ -235,18 +223,6 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
             </div>
             
             <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
-              {/* Session timer pill */}
-              <div
-                className={`flex items-center gap-1.5 text-[10px] md:text-[11px] px-2.5 md:px-3 py-1 rounded-full border font-mono ${
-                  isNearTimeout
-                    ? 'bg-red/5 border-red/20 text-red'
-                    : 'bg-amberLight border-amber/20 text-amber'
-                }`}
-              >
-                <TimerIcon size={14} weight={isNearTimeout ? "fill" : "regular"} />
-                <span className="font-semibold tracking-wide">{formatCountdown(remainingMs)}</span>
-              </div>
-              
               <div className="hidden md:flex flex-col items-end mr-1">
                 <span className="text-[13px] font-bold text-navy leading-tight">Super Admin</span>
                 <span className="text-[9px] text-amber font-bold uppercase tracking-wider bg-amberLight px-1.5 py-0.5 rounded leading-tight mt-0.5">

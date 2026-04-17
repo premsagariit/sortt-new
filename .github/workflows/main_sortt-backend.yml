@@ -65,7 +65,7 @@ jobs:
           zip -r ../release.zip .
 
       - name: Azure Login (legacy OIDC secret style)
-        if: ${{ env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != '' }}
+        if: env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != ''
         uses: azure/login@v3
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}
@@ -73,13 +73,13 @@ jobs:
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Azure Login (service principal JSON fallback)
-        if: ${{ env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON != '' }}
+        if: env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON != ''
         uses: azure/login@v3
         with:
           creds: ${{ env.AZURE_CREDENTIALS_JSON }}
 
       - name: Deploy to Azure Web App (publish profile)
-        if: ${{ env.AZURE_PUBLISH_PROFILE != '' && env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' }}
+        if: env.AZURE_PUBLISH_PROFILE != '' && env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
@@ -87,14 +87,14 @@ jobs:
           package: release.zip
 
       - name: Deploy to Azure Web App (azure/login)
-        if: ${{ env.AZURE_CLIENT_ID != '' || env.AZURE_CREDENTIALS_JSON != '' }}
+        if: env.AZURE_CLIENT_ID != '' || env.AZURE_CREDENTIALS_JSON != ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           package: release.zip
 
       - name: Fail with clear credential setup message
-        if: ${{ env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' && env.AZURE_PUBLISH_PROFILE == '' }}
+        if: env.AZURE_CLIENT_ID == '' && env.AZURE_CREDENTIALS_JSON == '' && env.AZURE_PUBLISH_PROFILE == ''
         run: |
           echo "::error::No deploy credentials found."
           echo "::error::Add one of:"

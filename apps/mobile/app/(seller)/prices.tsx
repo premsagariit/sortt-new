@@ -1,44 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Info, Warning, CaretUp, CaretDown, Minus } from 'phosphor-react-native';
+import { Info, Warning } from 'phosphor-react-native';
 import { colors, spacing, radius } from '../../constants/tokens';
 import { Text, Numeric } from '../../components/ui/Typography';
 import { NavBar } from '../../components/ui/NavBar';
 import { SkeletonLoader } from '../../components/ui/SkeletonLoader';
 import { safeBack } from '../../utils/navigation';
-import { api } from '../../lib/api';
-
-interface RateEntry {
-  material_code: string;
-  name: string;
-  rate_per_kg: number | null;
-  trend?: 'up' | 'down' | 'flat';
-  is_available: boolean;
-}
+import { MaterialCode } from '../../components/ui/MaterialChip';
+import { SellerMaterialCard } from '../../components/ui/SellerMaterialCard';
+import { useSellerMaterialRates } from '../../hooks/useSellerMaterialRates';
 
 export default function MarketRatesScreen() {
-  const [rates, setRates] = useState<RateEntry[]>([]);
-  const [cityCode, setCityCode] = useState('HYD');
-  const [loading, setLoading] = useState(true);
+  const { rates, cityCode, loading, reloadRates } = useSellerMaterialRates();
+  const MATERIALS: MaterialCode[] = ['metal', 'plastic', 'paper', 'ewaste', 'fabric', 'glass'];
 
-  const loadRates = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await api.get('/api/users/me/local-rates');
-      setRates(res.data?.rates || []);
-      setCityCode(String(res.data?.city_code || 'HYD').toUpperCase());
-    } catch {
-      /* non-fatal — empty state shown */
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadRates(); }, [loadRates]);
-
-  // Refresh on tab focus
-  useFocusEffect(useCallback(() => { loadRates(true); }, [loadRates]));
+  useFocusEffect(useCallback(() => { reloadRates(true); }, [reloadRates]));
 
   return (
     <View style={styles.container}>
@@ -64,7 +41,7 @@ export default function MarketRatesScreen() {
           <Info size={20} color={colors.amber} weight="fill" />
           <View style={styles.hintTextWrap}>
             <Text variant="label" color={colors.navy}>Locality Average</Text>
-            <Text variant="caption">These rates are averaged on the fly from verified active aggregators in your city.</Text>
+              <Text variant="caption">These rates are averaged from active aggregators in your city.</Text>
           </View>
         </View>
 
@@ -83,34 +60,25 @@ export default function MarketRatesScreen() {
           </Text>
         ) : (
           <View style={styles.grid}>
-            {rates.map((item) => (
-                <View key={item.material_code} style={styles.gridItem}>
-                <View style={[styles.rateCard, !item.is_available && styles.rateCardDisabled]}>
-                  <View style={styles.rateHeader}>
-                    <Text variant="label" color={item.is_available ? colors.navy : colors.muted}>{item.name}</Text>
-                    {!item.is_available
-                      ? <Minus size={16} color={colors.muted} weight="bold" />
-                      : item.trend === 'up'
-                      ? <CaretUp size={16} color={colors.teal} weight="bold" />
-                      : item.trend === 'down'
-                      ? <CaretDown size={16} color={colors.red} weight="bold" />
-                      : <Minus size={16} color={colors.muted} weight="bold" />}
-                  </View>
-                  {item.is_available ? (
-                    <>
-                      <Numeric size={20} color={colors.navy} style={{ marginTop: spacing.xs }}>
-                        ₹{item.rate_per_kg}
-                      </Numeric>
-                      <Text variant="caption" color={colors.muted}>per kg</Text>
-                    </>
-                  ) : (
-                    <Text variant="caption" color={colors.muted} style={styles.materialHelpText}>
-                      No aggregator is accepting this material in your area.
-                    </Text>
-                  )}
+            {MATERIALS.map((code) => {
+              const item = rates.find((entry) => entry.material_code === code);
+              const isAvailable = Boolean(item?.is_available && item?.rate_per_kg != null);
+
+              return (
+                <View key={code} style={styles.gridItem}>
+                  <SellerMaterialCard
+                    code={code}
+                    isSelected={false}
+                    isDisabled={!isAvailable}
+                    ratePerKg={item?.rate_per_kg ?? null}
+                    trend={item?.trend ?? 'flat'}
+                    helpText="no aggregator is ready to accept this material."
+                    onPress={() => {}}
+                    style={styles.materialCard}
+                  />
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -176,25 +144,12 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     width: '47.5%',
+    aspectRatio: 1,
   },
-  rateCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  rateCardDisabled: {
-    opacity: 0.65,
-  },
-  materialHelpText: {
-    marginTop: spacing.sm,
-    lineHeight: 16,
-  },
-  rateHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  materialCard: {
+    width: '100%',
+    height: '100%',
+    marginBottom: 0,
   },
   adBanner: {
     marginTop: spacing.sm,

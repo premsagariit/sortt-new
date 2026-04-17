@@ -153,7 +153,7 @@ function AdminLoginContent() {
                 <span className="mt-[2px]">🔒</span>
                 <div>
                   {reason === 'timeout'
-                    ? 'Your session expired due to inactivity.'
+                    ? 'Your previous session ended. Please sign in again.'
                     : reason === 'unauthorized'
                     ? 'This account does not have admin access.'
                     : 'Please sign in to continue.'}
@@ -243,7 +243,7 @@ function AdminLoginContent() {
             <div className="flex items-center justify-center gap-4 mt-8 pt-4 border-t border-border text-[10px] text-muted tracking-[0.04em]">
               <div className="flex items-center gap-1">🔒 IP verified</div>
               <div>· 10-attempt lockout</div>
-              <div>· 15 min session</div>
+              <div>· manual sign out</div>
             </div>
 
               <div className="mt-8 text-center text-[12px] text-muted">

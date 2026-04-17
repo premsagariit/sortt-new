@@ -15,6 +15,20 @@ const formatAddressLine = (address: SellerAddress) => {
   return parts.filter((value) => !!value && String(value).trim().length > 0).join(', ');
 };
 
+const formatPickupLocality = (address: SellerAddress) => {
+  const locality = String(address.pickup_locality ?? '').trim();
+  const city = String(address.city ?? '').trim();
+
+  if (locality && locality.toLowerCase() !== city.toLowerCase()) {
+    return locality;
+  }
+
+  return address.colony?.trim()
+    || address.street?.trim()
+    || address.building_name?.trim()
+    || city;
+};
+
 export default function SellerAddressesScreen() {
   const addresses = useAddressStore((state) => state.addresses);
   const loading = useAddressStore((state) => state.loading);
@@ -82,9 +96,9 @@ export default function SellerAddressesScreen() {
                 </View>
 
                 <Text variant="caption" color={colors.slate}>{formatAddressLine(address)}</Text>
-                {!!address.pickup_locality && (
+                {!!formatPickupLocality(address) && (
                   <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.xs }}>
-                    Locality: {address.pickup_locality}
+                    Locality: {formatPickupLocality(address)}
                   </Text>
                 )}
 

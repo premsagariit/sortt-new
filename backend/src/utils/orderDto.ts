@@ -4,6 +4,7 @@ export interface DbOrder {
   aggregator_id: string | null;
   order_number?: number;
   status: string;
+  city_code?: string | null;
   pickup_address: string | null;
   pickup_locality: string | null;
   phone_hash?: string;
@@ -151,6 +152,8 @@ export function buildOrderDto(
     seller_phone: canExposePhones ? (order.seller_display_phone ?? null) : null,
     aggregator_name: order.aggregator_name,
     aggregator_phone: canExposePhones ? (order.aggregator_display_phone ?? null) : null,
+    dispute_id: typeof order.dispute_id === 'string' ? order.dispute_id : null,
+    dispute_status: typeof order.dispute_status === 'string' ? order.dispute_status : null,
     material_codes: order.material_codes || [],
     estimated_weights: order.estimated_weights || {},
     order_items: normalizedOrderItems,

@@ -124,8 +124,19 @@ function KycCard({
           onClick={onToggle}
         >
           {/* Avatar */}
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-navy to-navySoft flex items-center justify-center text-white font-black text-[14px] flex-shrink-0">
-            {initials}
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-navy to-navySoft flex items-center justify-center text-white font-black text-[14px] flex-shrink-0 overflow-hidden">
+            {item.photo_url ? (
+              <NextImage
+                src={item.photo_url}
+                alt={item.business_name}
+                width={48}
+                height={48}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              initials
+            )}
           </div>
 
           <div className="flex-1 min-w-0">

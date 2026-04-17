@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { MaterialCode } from '../components/ui/MaterialChip';
 import { api } from '../lib/api';
+import { useAuthStore } from './authStore';
 
 type SelectedAddressSnapshot = {
   id: string;
@@ -187,6 +188,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
 
       if (orderId && uploadUris.length > 0) {
         try {
+          const authToken = useAuthStore.getState().token;
           for (let idx = 0; idx < uploadUris.length; idx += 1) {
             const formData = new FormData();
             formData.append('media_type', 'scrap_photo');
@@ -196,11 +198,27 @@ export const useListingStore = create<ListingState>((set, get) => ({
               type: 'image/jpeg',
             } as any);
 
-            await api.post(`/api/orders/${orderId}/media`, formData, {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              },
-            });
+            const url = `${api.defaults.baseURL}/api/orders/${orderId}/media`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 90000);
+            let response: Response;
+            try {
+              response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: formData,
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(timeoutId);
+            }
+
+            if (!response.ok) {
+              const body = await response.json().catch(() => ({}));
+              throw new Error(body?.error || `Order photo upload failed with status ${response.status}`);
+            }
           }
         } catch (err: any) {
           console.warn('Failed to upload order photo (non-fatal):', err.message);

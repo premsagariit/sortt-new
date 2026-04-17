@@ -6,6 +6,7 @@ import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, LineCapStyle } 
 import * as Sentry from '@sentry/node';
 import { query } from '../lib/db';
 import { storageProvider } from '../lib/storage';
+import { getLocalizedMaterialLabelSql } from './language';
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -162,6 +163,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
               o.created_at        AS order_created_at,
               o.updated_at        AS order_updated_at,
               u_seller.name       AS seller_name,
+              u_seller.preferred_language AS seller_preferred_language,
               sp.profile_type,
               sp.business_name    AS seller_business_name,
               sp.gstin            AS seller_gstin,
@@ -175,7 +177,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
                 json_agg(
                   json_build_object(
                     'material_code',       oi.material_code,
-                    'material_label',      mt.label_en,
+                    'material_label',      ${getLocalizedMaterialLabelSql('u_seller.preferred_language')},
                     'confirmed_weight_kg', COALESCE(oi.confirmed_weight_kg, 0),
                     'rate_per_kg',         COALESCE(oi.rate_per_kg, 0),
                     'amount',              COALESCE(oi.amount, 0)
@@ -191,7 +193,7 @@ export async function generateAndStoreInvoice(orderId: string): Promise<void> {
        LEFT JOIN order_items oi ON oi.order_id = o.id
        LEFT JOIN material_types mt ON mt.code = oi.material_code
        WHERE o.id = $1
-       GROUP BY o.id, u_seller.name, sp.profile_type, sp.business_name, sp.gstin, sp.locality, sp.city_code,
+      GROUP BY o.id, u_seller.name, u_seller.preferred_language, sp.profile_type, sp.business_name, sp.gstin, sp.locality, sp.city_code,
                 u_agg.name, ap.business_name, ap.operating_area, ap.city_code`,
       [orderId]
     );
