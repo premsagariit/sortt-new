@@ -82,6 +82,14 @@
 > - Routing eligibility for scheduled pickups was corrected to avoid strict current-time working-hours hard gates in feed creation fanout and heartbeat catch-up. Compatibility checks continue to enforce city/material/operating-area and pickup-window overlap.
 > - Operating-area matching normalization and tests were strengthened to reduce locality/address string mismatch regressions.
 
+> ✅ **Implementation Sync Note (2026-04-17) — Orders Route + Mobile TS Hardening**
+> - `backend/src/routes/orders/index.ts` was hardened for execution flows:
+>   - Added missing localized label SQL context where response queries interpolate `material_label`.
+>   - Corrected finalize-weighing query bind arrays to match placeholder count (`$1/$2`) and prevent PostgreSQL bind protocol errors.
+> - Mobile runtime i18n regressions fixed by restoring `t` extraction in both seller and aggregator profile screens.
+> - Mobile TypeScript strictness fixes applied for Expo filesystem compatibility typing, route typing in notification navigation, geocode field safety, and missing material type imports.
+> - Verification: monorepo `pnpm type-check` green on 2026-04-17.
+
 
 ---
 
@@ -910,7 +918,6 @@ export interface IMapProvider {
 
 | Provider | Free Tier | Swap Trigger |
 |---|---|---|
-| Google Maps | $200/month credit | Ola Maps if India-specific coverage needed or cost exceeds credit |
 | Ola Maps | TBD startup pricing | Available via `MAP_PROVIDER=ola` env var swap |
 
 ---
@@ -1561,7 +1568,7 @@ These rules apply to every agent in every session:
 - Never hardcode API keys in any agent session. Reference environment variables only.
 - All agents must import colours and spacing exclusively from `constants/tokens.ts` — never hardcode hex values.
 - All agents must use DM Sans and DM Mono. No other typefaces.
-- No agent may call Meta WhatsApp API, Ably, Cloudflare R2 SDK, Custom JWT, or Google Maps directly — only through the provider abstraction packages in `packages/`.
+- No agent may call Meta WhatsApp API, Ably, Cloudflare R2 SDK, Custom JWT, or direct map SDKs directly — only through the provider abstraction packages in `packages/`.
 - No agent may import or reference `legacy stack SDK` or any legacy stack package anywhere in the codebase.
 - On Days 1–3 (UI-only phase): no agent makes any backend or third-party API calls from the mobile app. All screen data is hardcoded fixture data. Real wiring begins Day 5.
 - Backend agents (Days 5–8): always call `SET LOCAL app.current_user_id = $userId` before DB queries in protected routes.
@@ -2044,7 +2051,7 @@ export interface IMapProvider {
 | `UPSTASH_REDIS_REST_TOKEN` | Backend only | Upstash Redis REST token |
 | `GEMINI_API_KEY` | Backend only | Google Gemini API key |
 | `OLA_MAPS_API_KEY` | Backend + Mobile | Via `IMapProvider` |
-| `MAP_PROVIDER` | Backend + Mobile | `"google"` or `"ola"` |
+| `MAP_PROVIDER` | Backend + Mobile | `"ola"` |
 | `EXPO_ACCESS_TOKEN` | Backend only | Expo server SDK token for push dispatch |
 | `REALTIME_PROVIDER` | All | `"ably"` (default) — switches `IRealtimeProvider` |
 | `SENTRY_DSN` | Backend + Web | Azure Sentry connection string for Express + Next.js telemetry |

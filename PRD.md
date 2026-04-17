@@ -56,6 +56,14 @@
 > - Scheduled order routing no longer hard-requires that the current time be inside aggregator working hours during fanout/feed/catch-up; matching continues to enforce city/material/operating-area and pickup-window compatibility.
 > - Operating-area normalization/matching logic was strengthened and covered with backend tests to reduce address-format mismatch drops.
 
+> ✅ **Implementation Sync Note (2026-04-17) — Stability & Type Safety Pass**
+> - Critical backend order execution regressions were resolved in `backend/src/routes/orders/index.ts`:
+>   - Fixed undefined localized material label SQL reference in accept/finalize execution responses.
+>   - Fixed finalize-weighing bind mismatch by aligning SQL placeholders and query parameter arrays.
+> - Mobile profile runtime crashes were resolved by wiring missing i18n `t` bindings in seller and aggregator profile screens.
+> - Mobile type-check regressions were resolved across edit-profile, address-map, aggregator-home, and notification watcher flows.
+> - Workspace verification snapshot: `pnpm type-check` passes monorepo-wide as of 2026-04-17.
+
 ---
 
 ## 1. Executive Summary

@@ -54,7 +54,7 @@ Copy `.env.example` to `.env` in the root and in relevant app directories:
 - `EXPO_ACCESS_TOKEN`: EAS deployments and updates.
 - `DATABASE_URL`: Azure PostgreSQL connection string.
 - `REDIS_URL`: Upstash Redis for rate limiting.
-- `MAP_PROVIDER`: Backend map provider switch (`google` | `ola`).
+- `MAP_PROVIDER`: Backend map provider switch (`ola`).
 - `EXPO_PUBLIC_MAP_PROVIDER`: Mobile provider switch (`ola` default).
 - `EXPO_PUBLIC_MAP_RENDERING_AVAILABLE`: `false` by default for Expo Go fallback; enable `true` in dev build with native MapLibre module.
 - `REALTIME_PROVIDER`: Realtime provider switch (`ably` | `soketi`).
@@ -101,6 +101,20 @@ pnpm dev:backend
 ✅ README setup steps unchanged — no new services or env vars introduced.
 
 🚀 Day 17 Security Audit & Infrastructure Hardening: **READY TO START** (Option B telemetry architecture documented).
+
+### 🗓 Status Update (2026-04-17)
+✅ Backend order execution stabilization completed:
+- Fixed undefined localized material label SQL reference in order accept/finalize response paths.
+- Fixed finalize-weighing PostgreSQL bind mismatch (`supplies 1 parameters, requires 2`).
+
+✅ Mobile runtime crash fixes completed:
+- Fixed missing i18n `t` binding in seller profile and aggregator profile screens.
+
+✅ Mobile type-safety pass completed:
+- Resolved TypeScript issues in profile image upload FS compatibility, notification handler typings, notification route pushes, address geocode field access, and missing material type import.
+
+✅ Verification snapshot:
+- `pnpm type-check` passes monorepo-wide (apps/mobile + backend + packages + apps/web).
 
 ✅ Day 14 provider abstraction layer completed (2026-03-24):
 - All 5 provider packages are implemented and build cleanly: `@sortt/maps`, `@sortt/realtime`, `@sortt/auth`, `@sortt/storage`, `@sortt/analysis`.

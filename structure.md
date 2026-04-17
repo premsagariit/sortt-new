@@ -1,4 +1,17 @@
 ﻿Sortt
+├── Recent implementation updates (2026-04-17)
+│   ├── Backend order execution stabilization:
+│   │   ├── Fixed undefined localized material label SQL usage in order execution response queries.
+│   │   └── Fixed finalize-weighing PostgreSQL bind mismatch by aligning query placeholders with arguments.
+│   ├── Mobile runtime crash stabilization:
+│   │   ├── Fixed missing i18n `t` binding in seller profile (`apps/mobile/app/(seller)/profile.tsx`).
+│   │   └── Fixed missing i18n `t` binding in aggregator profile (`apps/mobile/app/(aggregator)/profile.tsx`).
+│   ├── Mobile TypeScript hardening:
+│   │   ├── Added Expo filesystem compatibility typing in seller/aggregator edit profile screens.
+│   │   ├── Added missing `MaterialCode` import in aggregator home.
+│   │   ├── Hardened reverse geocode fallback field handling in seller address map.
+│   │   └── Updated notification watcher typing for current Expo notifications API shape.
+│   └── Validation: `pnpm type-check` passes monorepo-wide after fixes.
 ├── Recent implementation updates (2026-04-13)
 │   ├── Auth Strategy: Migrated from external auth SDK to Custom JWT; completely purged legacy external auth user id database and codebase records.
 │   ├── Database Core: Converted UUID primary keys to Text (strings) ensuring table integrity scaling.
@@ -28,13 +41,13 @@
 │   │   └── `apps/mobile/app/(seller)/order/[id].tsx` (seller live-tracking removed; detail screen now summary-focused)
 │   ├── Order live-location field preservation in `apps/mobile/store/orderStore.ts`
 │   └── Seller earnings route collision fix in `backend/src/routes/orders/index.ts` (`/earnings` before `/:id`)
-│   ├── Maps migration completed: Google Maps → Ola Maps provider implementation in `packages/maps/src/providers/OlaMapsProvider.ts`
+│   ├── Maps migration completed: provider implementation consolidated to `packages/maps/src/providers/OlaMapsProvider.ts`
 │   ├── Backend maps route expansion in `backend/src/routes/maps.ts` (`/geocode`, `/reverse`, `/autocomplete`)
 │   ├── Mobile map rendering migrated to MapLibre + Ola tiles with Expo Go-safe gate in `apps/mobile/utils/mapAvailable.ts`
 │   └── Provider-aware external map navigation helper added at `apps/mobile/utils/mapNavigation.ts`
 │   ├── Aggregator distance display fix: numeric parsing hardening in `apps/mobile/store/orderStore.ts` and `apps/mobile/store/aggregatorStore.ts`
 │   ├── Pre-accept header distance fallback added in `apps/mobile/app/(aggregator)/order/[id].tsx` (`liveDistanceKm` fallback)
-│   └── External navigation chooser flow added in `apps/mobile/utils/mapNavigation.ts` (Google Maps / MapmyIndia / Ola Maps / other app)
+│   └── External navigation chooser flow added in `apps/mobile/utils/mapNavigation.ts` (platform maps apps only)
 │   ├── End-to-end chat image messages implemented across mobile + backend + realtime (`apps/mobile/store/chatStore.ts`, `apps/mobile/hooks/useOrderChannel.ts`, `backend/src/routes/messages.ts`)
 │   ├── Shared chat UI modernization and small-screen hardening completed in `apps/mobile/app/(shared)/chat/[id].tsx` and `apps/mobile/components/ui/MessageBubble.tsx`
 │   ├── Realtime cleanup adjusted in `apps/mobile/lib/realtime.ts` to reduce detached-channel transition errors
@@ -356,7 +369,6 @@
 │   │       ├── index.ts # IMapProvider exports + factory
 │   │       ├── types.ts # GeoResult + IMapProvider interface
 │   │       └── providers
-│   │           ├── GoogleMapsProvider.ts # Legacy/Secondary maps implementation
 │   │           └── OlaMapsProvider.ts # Full Ola Maps implementation
 │   ├── realtime
 │   │   ├── package.json # Realtime package manifest

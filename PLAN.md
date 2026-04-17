@@ -63,6 +63,20 @@
 - [x] Day 17 is READY TO START for final security audit and launch hardening.
 - [x] Landing page implemented at `apps/web/app/page.tsx` — professional public-facing page with Admin Login + Download App CTA. No hex values, no hardcoded strings. Gates LP-1 through LP-9 PASSED.
 
+## ✅ STABILITY VERIFICATION SNAPSHOT (2026-04-17)
+
+- [x] Backend execution regressions fixed in `backend/src/routes/orders/index.ts`:
+  - [x] Undefined `materialLabelSql` references removed by restoring proper local SQL context.
+  - [x] Finalize-weighing bind mismatch fixed by passing the full placeholder parameter set.
+- [x] Mobile runtime regressions fixed:
+  - [x] Seller profile and aggregator profile now correctly bind i18n `t`.
+- [x] Mobile TypeScript regression set fixed:
+  - [x] Expo filesystem compatibility typing in both profile edit screens.
+  - [x] Missing `MaterialCode` import in aggregator home.
+  - [x] Safe geocode fallback field access in seller address map.
+  - [x] Notification handler and route push typing fixes.
+- [x] Verification gate rerun: `pnpm type-check` passes monorepo-wide.
+
 ---
 
 ---
@@ -85,7 +99,7 @@
 - [x] Validation snapshots passed after updates:
   - [x] Backend type-check (`pnpm --filter backend type-check`)
   - [x] Workspace type-check (`pnpm type-check`)
-- [x] Google Maps → Ola Maps migration completed:
+- [x] Maps migration completed:
   - [x] `packages/maps/src/providers/OlaMapsProvider.ts` implemented (geocode/reverse/autocomplete helper).
   - [x] Backend maps routes now include authenticated autocomplete endpoint (`GET /api/maps/autocomplete`).
   - [x] Mobile map rendering migrated to MapLibre + Ola tiles with `MAP_RENDERING_AVAILABLE` fallback gate for Expo Go.
@@ -103,7 +117,7 @@
   - [x] Numeric parsing hardened for coordinate/distance fields in mobile order/feed mappers (`orderStore` + `aggregatorStore`).
   - [x] Pre-accept order header now falls back to `liveDistanceKm` when coordinate-based distance is unavailable.
 - [x] External navigation handoff behavior corrected:
-  - [x] Execution route launch now opens a user-choice app picker flow (Google Maps / MapmyIndia / Ola Maps / other maps app) via `apps/mobile/utils/mapNavigation.ts`.
+  - [x] Execution route launch now opens a native maps app flow via `apps/mobile/utils/mapNavigation.ts`.
 - [x] Chat/media stabilization and UI hardening completed:
   - [x] Shared chat now supports end-to-end image messages (gallery attach, backend upload, signed URL history, realtime fanout).
   - [x] Chat header/meta and quick-reply layout hardened for small screens (320–360dp) to avoid text/button overflow.
@@ -1049,11 +1063,10 @@
 
 ### 14.1 All 5 Provider Packages (~150 min)
 
-- [x] **`packages/maps/`** — `IMapProvider` interface + `GoogleMapsProvider` (default):
+- [x] **`packages/maps/`** — `IMapProvider` interface + `OlaMapsProvider`:
   - `geocode(address: string): Promise<{ city_code: string, locality: string, display_address: string }>`.
   - `reverseGeocode(lat: number, lng: number): Promise<string>`.
-  - `OlaMapsProvider` stub — throws `NotImplementedError` on all methods. Switch via `MAP_PROVIDER=ola`.
-  - Map component in mobile uses `IMapProvider` — no direct Google Maps SDK import anywhere.
+  - Map component in mobile uses `IMapProvider` with Ola Maps only — no direct Google Maps SDK import anywhere.
 
 - [x] **`packages/realtime/`** — `IRealtimeProvider` interface + `AblyRealtimeProvider` (default):
   - `subscribe(channel, event, handler): () => void` — returns unsubscribe fn.

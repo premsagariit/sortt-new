@@ -7,6 +7,18 @@
 
 **Reference:** PRD + TRD | **Pilot City:** Hyderabad, India | **Status:** Day 17 IN PROGRESS (2026-04-13) (Security & Launch) | JWT Migration Complete | Admin Dashboard Enhanced
 
+> ✅ **Implementation Sync Note (2026-04-17) — Regression Sweep Complete**
+> - Backend execution route reliability fixes in `backend/src/routes/orders/index.ts`:
+>   - Restored missing localized material label SQL context in execution response queries.
+>   - Fixed finalize-weighing bind mismatch by aligning SQL placeholders and argument arrays.
+> - Profile crash fixes:
+>   - Restored i18n `t` binding in seller and aggregator profile screens.
+> - Mobile type-check hardening:
+>   - Added Expo filesystem compatibility typing for `cacheDirectory`/`documentDirectory` usage.
+>   - Fixed notification handler typing for current Expo notifications API shape.
+>   - Fixed dynamic router push typing and geocode fallback field safety.
+> - Verification state updated: `pnpm type-check` is green across the monorepo (2026-04-17).
+
 > ✅ **Implementation Sync Note (2026-04-13) — Custom JWT & Admin Enhancements**
 > - Refactored entire auth system to a consolidated Custom JWT flow and removed legacy external auth dependencies.
 > - Removed legacy external auth user id columns and codebase references.
@@ -56,7 +68,7 @@
 > - Order store merge hardening completed to preserve `pickupLat/pickupLng`, `aggregatorLat/aggregatorLng`, and `liveDistanceKm` across silent refresh cycles.
 > - Seller lifetime earnings route regression fixed: `/api/orders/earnings` now registered before dynamic `/:id`, preventing UUID parse collisions.
 > - Validation snapshot: backend and workspace type-checks pass after above changes.
-> - Google Maps → Ola Maps migration completed:
+> - Maps provider migration completed:
 >   - `packages/maps/src/providers/OlaMapsProvider.ts` implemented for geocode/reverse + autocomplete helper.
 >   - `backend/src/routes/maps.ts` now includes authenticated autocomplete endpoint.
 >   - Mobile map screens now use MapLibre + Ola tiles with Expo Go fallback gate.
@@ -65,7 +77,7 @@
 >   - Numeric parsing hardened for coordinate/distance fields in `apps/mobile/store/orderStore.ts` and feed distance mapping in `apps/mobile/store/aggregatorStore.ts`.
 >   - Pre-accept order header now falls back to `liveDistanceKm` when direct coordinate-based calculation is unavailable.
 > - External navigation flow corrected for execution screen:
->   - `apps/mobile/utils/mapNavigation.ts` now offers user app choice (Google Maps / MapmyIndia / Ola Maps / other maps app) instead of forcing Ola-first launch.
+>   - `apps/mobile/utils/mapNavigation.ts` now uses platform-native maps app intents instead of Google-specific deep links.
 
 > ✅ **Implementation Sync Note (2026-04-11)**
 > - Aggregator navigate screen now restores a visible current-location marker and renders detailed route geometry when available, with a graceful fallback when routing data is incomplete.
@@ -330,7 +342,7 @@ All vendor calls MUST go through these interfaces in `packages/`:
 
 ```
 packages/
-  maps/        → IMapProvider     (Google Maps / Ola Maps)
+  maps/        → IMapProvider     (Ola Maps)
   realtime/    → IRealtimeProvider (Ably / Soketi)
   auth/        → IAuthProvider    (Custom JWT)
   storage/     → IStorageProvider (Cloudflare R2 / S3)
